@@ -12,7 +12,13 @@ export const MODELS = [
   "rock",
   "supply",
   "beacon",
+  "pickup-health",
+  "pickup-star",
+  "pickup-gun",
+  "pickup-medal",
 ];
+
+export const ASSET_REVISION = "detail-2";
 
 export const CHAPTERS = [
   {

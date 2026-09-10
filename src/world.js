@@ -1,6 +1,7 @@
 import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
-import { MODELS } from "./data.js";
+import { MODELS, ASSET_REVISION } from "./data.js";
+import { createPickupBadgeMaterial, badgeWorldSize } from "./pickups.js";
 
 const materialCache = new Map();
 const boxGeometry = new THREE.BoxGeometry(1, 1, 1);
@@ -53,6 +54,10 @@ export class WorldView {
     this.level = new THREE.Group();
     this.scene.add(this.level);
     this.assets = new Map();
+    this.badgeMaterials = new Map();
+    this.pickupBadges = new Set();
+    this.badgeKeepouts = [];
+    this.badgePoint = new THREE.Vector3();
     this.animated = [];
     this.scrollProps = [];
     this.ray = new THREE.Raycaster();
@@ -69,7 +74,7 @@ export class WorldView {
     await Promise.all(
       MODELS.map(async (name) => {
         const gltf = await loader.loadAsync(
-          `${import.meta.env.BASE_URL}models/${name}.glb`,
+          `${import.meta.env.BASE_URL}models/${name}.glb?v=${ASSET_REVISION}`,
         );
         gltf.scene.traverse((obj) => {
           if (obj.isMesh) {
@@ -87,6 +92,10 @@ export class WorldView {
     const group = this.assets.get(name).clone(true);
     group.position.copy(position);
     group.scale.setScalar(scale);
+    if (name === "boat") {
+      for (const part of ["TwinGunL", "TwinGunR", "SupportRack"])
+        group.getObjectByName(part).visible = false;
+    }
     parent.add(group);
     return group;
   }
@@ -99,6 +108,31 @@ export class WorldView {
     mesh.receiveShadow = true;
     parent.add(mesh);
     return mesh;
+  }
+
+  pickupBadge(kind, parent) {
+    if (!this.badgeMaterials.has(kind))
+      this.badgeMaterials.set(kind, createPickupBadgeMaterial(kind));
+    const badge = new THREE.Sprite(this.badgeMaterials.get(kind));
+    badge.position.set(0, 1.7, 0);
+    badge.center.set(0.5, 0);
+    badge.renderOrder = 20;
+    badge.userData.pickupBadge = true;
+    badge.userData.kind = kind;
+    badge.raycast = () => {};
+    parent.add(badge);
+    this.pickupBadges.add(badge);
+    this.resizeBadge(badge);
+    return badge;
+  }
+
+  resizeBadge(badge) {
+    const size = badgeWorldSize(
+      this.camera,
+      this.canvas.clientHeight,
+      this.canvas.clientWidth < 700 ? 46 : 50,
+    );
+    badge.scale.set(size.width, size.height, 1);
   }
 
   sphere(position, scale, color, parent = this.level) {
@@ -129,6 +163,7 @@ export class WorldView {
 
   disposeObject(object) {
     object.traverse((child) => {
+      if (child.userData.pickupBadge) this.pickupBadges.delete(child);
       if (child.userData.disposable) {
         child.geometry?.dispose();
         child.material?.dispose();
@@ -370,6 +405,9 @@ export class WorldView {
     this.camera.lookAt(this.target);
     this.camera.updateProjectionMatrix();
     this.baseCamera = this.camera.position.clone();
+    this.level.traverse((object) => {
+      if (object.userData.pickupBadge) this.resizeBadge(object);
+    });
     this.needsRender = true;
   }
 
@@ -407,6 +445,23 @@ export class WorldView {
     if (shake > 0) {
       this.camera.position.x += Math.sin(time * 80) * shake;
       this.camera.position.y += Math.cos(time * 95) * shake * 0.5;
+    }
+    this.camera.updateMatrixWorld();
+    // Keep floating symbols out of HUD text and controls; the supply case stays visible.
+    const pixelScale =
+      this.canvas.clientHeight /
+      ((this.camera.top - this.camera.bottom) / this.camera.zoom);
+    for (const badge of this.pickupBadges) {
+      const point = this.project(badge.getWorldPosition(this.badgePoint));
+      const halfWidth = (badge.scale.x * pixelScale) / 2;
+      const top = point.y - badge.scale.y * pixelScale;
+      badge.visible = !this.badgeKeepouts.some(
+        (rect) =>
+          point.x - halfWidth < rect.right &&
+          point.x + halfWidth > rect.left &&
+          top < rect.bottom &&
+          point.y > rect.top,
+      );
     }
     this.renderer.render(this.scene, this.camera);
   }

@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import { PICKUPS } from "./pickups.js";
 import {
   MISSIONS,
   DEFAULT_LOADOUT,
@@ -345,6 +346,19 @@ export class Game {
   setupRiver() {
     this.player = this.view.model("boat", V(0, 0.1, 10));
     this.playerTurret = turretNode(this.player);
+    this.boatParts = Object.fromEntries(
+      [
+        "SingleGun",
+        "TwinGunL",
+        "TwinGunR",
+        "Muzzle",
+        "MuzzleL",
+        "MuzzleR",
+        "SupportRack",
+        "Radar",
+      ].map((name) => [name, this.player.getObjectByName(name)]),
+    );
+    this.updateBoatLoadout();
     this.travel = 0;
     this.spawnNumber = 0;
     this.pickupNumber = 0;
@@ -413,61 +427,19 @@ export class Game {
   }
 
   spawnPickup(z, kind, x = Math.sin(this.pickupNumber++ * 2) * 6) {
-    const pickup = this.entity("pickup", null, V(x, 0.75, z), {
+    const info = PICKUPS[kind];
+    if (!info) throw new Error(`Unknown pickup: ${kind}`);
+    const pickup = this.entity("pickup", null, V(x, 0.22, z), {
       kind,
       scrolling: true,
       radius: 1.45,
     });
-    const colors = {
-      health: 0xe9f4e3,
-      star: COLORS.gold,
-      gun: COLORS.friendly,
-      medal: 0xc5a6ed,
-    };
-    this.view.box(V(0, 0, 0), V(1.1, 0.3, 1.1), 0x345660, pickup.mesh);
-    const y = 0.35;
-    if (kind === "health") {
-      this.view.box(V(0, y, 0), V(0.8, 0.2, 0.26), colors[kind], pickup.mesh);
-      this.view.box(V(0, y, 0), V(0.26, 0.2, 0.8), colors[kind], pickup.mesh);
-    } else if (kind === "star") {
-      const shape = new THREE.Shape();
-      for (let i = 0; i < 10; i++) {
-        const a = (i * Math.PI) / 5,
-          r = i % 2 ? 0.25 : 0.58;
-        const x = Math.sin(a) * r,
-          y = Math.cos(a) * r;
-        if (!i) shape.moveTo(x, y);
-        else shape.lineTo(x, y);
-      }
-      shape.closePath();
-      const mesh = new THREE.Mesh(
-        new THREE.ExtrudeGeometry(shape, { depth: 0.12, bevelEnabled: false }),
-        new THREE.MeshStandardMaterial({ color: colors[kind] }),
-      );
-      mesh.rotation.x = -Math.PI / 2;
-      mesh.position.y = y;
-      mesh.userData.disposable = true;
-      pickup.mesh.add(mesh);
-    } else if (kind === "gun") {
-      this.view.box(V(0, y, 0), V(0.3, 0.3, 0.7), colors[kind], pickup.mesh);
-      this.view.box(
-        V(0.2, y, -0.28),
-        V(0.55, 0.16, 0.12),
-        colors[kind],
-        pickup.mesh,
-      );
-    } else {
-      this.view.sphere(
-        V(0, y, 0),
-        V(0.42, 0.16, 0.42),
-        colors[kind],
-        pickup.mesh,
-      );
-    }
+    pickup.body = this.view.model(info.model, V(), 1, pickup.mesh);
+    pickup.badge = this.view.pickupBadge(kind, pickup.mesh);
     pickup.halo = this.view.ring(
-      V(0, -0.5, 0),
+      V(0, -0.15, 0),
       1.3,
-      colors[kind],
+      info.color,
       0.08,
       pickup.mesh,
     );
@@ -735,10 +707,11 @@ export class Game {
           aim = this.targetPosition(nearest);
       }
     }
-    if (this.playerTurret) {
-      const dir = aim.clone().sub(this.player.position);
-      this.playerTurret.rotation.y = Math.atan2(-dir.x, -dir.z);
+    if (river && this.twin > 0 && !this.input.fire) {
+      const target = this.nearestTarget();
+      if (target) aim = this.targetPosition(target);
     }
+    if (river) this.aimBoatTurret(aim);
     this.reticle.position.copy(aim);
     this.reticle.position.y = Math.max(0.13, aim.y + 0.1);
     this.reticle.visible = !this.input.stickAim;
@@ -794,6 +767,8 @@ export class Game {
     }
     this.auto = Math.max(0, this.auto - dt);
     this.twin = Math.max(0, this.twin - dt);
+    this.updateBoatLoadout();
+    if (this.boatParts.Radar) this.boatParts.Radar.rotation.y += dt * 1.6;
     this.supportCooldown -= dt;
     if (this.twin > 0) {
       const target = this.nearestTarget();
@@ -803,7 +778,11 @@ export class Game {
       const target = this.nearestTarget();
       if (target) {
         this.spawnShot(
-          this.player.position.clone().add(V(0, 1.1, -1)),
+          this.boatParts.SupportRack
+            ? this.boatParts.SupportRack.getWorldPosition(V()).add(
+                V(0, 0.2, -0.8),
+              )
+            : this.player.position.clone().add(V(0, 1.1, -1)),
           this.targetPosition(target),
           true,
           false,
@@ -839,8 +818,10 @@ export class Game {
         }
       }
       if (e.type === "pickup") {
-        e.position.y = 0.55 + Math.sin(this.time * 3 + e.position.z) * 0.12;
-        e.mesh.rotation.y += dt * 0.5;
+        e.position.y = 0.22 + Math.sin(this.time * 2.3 + e.position.z) * 0.065;
+        e.body.rotation.y += dt * 0.35;
+        e.body.rotation.z = Math.sin(this.time * 1.8 + e.position.z) * 0.06;
+        e.halo.material.opacity = 0.38 + Math.sin(this.time * 2) * 0.08;
         if (
           Math.hypot(
             e.position.x - this.player.position.x,
@@ -892,21 +873,51 @@ export class Game {
   }
 
   collect(pickup) {
+    if (pickup.dead || this.status !== "playing") return;
+    const info = PICKUPS[pickup.kind];
     pickup.dead = true;
     this.view.disposeObject(pickup.mesh);
-    const labels = {
-      health: "SHIELDS RESTORED",
-      star: "TWIN GUNS / 7 SEC",
-      gun: "GUIDED SUPPORT / 5 SEC",
-      medal: "FIELD MEDAL +250",
-    };
     if (pickup.kind === "health") this.shields = [3, 3, 3];
-    if (pickup.kind === "star") this.twin = 7;
-    if (pickup.kind === "gun") this.auto = 5;
-    this.score += pickup.kind === "medal" ? 250 : 60;
-    this.notify("toast", labels[pickup.kind]);
+    if (pickup.kind === "star") this.twin = info.duration;
+    if (pickup.kind === "gun") this.auto = info.duration;
+    this.updateBoatLoadout();
+    this.score += info.reward;
+    this.notify("toast", info.toast);
     this.audio.play("pickup");
-    this.puff(pickup.position, COLORS.friendly, 1.4);
+    this.puff(pickup.position, info.color, 0.8);
+    const ring = this.view.ring(
+      this.player.position.clone().add(V(0, 0.3, 0)),
+      0.9,
+      info.color,
+      0.11,
+    );
+    this.effects.push({
+      mesh: ring,
+      life: 0.75,
+      maxLife: 0.75,
+      ring: true,
+      growth: 4,
+    });
+  }
+
+  updateBoatLoadout() {
+    if (this.chapter !== 1 || !this.boatParts) return;
+    if (this.boatParts.SingleGun)
+      this.boatParts.SingleGun.visible = this.twin <= 0;
+    for (const name of ["TwinGunL", "TwinGunR"])
+      if (this.boatParts[name]) this.boatParts[name].visible = this.twin > 0;
+    if (this.boatParts.SupportRack)
+      this.boatParts.SupportRack.visible = this.auto > 0;
+  }
+
+  aimBoatTurret(aim) {
+    if (!this.playerTurret) return;
+    this.player.updateMatrixWorld(true);
+    const localAim = this.playerTurret.parent
+      .worldToLocal(aim.clone())
+      .sub(this.playerTurret.position);
+    this.playerTurret.rotation.y = Math.atan2(-localAim.x, -localAim.z);
+    this.player.updateMatrixWorld(true);
   }
 
   updateHeli(dt) {
@@ -1006,13 +1017,21 @@ export class Game {
     if (rocket ? this.rocketCooldown > 0 : this.cooldown > 0) return false;
     if (rocket) this.rocketCooldown = 1.2;
     else this.cooldown = SHOT_INTERVAL;
-    const origin = this.player.position
-      .clone()
-      .add(V(0, this.chapter === 1 ? 1.1 : -0.1, -1.15));
+    if (this.chapter === 1) this.aimBoatTurret(aim);
+    const origin =
+      this.chapter === 1 && this.boatParts.Muzzle
+        ? this.boatParts.Muzzle.getWorldPosition(V())
+        : this.player.position
+            .clone()
+            .add(V(0, this.chapter === 1 ? 1.1 : -0.1, -1.15));
     if (this.twin > 0 && !rocket) {
       for (const side of [-1, 1])
         this.spawnShot(
-          origin.clone().add(V(side * 0.7, 0, 0)),
+          this.chapter === 1 && this.boatParts[side < 0 ? "MuzzleL" : "MuzzleR"]
+            ? this.boatParts[side < 0 ? "MuzzleL" : "MuzzleR"].getWorldPosition(
+                V(),
+              )
+            : origin.clone().add(V(side * 0.7, 0, 0)),
           aim.clone().add(V(side * 0.3, 0, 0)),
           false,
           false,

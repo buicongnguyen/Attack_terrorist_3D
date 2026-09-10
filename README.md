@@ -61,13 +61,16 @@ Regenerate with Blender 4.5 LTS:
 blender --background --python tools/build_assets.py -- --output public/models
 ```
 
-The 13 GLB models total approximately 463 KiB. They include a turret-equipped patrol boat and crew, helicopter, carrier plane, articulated opponent, cannon, launcher house, mine, two missile designs, palm, rock, supply case, and beacon. Geometry and material data are shared between runtime instances.
+The 17 GLB models total approximately 1.61 MiB. They include a detailed turret-equipped patrol boat and crew, helicopter, carrier plane, articulated opponent, cannon, launcher house, mine, two missile designs, palm, rock, supply case, beacon, and four distinct floating pickup cases. Geometry and material data are shared between runtime instances; static details are batched by material and articulated pivot during export.
+
+Supply cases use clear camera-facing symbols: a green **+** for shield repair, gold **twin barrels / x2** for twin automatic guns, a cyan **rocket** for guided support, and a gold **medal / +250** for score. Both weapon timers remain visible when bonuses overlap. The boat's gun and missile-rack models also change with its active loadout.
 
 ## Design and Verification
 
 - [Detailed evaluation, redesign plan, and future suggestions](PLAN.md)
 - [Verification notes and known limitations](docs/VERIFICATION.md)
 - [Asset and dependency credits](docs/CREDITS.md)
+- [3D detail and pickup readability review](docs/REVIEW-DETAILS.md)
 
 The first release uses a fixed 120 Hz simulation, cannon-es rigid bodies for bombs and fragments, and swept collision tests for fast projectiles. Guided flight programs are arcade mechanics. The forecast stops at first contact; it does not claim an exact preview of later bounces or drilling.
 

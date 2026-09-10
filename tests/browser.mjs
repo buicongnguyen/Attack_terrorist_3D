@@ -37,8 +37,8 @@ try {
     () => document.documentElement.dataset.ready === "true",
   );
   check(
-    "all 13 Blender models loaded",
-    await page.evaluate(() => __TIDELOCK__.view.assets.size === 13),
+    "all 17 Blender models loaded",
+    await page.evaluate(() => __TIDELOCK__.view.assets.size === 17),
   );
   const pixels = await page.evaluate(() => {
     const view = __TIDELOCK__.view;
@@ -128,12 +128,98 @@ try {
     }
     result.pickups =
       g.shields.every((hp) => hp === 3) && g.twin === 7 && g.auto === 5;
+    ui.updateHUD(true);
+    result.bothBonusTimers = ["star", "gun"].every(
+      (kind) =>
+        !document.getElementById(`bonus-${kind}`).hidden &&
+        document
+          .querySelector(`#bonus-${kind} strong`)
+          .textContent.endsWith("s"),
+    );
+    result.visibleLoadout =
+      !g.boatParts.SingleGun.visible &&
+      g.boatParts.TwinGunL.visible &&
+      g.boatParts.TwinGunR.visible &&
+      g.boatParts.SupportRack.visible;
+    const collected = g.entities.find((e) => e.type === "pickup" && e.dead);
+    const score = g.score;
+    g.collect(collected);
+    result.collectionOnce = g.score === score;
     g.update(1 / 120);
     result.support = g.projectiles.some(
       (p) => !p.hostile && p.missile && p.target,
     );
+    g.auto = 0.001;
+    g.update(1 / 120);
+    ui.updateHUD(true);
+    result.independentExpiry =
+      document.getElementById("bonus-gun").hidden &&
+      !document.getElementById("bonus-star").hidden &&
+      !g.boatParts.SupportRack.visible;
+    g.twin = 0.001;
+    g.update(1 / 120);
+    result.loadoutReset =
+      g.boatParts.SingleGun.visible &&
+      !g.boatParts.TwinGunL.visible &&
+      !g.boatParts.TwinGunR.visible;
+
+    ui.start(6);
+    const symbolPickup = g.spawnPickup(-4, "health", 6);
+    const rotation = symbolPickup.mesh.quaternion.clone();
+    const bodyAngle = symbolPickup.body.rotation.y;
+    g.update(1 / 120);
+    result.uprightBadge =
+      symbolPickup.badge.isSprite &&
+      symbolPickup.mesh.quaternion.equals(rotation) &&
+      symbolPickup.body.rotation.y !== bodyAngle;
+    view.badgeKeepouts = [
+      { left: 0, top: 0, right: innerWidth, bottom: innerHeight },
+    ];
+    view.render(g.time);
+    result.badgeAvoidsHUD =
+      !symbolPickup.badge.visible && symbolPickup.body.visible;
+    view.badgeKeepouts = [];
+    view.render(g.time);
+    result.badgeReturns = symbolPickup.badge.visible;
+    ui.updateBadgeBounds();
+    const gunTarget = g.entities.find((e) => e.type === "cannon");
+    g.fire(g.targetPosition(gunTarget));
+    const shot = g.projectiles.find((p) => !p.hostile);
+    result.authoredMuzzle =
+      shot.position.distanceTo(
+        g.boatParts.Muzzle.getWorldPosition(shot.position.clone()),
+      ) < 1e-6;
+    const turretFacing = shot.position
+      .clone()
+      .set(0, 0, -1)
+      .transformDirection(g.playerTurret.matrixWorld);
+    const shotFacing = shot.velocity.clone().setY(0).normalize();
+    result.turretAligned =
+      turretFacing.setY(0).normalize().dot(shotFacing) > 0.99;
+    result.articulatedEnemy = g.entities
+      .filter((e) => e.type === "enemy")
+      .every((e) => e.limbs.length === 4 && e.limbs.every(Boolean));
+    g.twin = 7;
+    g.cooldown = 0;
+    g.input.aim = g.player.position.clone().add({ x: 20, y: 0, z: 0 });
+    g.projectiles.forEach((p) => (p.dead = true));
+    g.update(1 / 120);
+    const autoShots = g.projectiles.filter((p) => !p.hostile && !p.dead);
+    const autoFacing = g.player.position
+      .clone()
+      .set(0, 0, -1)
+      .transformDirection(g.playerTurret.matrixWorld)
+      .setY(0)
+      .normalize();
+    result.autoTurretAligned =
+      autoShots.length === 2 &&
+      autoShots.every(
+        (p) => autoFacing.dot(p.velocity.clone().setY(0).normalize()) > 0.99,
+      );
 
     ui.start(9);
+    result.badgeCleanup =
+      view.pickupBadges.size === 0 && view.badgeMaterials.size === 4;
     const initialVisible = g.entities.filter(
       (e) => e.type === "cave" && e.phase !== "hidden",
     ).length;
@@ -201,6 +287,7 @@ try {
     });
   }
   for (const size of [
+    { width: 320, height: 740 },
     { width: 390, height: 844 },
     { width: 844, height: 390 },
   ]) {
@@ -235,6 +322,65 @@ try {
         path: `test-results/mobile-${size.width}-${index}.png`,
       });
     }
+    const mobileBonuses = await mobile.evaluate(() => {
+      const { ui, game: g, view } = __TIDELOCK__;
+      ui.start(6);
+      g.auto = 5;
+      g.twin = 7;
+      g.updateBoatLoadout();
+      ui.updateHUD(true);
+      g.paused = true;
+      view.render(g.time);
+      const ids = ["powerup", "shield-hud", "move-stick", "fire-stick"];
+      const boxes = ids.map((id) =>
+        document.getElementById(id).getBoundingClientRect(),
+      );
+      const overlap = (a, b) =>
+        a.left < b.right &&
+        a.right > b.left &&
+        a.top < b.bottom &&
+        a.bottom > b.top;
+      const gl = view.renderer.getContext();
+      const data = new Uint8Array(
+        gl.drawingBufferWidth * gl.drawingBufferHeight * 4,
+      );
+      gl.readPixels(
+        0,
+        0,
+        gl.drawingBufferWidth,
+        gl.drawingBufferHeight,
+        gl.RGBA,
+        gl.UNSIGNED_BYTE,
+        data,
+      );
+      const colors = new Set();
+      for (let i = 0; i < data.length; i += 256)
+        colors.add(`${data[i] >> 4},${data[i + 1] >> 4},${data[i + 2] >> 4}`);
+      const badge = g.entities.find((e) => e.type === "pickup").badge;
+      const badgePixels =
+        (badge.scale.x /
+          ((view.camera.top - view.camera.bottom) / view.camera.zoom)) *
+        innerHeight;
+      return {
+        spacing:
+          boxes.every((a, i) =>
+            boxes.every((b, j) => i === j || !overlap(a, b)),
+          ) &&
+          boxes.every(
+            (b) =>
+              b.left >= 0 &&
+              b.right <= innerWidth &&
+              b.top >= 0 &&
+              b.bottom <= innerHeight,
+          ),
+        rendered:
+          colors.size > 40 && view.renderer.info.render.triangles > 10000,
+        legible: badgePixels >= 45.99 && badgePixels <= 50.01,
+      };
+    });
+    for (const [name, value] of Object.entries(mobileBonuses))
+      check(`mobile ${size.width} bonuses ${name}`, value);
+    await mobile.screenshot({ path: `test-results/bonuses-${size.width}.png` });
     await mobile
       .getByRole("button", { name: "Mission settings", exact: true })
       .click();

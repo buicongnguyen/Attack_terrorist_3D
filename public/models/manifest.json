@@ -7,62 +7,62 @@
     {
       "name": "boat",
       "file": "boat.glb",
-      "meshes": 24,
-      "bytes": 85208
+      "meshes": 23,
+      "bytes": 289444
     },
     {
       "name": "helicopter",
       "file": "helicopter.glb",
-      "meshes": 20,
-      "bytes": 71792
+      "meshes": 11,
+      "bytes": 269900
     },
     {
       "name": "plane",
       "file": "plane.glb",
-      "meshes": 11,
-      "bytes": 63472
+      "meshes": 9,
+      "bytes": 186296
     },
     {
       "name": "enemy",
       "file": "enemy.glb",
-      "meshes": 14,
-      "bytes": 69532
+      "meshes": 16,
+      "bytes": 166380
     },
     {
       "name": "cannon",
       "file": "cannon.glb",
-      "meshes": 5,
-      "bytes": 15032
+      "meshes": 8,
+      "bytes": 49440
     },
     {
       "name": "launcher",
       "file": "launcher.glb",
-      "meshes": 12,
-      "bytes": 43208
+      "meshes": 8,
+      "bytes": 166864
     },
     {
       "name": "mine",
       "file": "mine.glb",
-      "meshes": 10,
-      "bytes": 33236
+      "meshes": 4,
+      "bytes": 71816
     },
     {
       "name": "missile-friendly",
       "file": "missile-friendly.glb",
       "meshes": 5,
-      "bytes": 22832
+      "bytes": 62904
     },
     {
       "name": "missile-enemy",
       "file": "missile-enemy.glb",
       "meshes": 5,
-      "bytes": 22832
+      "bytes": 62972
     },
     {
       "name": "palm",
       "file": "palm.glb",
-      "meshes": 8,
-      "bytes": 9968
+      "meshes": 3,
+      "bytes": 6876
     },
     {
       "name": "rock",
@@ -73,14 +73,38 @@
     {
       "name": "supply",
       "file": "supply.glb",
-      "meshes": 4,
-      "bytes": 12004
+      "meshes": 5,
+      "bytes": 42768
+    },
+    {
+      "name": "pickup-health",
+      "file": "pickup-health.glb",
+      "meshes": 6,
+      "bytes": 67832
+    },
+    {
+      "name": "pickup-star",
+      "file": "pickup-star.glb",
+      "meshes": 5,
+      "bytes": 52464
+    },
+    {
+      "name": "pickup-gun",
+      "file": "pickup-gun.glb",
+      "meshes": 7,
+      "bytes": 69308
+    },
+    {
+      "name": "pickup-medal",
+      "file": "pickup-medal.glb",
+      "meshes": 7,
+      "bytes": 66464
     },
     {
       "name": "beacon",
       "file": "beacon.glb",
       "meshes": 5,
-      "bytes": 21508
+      "bytes": 50860
     }
   ]
 }

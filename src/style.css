@@ -540,10 +540,48 @@ button:hover {
   left: 50%;
   bottom: 80px;
   transform: translateX(-50%);
-  color: var(--gold);
+  width: 184px;
+  display: grid;
+  gap: 5px;
+  pointer-events: none;
+}
+.bonus {
+  color: #ffda7d;
+  display: grid;
+  grid-template-columns: 20px 1fr auto;
+  align-items: center;
+  gap: 6px;
+  padding: 9px 10px 11px;
+  background: #123b46ed;
+  border: 1px solid #ffda7d70;
+  border-radius: 4px;
+  position: relative;
   font-size: 10px;
-  background: #1b454be6;
-  padding: 10px 16px;
+}
+#bonus-gun {
+  color: #87e2ff;
+  border-color: #87e2ff70;
+}
+.bonus svg {
+  width: 18px;
+  height: 18px;
+}
+.bonus strong {
+  color: #fff;
+  font-variant-numeric: tabular-nums;
+}
+.bonus-track {
+  position: absolute;
+  bottom: 3px;
+  left: 6px;
+  right: 6px;
+  height: 2px;
+  background: #ffffff1f;
+}
+.bonus-fill {
+  height: 100%;
+  background: currentColor;
+  transform-origin: left;
 }
 .joystick {
   width: 110px;
@@ -1235,10 +1273,17 @@ summary {
   }
   #powerup {
     bottom: 60px;
-    font-size: 8px;
-    width: 110px;
-    text-align: center;
-    padding: 8px;
+    width: 124px;
+  }
+  .bonus {
+    font-size: 9px;
+    grid-template-columns: 15px 1fr auto;
+    gap: 4px;
+    padding: 7px 6px 9px;
+  }
+  .bonus svg {
+    width: 15px;
+    height: 15px;
   }
   dialog {
     padding: 23px;
@@ -1360,6 +1405,38 @@ summary {
   }
   #powerup {
     bottom: 35px;
+    left: auto;
+    right: 135px;
+    transform: none;
+    width: 124px;
+  }
+  .bonus {
+    font-size: 9px;
+    grid-template-columns: 15px 1fr auto;
+    gap: 4px;
+    padding: 7px 6px 9px;
+  }
+  .bonus svg {
+    width: 15px;
+    height: 15px;
+  }
+  #shield-hud {
+    gap: 6px;
+  }
+  #shield-hud > svg {
+    width: 18px;
+    height: 18px;
+  }
+  #shield-count {
+    font-size: 10px;
+    margin-left: 4px;
+  }
+  #shield-segments {
+    gap: 4px;
+  }
+  #shield-segments i {
+    width: 8px;
+    height: 4px;
   }
   .score {
     display: none;
@@ -1392,6 +1469,20 @@ summary {
   .coordinate-detail {
     font-size: 8px;
     color: #fff0c3;
+  }
+}
+@media (max-width: 375px) {
+  .joystick {
+    width: 88px;
+    height: 88px;
+    left: 10px;
+  }
+  .fire-stick {
+    left: auto;
+    right: 10px;
+  }
+  #powerup {
+    width: 116px;
   }
 }
 @media (prefers-reduced-motion: reduce) {

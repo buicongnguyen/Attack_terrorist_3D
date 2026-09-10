@@ -31,6 +31,7 @@ import {
   missionNumber,
   saveResult,
 } from "./data.js";
+import { activeBonuses } from "./pickups.js";
 
 const iconSet = {
   Crosshair,
@@ -109,6 +110,21 @@ export class UI {
     this.bindStick("move-stick", false);
     this.bindStick("fire-stick", true);
     refreshIcons();
+    this.badgeOverlays = [
+      ...document.querySelectorAll(
+        ".topbar, .mission-hud, .world-caption, #shield-hud, #powerup, .joystick, .weapon-bar",
+      ),
+    ];
+    this.overlayObserver = new ResizeObserver(() => this.updateBadgeBounds());
+    this.badgeOverlays.forEach((node) => this.overlayObserver.observe(node));
+    window.addEventListener("resize", () => this.updateBadgeBounds());
+  }
+
+  updateBadgeBounds() {
+    this.view.badgeKeepouts = this.badgeOverlays
+      .map((node) => node.getBoundingClientRect())
+      .filter((rect) => rect.width > 0 && rect.height > 0);
+    this.view.needsRender = true;
   }
 
   persist() {
@@ -544,10 +560,18 @@ export class UI {
           `<span>${Array.from({ length: max }, (_, i) => `<i class="${i >= value ? "lost" : ""}"></i>`).join("")}</span>`,
       )
       .join("");
-    $("powerup").hidden = state.auto <= 0 && state.twin <= 0;
-    $("powerup").textContent =
-      state.auto > 0
-        ? `GUIDED SUPPORT / ${state.auto.toFixed(1)}s`
-        : `TWIN GUNS / ${state.twin.toFixed(1)}s`;
+    const bonuses = activeBonuses(state);
+    $("powerup").hidden = chapter !== 1 || bonuses.length === 0;
+    for (const kind of ["star", "gun"]) {
+      const bonus = bonuses.find((entry) => entry.kind === kind);
+      const row = $(`bonus-${kind}`);
+      row.hidden = !bonus;
+      if (!bonus) continue;
+      row.querySelector("strong").textContent =
+        `${bonus.remaining.toFixed(1)}s`;
+      row.querySelector(".bonus-fill").style.transform =
+        `scaleX(${Math.min(1, bonus.remaining / bonus.duration)})`;
+    }
+    if (force) this.updateBadgeBounds();
   }
 }
