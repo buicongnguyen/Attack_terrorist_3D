@@ -172,6 +172,19 @@ export async function checkRescue(page, browser, url, check, errors) {
   await page.evaluate(() => {
     __TIDELOCK__.ui.start(9);
   });
+  const followsAim = await page.evaluate(() => {
+    const { game: g, ui, view } = __TIDELOCK__;
+    ui.aim(innerWidth / 2, innerHeight / 2);
+    ui.pointerFire = true;
+    const before = g.input.aim.clone();
+    g.player.position.z -= 70;
+    view.followPlayer(g.player.position, 0, true);
+    ui.updateInput();
+    const follows = g.input.aim.z < before.z - 50;
+    ui.start(9);
+    return follows;
+  });
+  check("held mouse aim follows the moving camera", followsAim);
   await page.locator("#next-signal").click();
   check(
     "rescue waypoint selection",

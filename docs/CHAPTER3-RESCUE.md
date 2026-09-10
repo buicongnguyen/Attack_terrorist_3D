@@ -38,6 +38,7 @@ The repository uses an SSH push to `main` and its existing [test-and-deploy work
 
 - Ground enemies were outside the helicopter's old horizontal firing plane. Directional aim now selects a target inside the pad's aiming cone and fires toward its actual elevation. Empty-space fire slopes toward the ground; incoming missiles remain interceptable.
 - The previous fixed-coordinate projectile cutoff would delete shots in the northern valley. Helicopter shots now expire by lifetime and distance from the player.
+- Held mouse aim is reprojected as the camera follows the helicopter, instead of remaining at a stale world coordinate.
 - Tablet touch pads were hidden, and narrow landscape screens inherited portrait spacing. Coarse-pointer/touch capability now controls pad availability, with an independent short-landscape layout.
 - Every pointer cancellation, pause, and resize clears held movement/fire. The winch also releases on cancellation. Its three-second pickup resets when interrupted and cannot run alongside helicopter fire.
 - Friendly soldiers and supply caches are excluded from aiming, direct damage, and missile splash. Pickups are collected once; repair, rockets, and support each have distinct inventory effects.
@@ -45,7 +46,7 @@ The repository uses an SSH push to `main` and its existing [test-and-deploy work
 
 ## Verification and Limits
 
-The expanded suite contains 15 Node tests and 94 browser assertions. It covers complete two-, three-, and four-soldier sorties using normal movement, damage, cooldowns, and return-to-base rules. A scripted pilot selects directions and targets; these runs establish reachability, not human difficulty balance.
+The expanded suite contains 15 Node tests and 95 browser assertions. It covers complete two-, three-, and four-soldier sorties using normal movement, damage, cooldowns, and return-to-base rules. A scripted pilot selects directions and targets; these runs establish reachability, not human difficulty balance.
 
 Real keyboard events operate the winch. Chrome DevTools touch events exercise simultaneous movement and ground-target firing, held winch input, and touch cancellation. Layout and nonblank-canvas checks cover 320x740, 390x844, 568x320, 667x375, 844x390, and 768x1024 touch emulation. Desktop checks compare animated canvas pixels at the base, outpost, and northern ridge. All 20 Blender models load without resource errors.
 

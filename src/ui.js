@@ -105,6 +105,7 @@ export class UI {
     this.save = save;
     this.keys = new Set();
     this.pointerFire = false;
+    this.pointerPosition = null;
     this.moveStick = { x: 0, z: 0 };
     this.fireStick = null;
     this.winchHeld = false;
@@ -288,6 +289,7 @@ export class UI {
   }
 
   aim(x, y) {
+    this.pointerPosition = { x, y };
     const shots = this.game.projectiles.filter((s) => s.hostile && s.missile);
     this.game.input.aim.copy(
       this.view.aim(x, y, [
@@ -379,6 +381,8 @@ export class UI {
     this.game.input.fire =
       this.pointerFire || this.keys.has(" ") || Boolean(this.fireStick);
     this.game.input.stickAim = this.fireStick;
+    if (this.game.input.fire && !this.fireStick && this.pointerPosition)
+      this.aim(this.pointerPosition.x, this.pointerPosition.y);
     this.game.input.winch =
       this.game.chapter === 2 && (this.winchHeld || this.keys.has("e"));
     if (this.game.chapter === 2) {
