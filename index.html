@@ -1,0 +1,316 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width,initial-scale=1,viewport-fit=cover"
+    />
+    <meta name="theme-color" content="#1c4c52" />
+    <meta
+      name="description"
+      content="Tidelock: Operation Breakwater. A three-chapter 3D island campaign: precision strikes, river escort, and helicopter extraction."
+    />
+    <link
+      rel="icon"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='12' fill='%23254952'/%3E%3Cpath d='M12 18h40v8H36v25h-8V26H12z' fill='%23ffd15d'/%3E%3C/svg%3E"
+    />
+    <title>Tidelock / Operation Breakwater</title>
+  </head>
+  <body>
+    <canvas id="world" aria-label="Tidelock 3D mission battlefield"></canvas>
+    <div id="loading" role="status">
+      <span class="load-mark">T</span>
+      <h1>TIDELOCK</h1>
+      <p id="loading-label">Preparing the archipelago</p>
+      <div class="load-track"><span id="loading-progress"></span></div>
+    </div>
+    <div id="app" hidden>
+      <header class="topbar">
+        <div class="brand">
+          <div class="brand-mark"><i data-lucide="crosshair"></i></div>
+          <div><strong>TIDELOCK</strong><span>OPERATION BREAKWATER</span></div>
+        </div>
+        <nav class="chapters" aria-label="Campaign chapters">
+          <button data-chapter="0" class="chapter-tab active">
+            <span>01</span> Breakwater
+          </button>
+          <button data-chapter="1" class="chapter-tab">
+            <span>02</span> Relief Run
+          </button>
+          <button data-chapter="2" class="chapter-tab">
+            <span>03</span> Last Light
+          </button>
+        </nav>
+        <div class="top-actions">
+          <div class="score">
+            <span>MISSION SCORE</span><strong id="score">00000</strong>
+          </div>
+          <button
+            id="sound"
+            class="icon-button"
+            aria-label="Mute sound"
+            title="Mute sound"
+          >
+            <i data-lucide="volume-2"></i>
+          </button>
+          <button
+            id="pause"
+            class="icon-button"
+            aria-label="Pause mission"
+            title="Pause mission"
+          >
+            <i data-lucide="pause"></i>
+          </button>
+          <button
+            id="settings"
+            class="icon-button"
+            aria-label="Mission settings"
+            title="Mission settings"
+          >
+            <i data-lucide="sliders-horizontal"></i>
+          </button>
+        </div>
+      </header>
+
+      <aside class="mission-hud">
+        <div class="eyebrow">
+          <span class="signal-dot"></span
+          ><span id="chapter-label">CHAPTER 01 / PRECISION STRIKE</span>
+        </div>
+        <h1 id="mission-name">First Light</h1>
+        <p id="objective">Clear the relay garrison</p>
+        <div class="objective-status">
+          <i id="objective-icon" data-lucide="scan"></i
+          ><strong id="objective-count">01</strong
+          ><span id="objective-unit">HOSTILE REMAINING</span>
+        </div>
+        <div class="mission-progress"><span id="mission-progress"></span></div>
+        <div class="mission-meta">
+          <span id="mission-index">MISSION 01 / 06</span
+          ><span id="mission-percent">0%</span>
+        </div>
+        <div class="transmission">
+          <div>
+            <i data-lucide="radio"></i><span>IONA / FIELD COMMAND</span>
+          </div>
+          <p id="transmission"></p>
+        </div>
+      </aside>
+
+      <div class="world-caption">
+        <span class="coordinate-cross">+</span><span>MERIDIA ARCHIPELAGO</span
+        ><span class="coordinate-detail" id="coordinate-detail"
+          >SECTOR A / 06:42 AM</span
+        >
+      </div>
+      <div id="toast" role="status" aria-live="polite"></div>
+      <div id="shield-hud" hidden>
+        <i data-lucide="shield"></i>
+        <div>
+          <span id="shield-title">SHIELD INTEGRITY</span>
+          <div id="shield-segments"></div>
+        </div>
+        <strong id="shield-count">9 / 9</strong>
+      </div>
+      <div id="powerup" hidden></div>
+
+      <section id="loadout" aria-label="Bomb loadout">
+        <div class="loadout-heading">
+          <div>
+            <i data-lucide="bomb"></i><span>PAYLOAD CONFIGURATION</span>
+          </div>
+          <button
+            id="loadout-close"
+            class="icon-button"
+            aria-label="Close loadout"
+            title="Close loadout"
+          >
+            <i data-lucide="chevron-down"></i>
+          </button>
+        </div>
+        <div class="loadout-row">
+          <div class="segmented" aria-label="Bomb type">
+            <button data-bomb="drill" class="selected">Drill</button
+            ><button data-bomb="bounce">Bounce</button
+            ><button data-bomb="timer">Timed</button>
+          </div>
+          <select id="flight-path" aria-label="Flight program">
+            <option value="ballistic">Ballistic</option>
+            <option value="hook">Hook</option>
+            <option value="zigzag">Zigzag</option>
+          </select>
+          <select id="scope" aria-label="Apply bomb settings">
+            <option value="all">All pods</option>
+            <option value="next">Next pod</option>
+          </select>
+        </div>
+        <div class="sliders">
+          <label
+            >ANGLE <output id="angle-value">0&deg;</output
+            ><input
+              id="angle"
+              type="range"
+              min="-35"
+              max="35"
+              value="0"
+              step="1"
+          /></label>
+          <label
+            >SPEED <output id="speed-value">8 m/s</output
+            ><input id="speed" type="range" min="2" max="18" value="8" step="1"
+          /></label>
+          <label
+            >FUSE <output id="fuse-value">1.8 s</output
+            ><input
+              id="fuse"
+              type="range"
+              min=".3"
+              max="3"
+              value="1.8"
+              step=".1"
+          /></label>
+          <label
+            >LAYERS <output id="walls-value">3</output
+            ><input id="walls" type="range" min="1" max="6" value="3" step="1"
+          /></label>
+        </div>
+      </section>
+
+      <div class="bomb-actions" id="bomb-actions">
+        <button
+          id="loadout-toggle"
+          class="icon-button"
+          aria-label="Adjust bomb loadout"
+          title="Adjust bomb loadout"
+        >
+          <i data-lucide="sliders-horizontal"></i>
+        </button>
+        <div class="ammo-label">
+          <strong id="ammo">02</strong><span>PODS<br />AVAILABLE</span>
+        </div>
+        <button id="drop" class="primary-button">
+          <i data-lucide="arrow-down-to-line"></i><span>Release pod</span
+          ><kbd>SPACE</kbd>
+        </button>
+      </div>
+
+      <div id="combat-controls" hidden>
+        <div
+          id="move-stick"
+          class="joystick"
+          role="button"
+          tabindex="0"
+          aria-label="Move vehicle"
+        >
+          <div class="stick-cross"></div>
+          <div class="stick-knob"><i data-lucide="move"></i></div>
+        </div>
+        <div class="weapon-bar">
+          <button
+            id="gun-weapon"
+            class="icon-button selected"
+            aria-label="Select gun"
+            title="Gun"
+          >
+            <i data-lucide="crosshair"></i></button
+          ><button
+            id="rocket-weapon"
+            class="icon-button"
+            aria-label="Select rockets"
+            title="Rockets"
+          >
+            <i data-lucide="rocket"></i>
+          </button>
+        </div>
+        <div
+          id="fire-stick"
+          class="joystick fire-stick"
+          role="button"
+          tabindex="0"
+          aria-label="Aim and fire"
+        >
+          <div class="stick-cross"></div>
+          <div class="stick-knob"><i data-lucide="crosshair"></i></div>
+        </div>
+        <div class="desktop-combat">
+          <i data-lucide="crosshair"></i><span id="weapon-label">DECK GUN</span
+          ><span class="ready-dot"></span>
+        </div>
+      </div>
+      <footer class="mission-footer">
+        <span>KESTREL RESPONSE UNIT</span
+        ><span id="footer-mode">AIRBORNE / ACTIVE</span>
+      </footer>
+    </div>
+
+    <dialog id="menu-dialog">
+      <div class="dialog-heading">
+        <div>
+          <span class="eyebrow">KESTREL / OPERATIONS</span>
+          <h2>Mission control</h2>
+        </div>
+        <button
+          id="menu-close"
+          class="icon-button"
+          aria-label="Resume mission"
+          title="Resume"
+        >
+          <i data-lucide="x"></i>
+        </button>
+      </div>
+      <p id="mission-briefing" class="briefing"></p>
+      <div class="menu-actions">
+        <button id="resume" class="primary-button">
+          <i data-lucide="play"></i>Resume</button
+        ><button id="retry" class="secondary-button">
+          <i data-lucide="rotate-ccw"></i>Retry</button
+        ><button id="skip" class="secondary-button">
+          <i data-lucide="skip-forward"></i>Skip
+        </button>
+      </div>
+      <h3>Campaign</h3>
+      <div id="mission-list"></div>
+      <div class="preferences">
+        <label
+          ><span>Reduced motion</span
+          ><input type="checkbox" id="reduced-motion" /></label
+        ><label
+          ><span>Sound</span><input type="checkbox" id="audio-enabled" checked
+        /></label>
+      </div>
+      <details>
+        <summary>Controls</summary>
+        <div class="control-reference">
+          <span>Move</span><kbd>W A S D / Arrows</kbd><span>Fire / release</span
+          ><kbd>Space / Pointer</kbd><span>Pause</span><kbd>Esc</kbd
+          ><span>Retry</span><kbd>R</kbd><span>Rockets</span><kbd>2</kbd
+          ><span>Gun</span><kbd>1</kbd>
+        </div>
+      </details>
+    </dialog>
+
+    <dialog id="result-dialog">
+      <div class="result-emblem">
+        <i id="result-icon" data-lucide="badge-check"></i>
+      </div>
+      <p class="eyebrow" id="result-eyebrow">MISSION COMPLETE</p>
+      <h2 id="result-title">Relay secured</h2>
+      <p id="result-story"></p>
+      <div id="result-stars" aria-label="Mission rating"></div>
+      <div class="result-stats">
+        <div><span>SCORE</span><strong id="result-score">0</strong></div>
+        <div><span>TARGETS</span><strong id="result-targets">0</strong></div>
+        <div><span>BEST</span><strong id="result-best">0</strong></div>
+      </div>
+      <div class="result-actions">
+        <button id="result-retry" class="secondary-button">
+          <i data-lucide="rotate-ccw"></i>Retry</button
+        ><button id="result-next" class="primary-button">
+          Next mission<i data-lucide="arrow-right"></i>
+        </button>
+      </div>
+    </dialog>
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>

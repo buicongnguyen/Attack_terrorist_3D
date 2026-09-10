@@ -1,0 +1,86 @@
+{
+  "author": "Original procedural assets authored for Tidelock",
+  "blender": "4.5.0",
+  "units": "metres",
+  "forward": "-Z in glTF",
+  "assets": [
+    {
+      "name": "boat",
+      "file": "boat.glb",
+      "meshes": 24,
+      "bytes": 85208
+    },
+    {
+      "name": "helicopter",
+      "file": "helicopter.glb",
+      "meshes": 20,
+      "bytes": 71792
+    },
+    {
+      "name": "plane",
+      "file": "plane.glb",
+      "meshes": 11,
+      "bytes": 63472
+    },
+    {
+      "name": "enemy",
+      "file": "enemy.glb",
+      "meshes": 14,
+      "bytes": 69532
+    },
+    {
+      "name": "cannon",
+      "file": "cannon.glb",
+      "meshes": 5,
+      "bytes": 15032
+    },
+    {
+      "name": "launcher",
+      "file": "launcher.glb",
+      "meshes": 12,
+      "bytes": 43208
+    },
+    {
+      "name": "mine",
+      "file": "mine.glb",
+      "meshes": 10,
+      "bytes": 33236
+    },
+    {
+      "name": "missile-friendly",
+      "file": "missile-friendly.glb",
+      "meshes": 5,
+      "bytes": 22832
+    },
+    {
+      "name": "missile-enemy",
+      "file": "missile-enemy.glb",
+      "meshes": 5,
+      "bytes": 22832
+    },
+    {
+      "name": "palm",
+      "file": "palm.glb",
+      "meshes": 8,
+      "bytes": 9968
+    },
+    {
+      "name": "rock",
+      "file": "rock.glb",
+      "meshes": 1,
+      "bytes": 3364
+    },
+    {
+      "name": "supply",
+      "file": "supply.glb",
+      "meshes": 4,
+      "bytes": 12004
+    },
+    {
+      "name": "beacon",
+      "file": "beacon.glb",
+      "meshes": 5,
+      "bytes": 21508
+    }
+  ]
+}
