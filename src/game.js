@@ -896,7 +896,7 @@ export class Game {
 
   updateCaves(dt) {
     for (const e of this.entities) {
-      if (e.type !== "cave") continue;
+      if (e.type !== "cave" || e.dead || e.phase === "disabled") continue;
       if (this.rescue && e.position.distanceTo(this.player.position) > 48)
         continue;
       e.age += dt;
@@ -914,15 +914,6 @@ export class Game {
           e.phase = "enemy";
           e.timer = 0;
           e.crew.visible = true;
-        }
-      } else if (e.phase === "closed") {
-        e.mouth.scale.set(0.9, 0.2, 0.2);
-        if (e.timer > e.closedFor) {
-          e.phase = "enemy";
-          e.timer = 0;
-          e.hp = e.maxHp;
-          e.crew.visible = true;
-          e.mouth.scale.set(1.08, 0.93, 0.35);
         }
       } else if (e.phase === "enemy" && e.timer >= 3) {
         e.phase = "launcher";
@@ -1271,26 +1262,36 @@ export class Game {
 
   damage(e, amount, rocket = false) {
     if (
+      amount <= 0 ||
       e.dead ||
       e.friendly ||
       e.type === "pickup" ||
-      (e.type === "cave" && ["hidden", "closed", "opening"].includes(e.phase))
+      (e.type === "cave" &&
+        ["hidden", "closed", "opening", "disabled"].includes(e.phase))
     )
       return;
     e.hp -= amount;
     this.puff(this.targetPosition(e), 0xffd88b, 0.24, 0.2);
-    if (e.hp > 0) return;
     if (e.type === "cave") {
-      e.phase = "closed";
+      e.phase = "disabled";
       e.timer = 0;
-      e.closedFor = rocket ? 7 : 3.5;
+      e.mouth.scale.set(0.9, 0.2, 0.2);
       e.crew.visible = false;
       e.launcher.visible = false;
       e.warningRing.visible = false;
       this.score += rocket ? 150 : 100;
       this.kills++;
       this.explode(this.targetPosition(e), 1.5, COLORS.gold);
-    } else this.kill(e);
+      return;
+    }
+    if (this.chapter === 2 && e.type === "aa-truck" && !e.launcherDisabled) {
+      e.launcherDisabled = true;
+      const rack = e.mesh.getObjectByName("TruckTurret");
+      if (rack) rack.visible = false;
+      if (e.warning) e.warning.visible = false;
+      this.explode(this.targetPosition(e), 0.85, COLORS.gold);
+    }
+    if (e.hp <= 0) this.kill(e);
   }
 
   kill(e, reward = true) {

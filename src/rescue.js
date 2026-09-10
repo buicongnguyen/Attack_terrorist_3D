@@ -291,7 +291,7 @@ export class RescueOperation {
         const rotor = e.mesh.getObjectByName("DroneRotor");
         if (rotor) rotor.rotation.y += dt * 32;
       }
-      if (d > e.range) continue;
+      if (d > e.range || e.launcherDisabled) continue;
       e.cooldown -= dt;
       let turret = e.mesh.getObjectByName("TruckTurret");
       if (!turret)
@@ -342,7 +342,10 @@ export class RescueOperation {
     const danger =
       site &&
       g.entities.some(
-        (e) => isHostileEntity(e) && distance(e.position, site) < 9,
+        (e) =>
+          isHostileEntity(e) &&
+          !e.launcherDisabled &&
+          distance(e.position, site) < 9,
       );
     const near = site && distance(g.player.position, site) < 4.2;
     const ready =

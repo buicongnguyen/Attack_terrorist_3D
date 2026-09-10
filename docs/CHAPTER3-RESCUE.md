@@ -43,10 +43,11 @@ The repository uses an SSH push to `main` and its existing [test-and-deploy work
 - Every pointer cancellation, pause, and resize clears held movement/fire. The winch also releases on cancellation. Its three-second pickup resets when interrupted and cannot run alongside helicopter fire.
 - Friendly soldiers and supply caches are excluded from aiming, direct damage, and missile splash. Pickups are collected once; repair, rockets, and support each have distinct inventory effects.
 - The old survival timer cannot complete a rescue mission. All soldiers must be aboard and the helicopter must land at the southern base.
+- A landed hit permanently shuts down a Chapter 3 cave launcher or mobile missile rack. Disabled caves remain collapsed; mobile launchers lose their rack and warning indicator but their armored vehicle can still be destroyed. Disarmed units no longer appear as active threats on the map or block a pickup zone. Already-airborne missiles remain active, and retry restores fresh launchers.
 
 ## Verification and Limits
 
-The expanded suite contains 15 Node tests and 95 browser assertions. It covers complete two-, three-, and four-soldier sorties using normal movement, damage, cooldowns, and return-to-base rules. A scripted pilot selects directions and targets; these runs establish reachability, not human difficulty balance.
+The expanded suite contains 16 Node tests and 103 browser assertions. It covers complete two-, three-, and four-soldier sorties using normal movement, damage, cooldowns, and return-to-base rules. Launcher tests use traveling bullets, then simulate twenty seconds to verify no rearming or new launches. A scripted pilot selects directions and targets; these runs establish reachability, not human difficulty balance.
 
 Real keyboard events operate the winch. Chrome DevTools touch events exercise simultaneous movement and ground-target firing, held winch input, and touch cancellation. Layout and nonblank-canvas checks cover 320x740, 390x844, 568x320, 667x375, 844x390, and 768x1024 touch emulation. Desktop checks compare animated canvas pixels at the base, outpost, and northern ridge. All 20 Blender models load without resource errors.
 

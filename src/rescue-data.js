@@ -49,4 +49,5 @@ export const isHostileEntity = (e) =>
   ["mine", "cannon", "launcher", "enemy", "cave", "aa-truck", "drone"].includes(
     e.type,
   ) &&
-  (e.type !== "cave" || !["hidden", "closed", "opening"].includes(e.phase));
+  (e.type !== "cave" ||
+    !["hidden", "closed", "opening", "disabled"].includes(e.phase));

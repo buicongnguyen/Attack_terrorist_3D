@@ -1,3 +1,5 @@
+import { isHostileEntity } from "./rescue-data.js";
+
 export class RescueHUD {
   constructor(game) {
     this.game = game;
@@ -99,9 +101,8 @@ export class RescueHUD {
     c.setLineDash([]);
     for (const e of g.entities) {
       if (
-        e.dead ||
-        e.friendly ||
-        e.type === "pickup" ||
+        !isHostileEntity(e) ||
+        e.launcherDisabled ||
         e.position.distanceTo(g.player.position) > 48
       )
         continue;

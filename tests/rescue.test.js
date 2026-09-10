@@ -41,3 +41,8 @@ test("friendly soldiers, supplies, and hidden caves are not weapon targets", () 
   assert.ok(isHostileEntity({ type: "aa-truck" }));
   assert.ok(isHostileEntity({ type: "drone" }));
 });
+
+test("disabled caves stop being targets; disarmed trucks can still be destroyed", () => {
+  assert.ok(!isHostileEntity({ type: "cave", phase: "disabled" }));
+  assert.ok(isHostileEntity({ type: "aa-truck", launcherDisabled: true }));
+});

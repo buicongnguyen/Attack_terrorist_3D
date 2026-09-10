@@ -101,6 +101,75 @@ export async function checkRescue(page, browser, url, check, errors) {
   for (const [name, value] of Object.entries(result))
     check(`rescue ${name}`, value);
 
+  const launchers = await page.evaluate(() => {
+    const { game: g, ui } = __TIDELOCK__,
+      out = {};
+    ui.start(9);
+    const cave = g.entities.find((e) => e.type === "cave");
+    g.entities = [cave];
+    cave.phase = "launcher";
+    cave.timer = 4;
+    cave.launcher.visible = true;
+    cave.mesh.scale.setScalar(1);
+    g.player.position.set(cave.position.x, 7.5, cave.position.z + 15);
+    const incoming = g.spawnShot(
+      g.player.position.clone().add({ x: 25, y: 0, z: 0 }),
+      g.player.position.clone(),
+      true,
+      true,
+    );
+    out.requiresImpact =
+      g.fire(g.targetPosition(cave)) && cave.phase === "launcher";
+    for (let i = 0; i < 120; i++) g.updateProjectiles(1 / 120);
+    out.caveHitDisables =
+      cave.phase === "disabled" &&
+      !cave.launcher.visible &&
+      !cave.crew.visible &&
+      !cave.warningRing.visible;
+    out.inFlightMissileRemains =
+      !incoming.dead && g.projectiles.includes(incoming);
+    const shots = g.projectiles.length,
+      score = g.score,
+      kills = g.kills;
+    for (let i = 0; i < 2400; i++) g.updateCaves(1 / 120);
+    out.caveNeverRearms =
+      cave.phase === "disabled" && g.projectiles.length === shots;
+    g.damage(cave, 5, true);
+    out.caveRewardOnce = g.score === score && g.kills === kills;
+
+    ui.start(9);
+    const truck = g.entities.find((e) => e.type === "aa-truck");
+    g.entities = [truck];
+    g.player.position.set(truck.position.x, 7.5, truck.position.z + 15);
+    const hp = truck.hp;
+    g.fire(g.targetPosition(truck));
+    for (let i = 0; i < 120; i++) g.updateProjectiles(1 / 120);
+    out.truckHitDisables =
+      truck.launcherDisabled &&
+      truck.hp === hp - 1 &&
+      !truck.dead &&
+      !truck.warning.visible &&
+      !truck.mesh.getObjectByName("TruckTurret").visible;
+    for (let i = 0; i < 2400; i++) {
+      g.time += 1 / 120;
+      g.rescue.update(1 / 120);
+    }
+    out.truckNeverFiresAgain = !g.projectiles.some((p) => p.hostile);
+    ui.start(9);
+    out.retryRestoresLaunchers =
+      g.entities.some((e) => e.type === "cave" && e.phase === "hidden") &&
+      g.entities.some(
+        (e) =>
+          e.type === "aa-truck" &&
+          !e.launcherDisabled &&
+          e.mesh.getObjectByName("TruckTurret").visible,
+      );
+    g.paused = true;
+    return out;
+  });
+  for (const [name, value] of Object.entries(launchers))
+    check(`launcher ${name}`, value);
+
   for (const index of [9, 10, 11]) {
     const sortie = await page.evaluate((index) => {
       const { game: g, ui } = __TIDELOCK__;

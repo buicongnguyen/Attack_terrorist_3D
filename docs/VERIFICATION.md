@@ -1,5 +1,9 @@
 # Release Verification
 
+## Launcher Shutdown Update
+
+Chapter 3 cave launchers and mobile anti-air racks now stop firing permanently after a landed hit. Traveling-projectile tests verify shutdown, twenty seconds without new launches, one-time cave rewards, preservation of missiles already airborne, and fresh launchers on retry. The suite now has 16 Node tests and 103 browser assertions. Chapter 2 launchers retain their existing rules.
+
 ## Rescue Update
 
 [Chapter 3 search and rescue](CHAPTER3-RESCUE.md) replaces the fixed helicopter defense with a larger following-camera map and three extraction sorties. Coverage now includes 15 Node tests and 95 browser assertions, 20 Blender assets, limited ordnance, flare countermeasures, friendly-fire protection, interrupted winches, base return, and all three complete rescue routes. Touch tests include real two-finger Chrome input and narrow landscape/tablet layouts. Screenshots and canvas-pixel checks verify the helicopter chapter at several map locations. Browser emulation is not real-device testing.
