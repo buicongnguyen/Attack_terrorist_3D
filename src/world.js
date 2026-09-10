@@ -2,6 +2,7 @@ import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { MODELS, ASSET_REVISION } from "./data.js";
 import { createPickupBadgeMaterial, badgeWorldSize } from "./pickups.js";
+import { createRescueScenery } from "./rescue-world.js";
 
 const materialCache = new Map();
 const boxGeometry = new THREE.BoxGeometry(1, 1, 1);
@@ -51,6 +52,7 @@ export class WorldView {
     this.sun.shadow.normalBias = 0.035;
     this.sun.shadow.bias = -0.0002;
     this.scene.add(this.sun);
+    this.scene.add(this.sun.target);
     this.level = new THREE.Group();
     this.scene.add(this.level);
     this.assets = new Map();
@@ -178,10 +180,13 @@ export class WorldView {
     this.scene.add(this.level);
     this.scrollProps = [];
     this.animated = [];
+    this.followPosition = null;
+    this.followPlayerPosition = null;
+    this.sceneryChunks = [];
   }
 
   createWater() {
-    const geometry = new THREE.PlaneGeometry(350, 350, 96, 96);
+    const geometry = new THREE.PlaneGeometry(650, 650, 96, 96);
     geometry.rotateX(-Math.PI / 2);
     const shader = new THREE.ShaderMaterial({
       uniforms: { time: { value: 0 } },
@@ -245,7 +250,7 @@ export class WorldView {
     make(1, height, 0x74a17a, 0.16);
   }
 
-  createScenery(chapter) {
+  createScenery(chapter, mission) {
     this.chapter = chapter;
     if (chapter === 0) {
       this.island(0, 0, 36, 18, 1);
@@ -325,44 +330,11 @@ export class WorldView {
         }
       }
     } else {
-      for (let side of [-1, 1]) {
-        this.island(side * 13, -8, 18, 38, 1.15);
-        for (let i = 0; i < 7; i++) {
-          this.model(
-            "rock",
-            new THREE.Vector3(side * (17 + (i % 3) * 2.1), 1, -24 + i * 5.2),
-            2.8 + (i % 3) * 0.65,
-          );
-        }
-        for (let i = 0; i < 4; i++)
-          this.model(
-            "palm",
-            new THREE.Vector3(side * (16 + (i % 2) * 2), 1, 6 - i * 7),
-            0.8,
-          );
-      }
-      this.island(0, 16, 9, 9, 0.65);
-      this.ring(new THREE.Vector3(0, 0.82, 16), 2.3, 0xf8dda0, 0.12);
-      this.box(
-        new THREE.Vector3(0, 0.8, 16),
-        new THREE.Vector3(0.28, 0.03, 2),
-        0xe7e4c7,
-      );
-      this.box(
-        new THREE.Vector3(-0.7, 0.8, 16),
-        new THREE.Vector3(0.28, 0.03, 2),
-        0xe7e4c7,
-      );
-      this.box(
-        new THREE.Vector3(-0.35, 0.8, 16),
-        new THREE.Vector3(0.9, 0.03, 0.24),
-        0xe7e4c7,
-      );
-      this.model("beacon", new THREE.Vector3(2.5, 0.7, 16));
+      createRescueScenery(this, mission);
     }
     this.distant = new THREE.Group();
     this.level.add(this.distant);
-    for (let i = 0; i < 6; i++) {
+    for (let i = 0; i < (chapter === 2 ? 0 : 6); i++) {
       const x = -65 + i * 26,
         z = -65 - (i % 2) * 12;
       this.island(x, z, 17 + (i % 3) * 8, 17, 1.5, this.distant);
@@ -405,10 +377,49 @@ export class WorldView {
     this.camera.lookAt(this.target);
     this.camera.updateProjectionMatrix();
     this.baseCamera = this.camera.position.clone();
+    if (this.chapter === 2 && this.followPlayerPosition)
+      this.followPlayer(this.followPlayerPosition, 0, true);
+    else {
+      this.sun.position.set(-18, 36, 16);
+      this.sun.target.position.set(0, 0, 0);
+    }
     this.level.traverse((object) => {
       if (object.userData.pickupBadge) this.resizeBadge(object);
     });
     this.needsRender = true;
+  }
+
+  followPlayer(position, dt, snap = false) {
+    this.followPlayerPosition = position.clone();
+    const goal = new THREE.Vector3(position.x, 0, position.z - 7);
+    if (!this.followPosition || snap) this.followPosition = goal;
+    else this.followPosition.lerp(goal, 1 - Math.exp(-dt * 5));
+    this.baseCamera.copy(this.followPosition).add(new THREE.Vector3(0, 65, 68));
+    this.camera.position.copy(this.baseCamera);
+    this.camera.lookAt(this.followPosition);
+    this.camera.updateMatrixWorld();
+    this.sun.position
+      .copy(this.followPosition)
+      .add(new THREE.Vector3(-18, 36, 16));
+    this.sun.target.position.copy(this.followPosition);
+    for (const chunk of this.sceneryChunks || [])
+      chunk.visible = Math.abs(chunk.userData.centerZ - position.z) < 75;
+  }
+
+  screenDirection(raw) {
+    const origin = new THREE.Vector3(),
+      endpoint = new THREE.Vector3();
+    this.ray.setFromCamera(new THREE.Vector2(0, 0), this.camera);
+    this.ray.ray.intersectPlane(this.plane, origin);
+    this.ray.setFromCamera(
+      new THREE.Vector2(
+        (raw.x * 0.1 * this.canvas.clientHeight) / this.canvas.clientWidth,
+        -raw.z * 0.1,
+      ),
+      this.camera,
+    );
+    this.ray.ray.intersectPlane(this.plane, endpoint);
+    return endpoint.sub(origin).setY(0).normalize();
   }
 
   aim(clientX, clientY, entities = []) {

@@ -1,5 +1,11 @@
 import * as THREE from "three";
 import { PICKUPS } from "./pickups.js";
+import { RescueOperation } from "./rescue.js";
+import {
+  RESCUE_HEIGHT,
+  RESCUE_BOUNDS,
+  isHostileEntity,
+} from "./rescue-data.js";
 import {
   MISSIONS,
   DEFAULT_LOADOUT,
@@ -51,7 +57,8 @@ export class Game {
     this.index = index;
     this.mission = MISSIONS[index];
     this.chapter = this.mission.chapter;
-    this.view.createScenery(this.chapter);
+    this.rescue = null;
+    this.view.createScenery(this.chapter, this.mission);
     this.physics = createPhysics();
     this.entities = [];
     this.projectiles = [];
@@ -76,11 +83,12 @@ export class Game {
     this.twin = 0;
     this.supportCooldown = 0;
     this.velocity = V();
-    this.shields = this.chapter === 1 ? [3, 3, 3] : [1, 1, 1];
+    this.shields = this.chapter ? [3, 3, 3] : [1, 1, 1];
     this.input.fire = false;
     this.input.x = 0;
     this.input.z = 0;
     this.input.stickAim = null;
+    this.input.winch = false;
     this.nextLoadout = null;
     this.playerTurret = null;
     this.rotor = null;
@@ -447,57 +455,14 @@ export class Game {
   }
 
   setupHeli() {
-    this.player = this.view.model("helicopter", V(0, 4.5, 10), 0.85);
+    this.player = this.view.model("helicopter", V(0, RESCUE_HEIGHT, 18), 0.95);
     this.rotor = this.player.getObjectByName("Rotor");
     this.tailRotor = this.player.getObjectByName("TailRotor");
+    this.heliTurret = this.player.getObjectByName("ChinTurret");
+    this.heliMuzzle = this.player.getObjectByName("HeliMuzzle");
     this.shieldMeshes = this.createShields(3.1, 0);
-    for (let i = 0; i < this.mission.caves; i++) {
-      const side = i % 2 ? -1 : 1,
-        row = Math.floor(i / 2);
-      const x = side * (8.3 + (row % 2) * 3.2),
-        z = 1 - row * 3.7;
-      const cave = this.entity("cave", null, V(x, 1.8, z), {
-        radius: 1.55,
-        hp: i % 4 === 0 ? 5 : 3,
-        maxHp: i % 4 === 0 ? 5 : 3,
-        phase: "hidden",
-        timer: 0,
-        appearAt: i < 6 ? i * 0.55 : 7 + (i - 6) * 2.8,
-        size: i % 4 === 0 ? 1.15 : 0.9,
-      });
-      this.view.model("rock", V(0, -0.6, 0), 1.9, cave.mesh);
-      const mouth = this.view.sphere(
-        V(0, 0.38, 1.5),
-        V(1.08, 0.93, 0.35),
-        0x233c40,
-        cave.mesh,
-      );
-      cave.mouth = mouth;
-      const arch = new THREE.Mesh(
-        new THREE.TorusGeometry(1.03, 0.17, 5, 12, Math.PI),
-        new THREE.MeshStandardMaterial({ color: 0xc4c7b5, roughness: 1 }),
-      );
-      arch.position.set(0, 0.25, 1.62);
-      arch.userData.disposable = true;
-      cave.mesh.add(arch);
-      cave.crew = this.view.model("enemy", V(0, -0.6, 1.65), 0.75, cave.mesh);
-      cave.launcher = this.view.box(
-        V(0, -0.2, 1.4),
-        V(0.75, 0.48, 1.25),
-        0x9b6060,
-        cave.mesh,
-      );
-      cave.mesh.scale.setScalar(0.01);
-      cave.crew.visible = false;
-      cave.launcher.visible = false;
-      cave.warningRing = this.view.ring(
-        V(0, -0.65, 1.6),
-        1.3,
-        COLORS.hostile,
-        0.08,
-        cave.mesh,
-      );
-    }
+    this.rescue = new RescueOperation(this);
+    this.view.followPlayer(this.player.position, 0, true);
     this.wakeCooldown = 0;
   }
 
@@ -550,7 +515,11 @@ export class Game {
       if (this.chapter === 1) this.updateRiver(dt);
       else this.updateHeli(dt);
       this.updateProjectiles(dt);
-      if (this.status === "playing" && this.time >= this.mission.duration)
+      if (
+        this.chapter === 1 &&
+        this.status === "playing" &&
+        this.time >= this.mission.duration
+      )
         this.finish(true);
     }
     this.updatePeople(dt);
@@ -665,22 +634,23 @@ export class Game {
       this.velocity,
       { x: this.input.x, z: this.input.z },
       dt,
-      river ? 33 : 43,
+      river ? 33 : 60,
       river ? 3.7 : 4.1,
-      river ? 7.6 : 9,
+      river ? 7.6 : 14,
     );
     this.player.position.x = clamp(
       this.player.position.x + this.velocity.x * dt,
-      river ? -9 : -7,
-      river ? 9 : 7,
+      river ? -9 : RESCUE_BOUNDS.left,
+      river ? 9 : RESCUE_BOUNDS.right,
     );
     this.player.position.z = clamp(
       this.player.position.z + this.velocity.z * dt,
-      river ? -7 : 4,
-      river ? 18 : 17,
+      river ? -7 : RESCUE_BOUNDS.far,
+      river ? 18 : RESCUE_BOUNDS.near,
     );
     this.player.position.y =
-      (river ? 0.08 : 4.5) + Math.sin(this.time * (river ? 2.5 : 1.3)) * 0.07;
+      (river ? 0.08 : RESCUE_HEIGHT) +
+      Math.sin(this.time * (river ? 2.5 : 1.3)) * 0.07;
     this.player.rotation.z = THREE.MathUtils.damp(
       this.player.rotation.z,
       -this.velocity.x * (river ? 0.012 : 0.035),
@@ -694,18 +664,16 @@ export class Game {
       dt,
     );
     let aim = this.input.aim;
+    this.aimTarget = null;
     if (this.input.stickAim) {
-      const raw = this.input.stickAim;
-      aim = this.player.position.clone().add(V(raw.x * 35, 0, raw.z * 35));
-      const nearest = this.nearestTarget();
-      if (nearest) {
-        const desired = nearest.position
-          .clone()
-          .sub(this.player.position)
-          .normalize();
-        if (desired.dot(V(raw.x, 0, raw.z).normalize()) > 0.94)
-          aim = this.targetPosition(nearest);
-      }
+      const direction = this.view.screenDirection(this.input.stickAim);
+      this.aimTarget = this.directionTarget(direction);
+      aim = this.aimTarget
+        ? this.targetPosition(this.aimTarget)
+        : this.player.position
+            .clone()
+            .addScaledVector(direction, 35)
+            .setY(river ? 0.2 : 1.5);
     }
     if (river && this.twin > 0 && !this.input.fire) {
       const target = this.nearestTarget();
@@ -714,9 +682,10 @@ export class Game {
     if (river) this.aimBoatTurret(aim);
     this.reticle.position.copy(aim);
     this.reticle.position.y = Math.max(0.13, aim.y + 0.1);
-    this.reticle.visible = !this.input.stickAim;
-    if (this.input.fire)
-      this.fire(aim, this.chapter === 2 && this.weapon === "rocket");
+    this.reticle.visible = true;
+    if (this.input.fire && !this.input.winch)
+      this.fire(aim, this.chapter === 2 && this.weapon !== "gun");
+    if (!river) this.view.followPlayer(this.player.position, dt);
     for (let i = 0; i < 3; i++) {
       this.shieldMeshes[i].position
         .copy(this.player.position)
@@ -873,6 +842,7 @@ export class Game {
   }
 
   collect(pickup) {
+    if (this.rescue) return this.rescue.collect(pickup);
     if (pickup.dead || this.status !== "playing") return;
     const info = PICKUPS[pickup.kind];
     pickup.dead = true;
@@ -921,10 +891,14 @@ export class Game {
   }
 
   updateHeli(dt) {
-    if (this.rotor) this.rotor.rotation.y += dt * 35;
-    if (this.tailRotor) this.tailRotor.rotation.x += dt * 44;
+    this.rescue.update(dt);
+  }
+
+  updateCaves(dt) {
     for (const e of this.entities) {
       if (e.type !== "cave") continue;
+      if (this.rescue && e.position.distanceTo(this.player.position) > 48)
+        continue;
       e.age += dt;
       if (e.phase === "hidden") {
         if (this.time >= e.appearAt) {
@@ -975,6 +949,8 @@ export class Game {
   }
 
   targetPosition(e) {
+    if (e.hostile || e.type === "drone") return e.position.clone();
+    if (e.type === "aa-truck") return e.position.clone().add(V(0, 1.1, 0));
     return e.position
       .clone()
       .add(
@@ -998,11 +974,9 @@ export class Game {
     return this.entities
       .filter(
         (e) =>
-          !e.dead &&
-          ["mine", "cannon", "launcher", "enemy", "cave"].includes(e.type) &&
-          (e.type !== "cave" ||
-            !["hidden", "closed", "opening"].includes(e.phase)) &&
-          e.position.z < this.player.position.z + 8,
+          isHostileEntity(e) &&
+          e.position.distanceTo(this.player.position) < 55 &&
+          (this.chapter === 2 || e.position.z < this.player.position.z + 8),
       )
       .sort(
         (a, b) =>
@@ -1011,19 +985,77 @@ export class Game {
       )[0];
   }
 
+  directionTarget(direction) {
+    let best = null,
+      score = -Infinity;
+    const candidates = [
+      ...this.entities.filter(isHostileEntity),
+      ...this.projectiles.filter((p) => p.hostile && p.missile && !p.dead),
+    ];
+    for (const target of candidates) {
+      const delta = this.targetPosition(target).sub(this.player.position);
+      const distance = delta.length();
+      if (distance > 55) continue;
+      const dot = delta.setY(0).normalize().dot(direction);
+      const value = dot * 2 - distance * 0.001 + (target.hostile ? 0.005 : 0);
+      if (dot > 0.94 && value > score) {
+        score = value;
+        best = target;
+      }
+    }
+    return best;
+  }
+
   fire(aim, rocket = false) {
     if (this.paused || this.status !== "playing" || this.chapter === 0)
       return false;
+    if (this.chapter === 2 && this.input.winch) return false;
     if (rocket ? this.rocketCooldown > 0 : this.cooldown > 0) return false;
+    const guided = this.chapter === 2 && this.weapon === "guided";
+    const target = guided
+      ? this.entities
+          .filter(isHostileEntity)
+          .sort(
+            (a, b) =>
+              this.targetPosition(a).distanceToSquared(aim) -
+              this.targetPosition(b).distanceToSquared(aim),
+          )[0]
+      : null;
+    if (
+      guided &&
+      (!target ||
+        this.targetPosition(target).distanceTo(aim) > 4 ||
+        target.position.distanceTo(this.player.position) > 55)
+    )
+      return false;
+    if (this.rescue && rocket) {
+      const key = guided ? "guided" : "rockets";
+      if (this.rescue.gear[key] <= 0) return false;
+      this.rescue.gear[key]--;
+    }
     if (rocket) this.rocketCooldown = 1.2;
     else this.cooldown = SHOT_INTERVAL;
     if (this.chapter === 1) this.aimBoatTurret(aim);
+    if (this.chapter === 2 && this.heliTurret) {
+      this.player.updateMatrixWorld(true);
+      const direction = aim
+        .clone()
+        .sub(this.heliTurret.getWorldPosition(V()))
+        .normalize();
+      direction.applyQuaternion(
+        this.player.getWorldQuaternion(new THREE.Quaternion()).invert(),
+      );
+      this.heliTurret.quaternion.setFromUnitVectors(forward, direction);
+      this.player.updateMatrixWorld(true);
+    }
     const origin =
       this.chapter === 1 && this.boatParts.Muzzle
         ? this.boatParts.Muzzle.getWorldPosition(V())
-        : this.player.position
-            .clone()
-            .add(V(0, this.chapter === 1 ? 1.1 : -0.1, -1.15));
+        : this.chapter === 2 && this.heliMuzzle
+          ? this.heliMuzzle.getWorldPosition(V())
+          : this.player.position
+              .clone()
+              .add(V(0, this.chapter === 1 ? 1.1 : -0.1, -1.15));
     if (this.twin > 0 && !rocket) {
       for (const side of [-1, 1])
         this.spawnShot(
@@ -1036,7 +1068,14 @@ export class Game {
           false,
           false,
         );
-    } else this.spawnShot(origin, aim, rocket, false);
+    } else this.spawnShot(origin, aim, rocket, false, target);
+    if (this.chapter === 2)
+      this.puff(
+        origin,
+        rocket ? 0xffd47e : COLORS.friendly,
+        rocket ? 0.2 : 0.12,
+        0.09,
+      );
     this.audio.play("shot");
     return true;
   }
@@ -1086,13 +1125,16 @@ export class Game {
       shot.life -= dt;
       shot.last.copy(shot.position);
       if (shot.missile) {
-        const goal = shot.hostile
-          ? this.player.position
-              .clone()
-              .add(V(0, this.chapter === 1 ? 1 : 0, 0))
-          : shot.target && !shot.target.dead
-            ? this.targetPosition(shot.target)
-            : null;
+        const goal =
+          shot.hostile && (shot.distracted || this.rescue?.countermeasures > 0)
+            ? null
+            : shot.hostile
+              ? this.player.position
+                  .clone()
+                  .add(V(0, this.chapter === 1 ? 1 : 0, 0))
+              : shot.target && !shot.target.dead
+                ? this.targetPosition(shot.target)
+                : null;
         if (goal) {
           const desired = goal.sub(shot.position).normalize();
           const direction = shot.velocity.clone().normalize();
@@ -1161,13 +1203,7 @@ export class Game {
             hit = { t, missile: enemyShot };
         }
         for (const e of this.entities) {
-          if (
-            e.dead ||
-            e.type === "pickup" ||
-            (e.type === "cave" &&
-              ["hidden", "opening", "closed"].includes(e.phase))
-          )
-            continue;
+          if (!isHostileEntity(e)) continue;
           const t = segmentSphere(
             shot.last,
             shot.position,
@@ -1209,7 +1245,7 @@ export class Game {
                 if (
                   e !== hit.entity &&
                   !e.dead &&
-                  e.type !== "pickup" &&
+                  isHostileEntity(e) &&
                   this.targetPosition(e).distanceTo(shot.position) < 3.7
                 )
                   this.damage(e, 3, true);
@@ -1220,8 +1256,9 @@ export class Game {
       if (
         shot.life <= 0 ||
         shot.position.y < -0.8 ||
-        Math.abs(shot.position.z) > 90 ||
-        Math.abs(shot.position.x) > 45
+        (this.chapter === 2
+          ? shot.position.distanceTo(this.player.position) > 95
+          : Math.abs(shot.position.z) > 90 || Math.abs(shot.position.x) > 45)
       )
         shot.dead = true;
     }
@@ -1235,6 +1272,8 @@ export class Game {
   damage(e, amount, rocket = false) {
     if (
       e.dead ||
+      e.friendly ||
+      e.type === "pickup" ||
       (e.type === "cave" && ["hidden", "closed", "opening"].includes(e.phase))
     )
       return;
@@ -1489,8 +1528,13 @@ export class Game {
       auto: this.auto,
       twin: this.twin,
       progress: this.chapter
-        ? Math.min(1, this.time / this.mission.duration)
+        ? this.rescue
+          ? this.status === "success"
+            ? 1
+            : this.rescue.snapshot().progress
+          : Math.min(1, this.time / this.mission.duration)
         : this.kills / this.mission.enemies,
+      rescue: this.rescue?.snapshot() || null,
     };
   }
 }

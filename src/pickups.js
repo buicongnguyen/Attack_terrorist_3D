@@ -31,6 +31,20 @@ export const PICKUPS = Object.freeze({
     reward: 250,
     toast: "FIELD MEDAL +250",
   },
+  ammo: {
+    model: "pickup-gun",
+    color: 0xffd369,
+    label: "ROCKETS",
+    reward: 60,
+    toast: "ROCKETS +10",
+  },
+  support: {
+    model: "pickup-gun",
+    color: 0x6bdaff,
+    label: "SUPPORT",
+    reward: 60,
+    toast: "GUIDED +4 / FLARES +2",
+  },
 });
 
 export function activeBonuses(state) {
@@ -81,7 +95,7 @@ export function createPickupBadgeMaterial(kind) {
     ctx.font = "bold 30px Arial";
     ctx.textAlign = "center";
     ctx.fillText("x2", 96, 133);
-  } else if (kind === "gun") {
+  } else if (["gun", "ammo", "support"].includes(kind)) {
     ctx.save();
     ctx.translate(96, 76);
     ctx.rotate(Math.PI / 4);

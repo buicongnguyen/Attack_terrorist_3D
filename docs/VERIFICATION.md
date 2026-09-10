@@ -1,5 +1,11 @@
 # Release Verification
 
+## Rescue Update
+
+[Chapter 3 search and rescue](CHAPTER3-RESCUE.md) replaces the fixed helicopter defense with a larger following-camera map and three extraction sorties. Coverage now includes 15 Node tests and 94 browser assertions, 20 Blender assets, limited ordnance, flare countermeasures, friendly-fire protection, interrupted winches, base return, and all three complete rescue routes. Touch tests include real two-finger Chrome input and narrow landscape/tablet layouts. Screenshots and canvas-pixel checks verify the helicopter chapter at several map locations. Browser emulation is not real-device testing.
+
+The historical sections below describe earlier releases, including the helicopter defense missions that this update replaces.
+
 ## Detail Update
 
 The subsequent [3D detail and pickup review](REVIEW-DETAILS.md) expands coverage to 11 Node tests and 54 browser assertions, 17 GLBs, independent bonus timers, authored gun muzzles, and HUD-safe pickup badges. It adds 320x740 mobile emulation alongside the original desktop and phone orientations. The sections below preserve the initial release's verification history.
@@ -45,7 +51,7 @@ Logic review found and corrected duplicate drill-layer counts at adjacent tile e
 - This is a first playable arcade release with authored low-poly assets, not a finished commercial art pass.
 - Touch layouts and pointer capture are browser-emulated. Real iOS Safari and low-end Android hardware still require device testing.
 - Desktop screenshots were captured in headless Chrome with software WebGL. They verify rendering and layout, not a real-device 60 FPS performance guarantee.
-- The camera is fixed per chapter. Vehicles and effects are 3D; precision bombing intentionally keeps its easy-to-read side-plane control scheme.
+- Chapters 1 and 2 use fixed cameras; Chapter 3 follows the helicopter through the valley. Precision bombing intentionally keeps its easy-to-read side-plane control scheme.
 - Drilling removes local slab tiles. Full structural support/collapse simulation is a future improvement.
 - Bomb trajectory previews end at first geometry contact. Post-impact travel depends on the physics engine and selected fuse.
 - Cave geometry is simplified and repeatedly suppressible. Character poses are node animations, not motion-captured skeletal clips.

@@ -6,27 +6,32 @@ A playable 3D remake of the Sky Drill arcade campaign, built with **Three.js**, 
 
 ![Breakwater mission](docs/chapter1.png)
 
-The Ashen Front has closed the Meridia relief corridor. Disable its coastal relays, bring a relief launch upriver, and protect the mountain extraction until the survey crew is safe.
+The Ashen Front has closed the Meridia relief corridor. Disable its coastal relays, bring a relief launch upriver, then fly into the valley to rescue stranded soldiers and bring them home.
 
 ## Campaign
 
 - **Breakwater**: six precision missions. Configure drill, bounce, or timed pods; choose ballistic, hook, or zigzag flight; time your release from the carrier aircraft. Later missions demand room-sized blasts and efficient use of limited ammunition.
 - **Relief Run**: three river legs. Pilot a crewed patrol boat, aim its turret, intercept mines, and destroy bank guns and launcher houses. Pickups repair shields or temporarily grant twin automatic guns and guided missiles.
-- **Last Light**: three helicopter defenses. Move around the extraction zone, suppress emerging cave launchers, intercept incoming missiles, and protect three independent shield sectors.
+- **Last Light**: three search-and-rescue sorties across a 92 by 250 world-unit valley. Choose rescue signals on the tactical map, clear pickup zones, hover to winch two, three, or four soldiers aboard, and return to base. Fight infantry, cannons, cave launchers, mobile anti-air trucks, and drones with a chain gun, rockets, guided missiles, and defensive flares. Supply caches and the southern base restore equipment and shields.
+
+![Valley rescue mission](docs/chapter3.png)
 
 All twelve missions are available from Mission Control for testing. Completion records save locally. Retry starts a fresh attempt; only completed best scores are retained.
 
 ## Controls
 
-| Action | Desktop | Touch |
-| --- | --- | --- |
-| Release pod | Space or Release pod | Release pod |
-| Adjust pod | Bottom loadout controls | Bottom-left settings icon |
-| Move boat / helicopter | WASD or arrow keys | Left stick |
-| Aim and fire | Point and hold primary mouse button; Space also fires | Right stick |
-| Helicopter weapon | 1 for gun, 2 for rockets | Weapon icons |
-| Pause / mission selection | Escape or top settings icon | Top settings icon |
-| Retry | R or Mission Control | Mission Control |
+| Action                    | Desktop                                               | Touch                                 |
+| ------------------------- | ----------------------------------------------------- | ------------------------------------- |
+| Release pod               | Space or Release pod                                  | Release pod                           |
+| Adjust pod                | Bottom loadout controls                               | Bottom-left settings icon             |
+| Move boat / helicopter    | WASD or arrow keys                                    | Left stick                            |
+| Aim and fire              | Point and hold primary mouse button; Space also fires | Right stick                           |
+| Helicopter weapon         | 1 gun, 2 rockets, 3 guided missiles                   | Weapon icons with ammunition counts   |
+| Defensive flares          | F                                                     | Flare icon                            |
+| Rescue / return to base   | Hold E while hovering in a clear landing zone         | Hold winch / land button              |
+| Rescue waypoint           | Select map signal or next-signal icon                 | Select map signal or next-signal icon |
+| Pause / mission selection | Escape or top settings icon                           | Top settings icon                     |
+| Retry                     | R or Mission Control                                  | Mission Control                       |
 
 ## Run Locally
 
@@ -61,7 +66,7 @@ Regenerate with Blender 4.5 LTS:
 blender --background --python tools/build_assets.py -- --output public/models
 ```
 
-The 17 GLB models total approximately 1.61 MiB. They include a detailed turret-equipped patrol boat and crew, helicopter, carrier plane, articulated opponent, cannon, launcher house, mine, two missile designs, palm, rock, supply case, beacon, and four distinct floating pickup cases. Geometry and material data are shared between runtime instances; static details are batched by material and articulated pivot during export.
+The 20 GLB models total approximately 1.94 MiB. They include a detailed turret-equipped patrol boat and crew, helicopter with an articulated chin gun, carrier plane, articulated opponent, waving rescue soldier, mobile anti-air truck, drone, cannon, launcher house, mine, two missile designs, palm, rock, supply case, beacon, and four distinct floating pickup cases. Geometry and material data are shared between runtime instances; static details are batched by material and articulated pivot during export.
 
 Supply cases use clear camera-facing symbols: a green **+** for shield repair, gold **twin barrels / x2** for twin automatic guns, a cyan **rocket** for guided support, and a gold **medal / +250** for score. Both weapon timers remain visible when bonuses overlap. The boat's gun and missile-rack models also change with its active loadout.
 
@@ -71,6 +76,7 @@ Supply cases use clear camera-facing symbols: a green **+** for shield repair, g
 - [Verification notes and known limitations](docs/VERIFICATION.md)
 - [Asset and dependency credits](docs/CREDITS.md)
 - [3D detail and pickup readability review](docs/REVIEW-DETAILS.md)
+- [Chapter 3 rescue design, implementation, and review](docs/CHAPTER3-RESCUE.md)
 
 The first release uses a fixed 120 Hz simulation, cannon-es rigid bodies for bombs and fragments, and swept collision tests for fast projectiles. Guided flight programs are arcade mechanics. The forecast stops at first contact; it does not claim an exact preview of later bounces or drilling.
 

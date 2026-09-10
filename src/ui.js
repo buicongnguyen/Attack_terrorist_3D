@@ -23,6 +23,10 @@ import {
   ArrowRight,
   Star,
   TriangleAlert,
+  Navigation,
+  Sparkles,
+  ArrowUpFromLine,
+  Target,
 } from "lucide";
 import {
   CHAPTERS,
@@ -32,6 +36,8 @@ import {
   saveResult,
 } from "./data.js";
 import { activeBonuses } from "./pickups.js";
+import { RescueHUD } from "./rescue-hud.js";
+import { isHostileEntity } from "./rescue-data.js";
 
 const iconSet = {
   Crosshair,
@@ -57,6 +63,10 @@ const iconSet = {
   ArrowRight,
   Star,
   TriangleAlert,
+  Navigation,
+  Sparkles,
+  ArrowUpFromLine,
+  Target,
 };
 const $ = (id) => document.getElementById(id);
 export const refreshIcons = () =>
@@ -97,6 +107,8 @@ export class UI {
     this.pointerFire = false;
     this.moveStick = { x: 0, z: 0 };
     this.fireStick = null;
+    this.winchHeld = false;
+    this.padResets = [];
     this.lastHUD = -1;
     this.toastTime = 0;
     this.dialog = $("menu-dialog");
@@ -109,10 +121,21 @@ export class UI {
     this.bind();
     this.bindStick("move-stick", false);
     this.bindStick("fire-stick", true);
+    this.rescueHUD = new RescueHUD(game);
+    const touchQuery = matchMedia("(any-pointer: coarse)");
+    const touchLayout = () => {
+      document.documentElement.dataset.touch = String(
+        touchQuery.matches || navigator.maxTouchPoints > 0,
+      );
+      this.clearInput();
+    };
+    touchLayout();
+    touchQuery.addEventListener("change", touchLayout);
+    window.addEventListener("resize", () => this.clearInput());
     refreshIcons();
     this.badgeOverlays = [
       ...document.querySelectorAll(
-        ".topbar, .mission-hud, .world-caption, #shield-hud, #powerup, .joystick, .weapon-bar",
+        ".topbar, .mission-hud, .world-caption, #shield-hud, #powerup, .joystick, .weapon-bar, #rescue-hud, #rescue-actions",
       ),
     ];
     this.overlayObserver = new ResizeObserver(() => this.updateBadgeBounds());
@@ -196,6 +219,19 @@ export class UI {
     );
     $("gun-weapon").onclick = () => this.weapon("gun");
     $("rocket-weapon").onclick = () => this.weapon("rocket");
+    $("guided-weapon").onclick = () => this.weapon("guided");
+    $("flare-action").onclick = () => this.game.rescue?.flare();
+    const winch = $("winch-action");
+    winch.onpointerdown = (event) => {
+      if (this.game.paused || !this.game.rescue) return;
+      event.preventDefault();
+      winch.setPointerCapture(event.pointerId);
+      this.winchHeld = true;
+    };
+    winch.onpointerup =
+      winch.onpointercancel =
+      winch.onlostpointercapture =
+        () => (this.winchHeld = false);
     window.addEventListener("keydown", (e) => {
       if (
         e.target instanceof HTMLInputElement ||
@@ -219,6 +255,8 @@ export class UI {
         if (key === "r") this.start(this.game.index);
         if (key === "1") this.weapon("gun");
         if (key === "2") this.weapon("rocket");
+        if (key === "3") this.weapon("guided");
+        if (key === "f") this.game.rescue?.flare();
       }
     });
     window.addEventListener("keyup", (e) =>
@@ -253,7 +291,7 @@ export class UI {
     const shots = this.game.projectiles.filter((s) => s.hostile && s.missile);
     this.game.input.aim.copy(
       this.view.aim(x, y, [
-        ...this.game.entities.filter((e) => e.type !== "pickup"),
+        ...this.game.entities.filter(isHostileEntity),
         ...shots,
       ]),
     );
@@ -275,8 +313,8 @@ export class UI {
         z /= length;
       }
       knob.style.transform = `translate(${x * radius}px,${z * radius}px)`;
-      if (fire) this.fireStick = length < 0.12 ? { x: 0, z: -1 } : { x, z };
-      else this.moveStick = { x, z };
+      if (fire) this.fireStick = length < 0.18 ? null : { x, z };
+      else this.moveStick = length < 0.1 ? { x: 0, z: 0 } : { x, z };
     };
     element.onpointerdown = (event) => {
       if (pointer !== null || this.game.paused) return;
@@ -287,13 +325,19 @@ export class UI {
       move(event);
     };
     element.onpointermove = move;
-    const release = (event) => {
-      if (pointer !== event.pointerId) return;
+    const reset = () => {
+      const old = pointer;
       pointer = null;
+      if (old !== null && element.hasPointerCapture(old))
+        element.releasePointerCapture(old);
       knob.style.transform = "";
       if (fire) this.fireStick = null;
       else this.moveStick = { x: 0, z: 0 };
     };
+    const release = (event) => {
+      if (pointer === event.pointerId) reset();
+    };
+    this.padResets.push(reset);
     element.onpointerup =
       element.onpointercancel =
       element.onlostpointercapture =
@@ -301,9 +345,12 @@ export class UI {
   }
 
   clearInput() {
+    this.padResets.forEach((reset) => reset());
     this.keys.clear();
     this.pointerFire = false;
     this.fireStick = null;
+    this.winchHeld = false;
+    this.game.input.winch = false;
     this.moveStick = { x: 0, z: 0 };
     this.game.input.fire = false;
     this.game.input.stickAim = null;
@@ -332,6 +379,17 @@ export class UI {
     this.game.input.fire =
       this.pointerFire || this.keys.has(" ") || Boolean(this.fireStick);
     this.game.input.stickAim = this.fireStick;
+    this.game.input.winch =
+      this.game.chapter === 2 && (this.winchHeld || this.keys.has("e"));
+    if (this.game.chapter === 2) {
+      const input = this.game.input,
+        length = Math.min(1, Math.hypot(input.x, input.z));
+      if (length > 0) {
+        const direction = this.view.screenDirection(input);
+        input.x = direction.x * length;
+        input.z = direction.z * length;
+      }
+    }
   }
 
   updateLoadout() {
@@ -361,12 +419,15 @@ export class UI {
     this.game.weapon = kind;
     $("gun-weapon").classList.toggle("selected", kind === "gun");
     $("rocket-weapon").classList.toggle("selected", kind === "rocket");
+    $("guided-weapon").classList.toggle("selected", kind === "guided");
     $("weapon-label").textContent =
-      kind === "rocket"
-        ? "ROCKET PODS"
-        : this.game.chapter === 1
-          ? "DECK GUN"
-          : "CHAIN GUN";
+      kind === "guided"
+        ? "GUIDED MISSILES"
+        : kind === "rocket"
+          ? "ROCKET PODS"
+          : this.game.chapter === 1
+            ? "DECK GUN"
+            : "CHAIN GUN";
   }
 
   updateSound() {
@@ -437,7 +498,7 @@ export class UI {
       $("objective").textContent = [
         "Clear the relay garrison",
         "Reach the mountain station",
-        "Hold the extraction zone",
+        "Rescue the soldiers and return to base",
       ][c];
       $("mission-index").textContent =
         `MISSION ${String(missionNumber(data.index)).padStart(2, "0")} / ${c === 0 ? "06" : "03"}`;
@@ -457,6 +518,10 @@ export class UI {
       $("combat-controls").hidden = c === 0;
       $("shield-hud").hidden = c === 0;
       $("rocket-weapon").hidden = c !== 2;
+      $("guided-weapon").hidden = c !== 2;
+      $("rescue-hud").hidden = $("rescue-actions").hidden = c !== 2;
+      $("rocket-stock").hidden = c !== 2;
+      $("rocket-weapon").disabled = false;
       $("shield-title").textContent =
         c === 1 ? "SHIELD INTEGRITY" : "SHIELD SECTORS";
       $("scope").value = "all";
@@ -493,17 +558,17 @@ export class UI {
     $("result-title").textContent = finale
       ? "Everyone is coming home."
       : result.success
-        ? ["Relay secured", "Channel cleared", "Sky under control"][
+        ? ["Relay secured", "Channel cleared", "Team delivered"][
             this.game.chapter
           ]
         : "Another approach.";
     $("result-story").textContent = finale
-      ? "The survey crew is safe. The relief corridor is open. Well flown, Kestrel."
+      ? "The rescue team is safe. The relief corridor is open. Well flown, Kestrel."
       : result.success
         ? [
             "The relay is silent. One step closer to opening the relief corridor.",
             "The launch made it through. Your next waypoint is ready.",
-            "The crew is boarding. Keep the remaining extraction routes clear.",
+            "The rescued soldiers are safe at base. Your next sortie is ready.",
           ][this.game.chapter]
         : this.game.chapter === 0
           ? "The garrison is still active. Adjust the release point and payload for another pass."
@@ -542,18 +607,20 @@ export class UI {
     $("objective-count").textContent =
       chapter === 0
         ? String(state.remaining).padStart(2, "0")
-        : `${Math.ceil(Math.max(0, this.game.mission.duration - state.time))}s`;
+        : chapter === 2
+          ? `${state.rescue.rescued} / ${state.rescue.total}`
+          : `${Math.ceil(Math.max(0, this.game.mission.duration - state.time))}s`;
     $("objective-unit").textContent =
       chapter === 0
         ? "HOSTILES REMAINING"
         : chapter === 1
           ? "TO WAYPOINT"
-          : "TO EXTRACTION";
+          : "SOLDIERS ABOARD";
     $("ammo").textContent = String(state.ammo || 0).padStart(2, "0");
     $("drop").disabled = !state.ammo || state.status !== "playing";
     const total = state.shields.reduce((a, b) => a + b, 0);
-    $("shield-count").textContent = `${total} / ${chapter === 1 ? 9 : 3}`;
-    const max = chapter === 1 ? 3 : 1;
+    $("shield-count").textContent = `${total} / ${chapter ? 9 : 3}`;
+    const max = chapter ? 3 : 1;
     $("shield-segments").innerHTML = state.shields
       .map(
         (value) =>
@@ -573,5 +640,6 @@ export class UI {
         `scaleX(${Math.min(1, bonus.remaining / bonus.duration)})`;
     }
     if (force) this.updateBadgeBounds();
+    this.rescueHUD.update(state);
   }
 }

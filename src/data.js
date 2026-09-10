@@ -16,9 +16,12 @@ export const MODELS = [
   "pickup-star",
   "pickup-gun",
   "pickup-medal",
+  "rescue-soldier",
+  "aa-truck",
+  "drone",
 ];
 
-export const ASSET_REVISION = "detail-2";
+export const ASSET_REVISION = "rescue-3";
 
 export const CHAPTERS = [
   {
@@ -30,7 +33,7 @@ export const CHAPTERS = [
   { name: "Relief Run", label: "River escort", icon: "ship", color: "#7ae0d7" },
   {
     name: "Last Light",
-    label: "Extraction defense",
+    label: "Search and rescue",
     icon: "helicopter",
     color: "#f4a18a",
   },
@@ -118,23 +121,20 @@ export const MISSIONS = [
   {
     chapter: 2,
     name: "Hidden Signals",
-    duration: 45,
-    caves: 10,
-    text: "Beacon received. Hold the extraction zone while the survey crew boards the helicopter.",
+    team: 2,
+    text: "Two soldiers are stranded beyond the river. Follow their signals, clear each pickup zone, and bring them back to the southern base.",
   },
   {
     chapter: 2,
     name: "Stone Choir",
-    duration: 55,
-    caves: 13,
-    text: "New launch sites in the rock face. Close the caves and intercept anything that gets through.",
+    team: 3,
+    text: "Three signals across the valley. Anti-air patrols control the crossings. Supplies remain at the abandoned aid stations.",
   },
   {
     chapter: 2,
     name: "Clear Skies",
-    duration: 65,
-    caves: 16,
-    text: "The last team is on the way. Keep the sky clear, Kestrel. Bring everyone home.",
+    team: 4,
+    text: "The last soldier is beyond North Ridge. Manage your missiles, evade the drone patrols, and return the entire team to base.",
   },
 ];
 

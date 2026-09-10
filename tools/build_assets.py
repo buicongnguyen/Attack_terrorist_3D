@@ -235,6 +235,10 @@ sphere('Searchlight lens', (0, 1.04, -.73), (.18, .1, .12), 'yellow')
 for x in (-.38, .38):
     rod('Engine exhaust', (x, -1.15, .55), (x, -1.69, .65), .14, 'steel')
     cylinder('Rotor fastener', (x * .3, -.12, 1.4), .04, .08, 'brass')
+chin = empty('ChinTurret', (0, 1.03, -.69))
+sphere('Chin mount', (0, 0, 0), (.26, .3, .2), 'steel', chin)
+rod('Chain gun', (0, .14, 0), (0, 1.0, 0), .07, 'edge', chin)
+empty('HeliMuzzle', (0, 1.08, 0), chin)
 
 start('plane')
 sphere('Fuselage', (0, 0, 0), (.65, 2.75, .61), 'yellow')
@@ -407,6 +411,53 @@ for side in (-1, 1):
 torus('Beacon lens collar', (0, 0, 1.62), .23, .035, 'steel')
 for a in (0, 2.1, 4.2):
     cylinder('Beacon anchor', (math.cos(a) * .55, math.sin(a) * .55, .28), .07, .08, 'brass', 6)
+
+start('rescue-soldier')
+box('Rescue trousers', (0, 0, .35), (.36, .3, .5), 'green')
+box('Rescue vest', (0, 0, .81), (.48, .35, .49), 'medical', .06)
+box('Reflective stripe', (0, .19, .86), (.42, .04, .09), 'white', .01)
+box('Radio pack', (0, -.24, .84), (.35, .17, .4), 'hull', .04)
+sphere('Rescue head', (0, 0, 1.2), (.18, .17, .2), 'skin')
+sphere('Rescue helmet', (0, 0, 1.31), (.21, .2, .13), 'medical')
+box('Rescue goggles', (0, .17, 1.23), (.29, .06, .09), 'edge', .01)
+for side in (-1,1):
+    box('Rescue boot', (side*.12, .05, .1), (.2, .37, .2), 'edge', .03)
+arm=empty('WaveArm', (-.28, 0, 1.0))
+rod('Raised sleeve', (0,0,0), (-.2,0,.4), .09, 'green', arm)
+sphere('Signal hand', (-.24,0,.5), (.11,.09,.12), 'skin', arm)
+rod('Resting arm', (.29,0,.95), (.29,.16,.62), .09, 'green')
+rod('Radio antenna', (0,-.28,1.02), (0,-.28,1.56), .015, 'edge')
+
+start('aa-truck')
+box('Armored chassis', (0,0,.65), (1.6,3.1,.45), 'hull', .1)
+box('Truck cab', (0,1.0,1.18), (1.5,1.0,.8), 'uniform', .09)
+box('Truck windscreen', (0,1.51,1.32), (1.25,.035,.3), 'glass', .015)
+for side in (-1,1):
+    for y in (-1.0,.95):
+        wheel=cylinder('Wheel', (side*.86,y,.43), .39,.28,'rubber',16)
+        wheel.rotation_euler.y=math.pi/2
+    sphere('Truck headlight', (side*.54,1.54,.92), (.13,.05,.09),'yellow')
+    box('Truck armor rail', (side*.74,-.6,1.0), (.1,1.6,.5),'uniform',.03)
+truck_turret=empty('TruckTurret',(0,-.55,1.2))
+cylinder('Launcher bearing',(0,0,0),.45,.2,'steel',parent=truck_turret)
+for side in (-1,1):
+    rod('SAM tube',(side*.24,-.65,.24),(side*.24,.63,.58),.18,'edge',truck_turret)
+    sphere('SAM nose',(side*.24,.65,.59),(.14,.19,.14),'coral',truck_turret)
+rod('Radar post',(0,-.1,.2),(0,-.1,.98),.04,'steel',truck_turret)
+box('Radar plate',(0,-.1,.97),(.7,.12,.3),'coral',.03,truck_turret)
+
+start('drone')
+sphere('Drone fuselage',(0,0,0),(.63,1.1,.37),'uniform')
+box('Drone wing',(0,-.25,.05),(3.2,.65,.13),'edge',.08)
+box('Drone tail',(0,-1.05,.2),(1.5,.32,.11),'steel')
+sphere('Drone sensor',(0,.87,-.06),(.26,.29,.23),'coral')
+drone_rotor=empty('DroneRotor',(0,-.15,.53))
+for angle in (0,math.pi/2):
+    blade=box('Drone blade',(0,0,0),(2.7,.11,.04),'edge',.01,drone_rotor)
+    blade.rotation_euler.z=angle
+for side in (-1,1):
+    rod('Drone gun',(side*.54,.2,-.17),(side*.54,.97,-.17),.045,'steel')
+    sphere('Drone wing beacon',(side*1.53,-.24,.17),(.07,.07,.07),'coral')
 
 # Batch static detail per material and pivot to keep draw calls low. Animated empties stay intact.
 for asset in assets:

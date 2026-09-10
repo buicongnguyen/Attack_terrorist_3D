@@ -1,6 +1,6 @@
 # Assets and Dependencies
 
-All seventeen game models are original procedural Blender assets authored for this project. No borrowed game models, commercial asset packs, background photographs, or externally hosted textures are used. `tools/build_assets.py` and `art/tidelock-assets.blend` are the editable source of the committed GLBs.
+All twenty game models are original procedural Blender assets authored for this project. No borrowed game models, commercial asset packs, background photographs, or externally hosted textures are used. `tools/build_assets.py` and `art/tidelock-assets.blend` are the editable source of the committed GLBs.
 
 Runtime water, terrain, architecture, targeting indicators, and effects are original Three.js geometry/shaders. Pickup badges are original canvas-drawn game symbols cached as camera-facing sprite textures. Sound effects are synthesized with WebAudio.
 

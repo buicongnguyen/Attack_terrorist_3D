@@ -230,7 +230,16 @@
             aria-label="Select rockets"
             title="Rockets"
           >
-            <i data-lucide="rocket"></i>
+            <i data-lucide="rocket"></i><small id="rocket-stock">14</small>
+          </button>
+          <button
+            id="guided-weapon"
+            class="icon-button"
+            aria-label="Select guided missiles"
+            title="Guided missiles"
+            hidden
+          >
+            <i data-lucide="target"></i><small id="guided-stock">6</small>
           </button>
         </div>
         <div
@@ -246,6 +255,50 @@
         <div class="desktop-combat">
           <i data-lucide="crosshair"></i><span id="weapon-label">DECK GUN</span
           ><span class="ready-dot"></span>
+        </div>
+      </div>
+      <aside id="rescue-hud" hidden>
+        <div class="rescue-heading">
+          <span>VALLEY / SEARCH</span><strong id="rescue-count">0 / 2</strong>
+        </div>
+        <canvas
+          id="rescue-map"
+          width="160"
+          height="208"
+          aria-label="Rescue map: select a soldier signal"
+        ></canvas>
+        <div class="rescue-waypoint">
+          <span id="rescue-signal">ECHO 01</span
+          ><strong id="rescue-distance">54 m</strong
+          ><button
+            id="next-signal"
+            class="icon-button"
+            title="Next rescue signal"
+            aria-label="Next rescue signal"
+          >
+            <i data-lucide="navigation"></i>
+          </button>
+        </div>
+      </aside>
+      <div id="rescue-actions" hidden>
+        <span id="rescue-status">EN ROUTE</span>
+        <div class="rescue-buttons">
+          <button
+            id="flare-action"
+            class="icon-button"
+            title="Deploy flares"
+            aria-label="Deploy flares"
+          >
+            <i data-lucide="sparkles"></i><small id="flare-stock">4</small>
+          </button>
+          <button
+            id="winch-action"
+            title="Operate rescue winch"
+            aria-label="Operate rescue winch"
+          >
+            <i data-lucide="arrow-up-from-line"></i
+            ><span id="winch-label">WINCH</span><i id="winch-progress"></i>
+          </button>
         </div>
       </div>
       <footer class="mission-footer">
@@ -295,7 +348,8 @@
           <span>Move</span><kbd>W A S D / Arrows</kbd><span>Fire / release</span
           ><kbd>Space / Pointer</kbd><span>Pause</span><kbd>Esc</kbd
           ><span>Retry</span><kbd>R</kbd><span>Rockets</span><kbd>2</kbd
-          ><span>Gun</span><kbd>1</kbd>
+          ><span>Gun</span><kbd>1</kbd><span>Guided missiles</span><kbd>3</kbd
+          ><span>Winch / land</span><kbd>E</kbd><span>Flares</span><kbd>F</kbd>
         </div>
       </details>
     </dialog>

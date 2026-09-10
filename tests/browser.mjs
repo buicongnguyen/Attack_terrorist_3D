@@ -1,6 +1,7 @@
 import { chromium } from "@playwright/test";
 import assert from "node:assert/strict";
 import { mkdir } from "node:fs/promises";
+import { checkRescue } from "./rescue-browser.mjs";
 
 const url = process.env.GAME_URL || "http://127.0.0.1:5183/";
 const executablePath =
@@ -37,8 +38,8 @@ try {
     () => document.documentElement.dataset.ready === "true",
   );
   check(
-    "all 17 Blender models loaded",
-    await page.evaluate(() => __TIDELOCK__.view.assets.size === 17),
+    "all 20 Blender models loaded",
+    await page.evaluate(() => __TIDELOCK__.view.assets.size === 20),
   );
   const pixels = await page.evaluate(() => {
     const view = __TIDELOCK__.view;
@@ -219,7 +220,12 @@ try {
 
     ui.start(9);
     result.badgeCleanup =
-      view.pickupBadges.size === 0 && view.badgeMaterials.size === 4;
+      !view.pickupBadges.has(symbolPickup.badge) &&
+      view.badgeMaterials.size <= 6;
+    g.player.position.set(-18, 7.5, -26);
+    g.entities.forEach((e) => {
+      if (e.type !== "cave") e.cooldown = 999;
+    });
     const initialVisible = g.entities.filter(
       (e) => e.type === "cave" && e.phase !== "hidden",
     ).length;
@@ -251,8 +257,8 @@ try {
     ui.start(9);
     const impact = g.player.position.clone().add({ x: 4, y: 0, z: 0 });
     g.hurtPlayer(impact, 1);
-    result.firstShield = g.status === "playing" && g.shields[0] === 0;
-    g.hurtPlayer(impact, 1);
+    result.firstShield = g.status === "playing" && g.shields[0] === 2;
+    g.hurtPlayer(impact, 3);
     result.breach = g.status === "failed";
 
     ui.start(6);
@@ -412,6 +418,7 @@ try {
     );
     await mobile.close();
   }
+  await checkRescue(page, browser, url, check, errors);
   check("no browser runtime or resource errors", errors.length === 0);
   console.log(
     JSON.stringify({ passed: results.length, pixels, errors }, null, 2),

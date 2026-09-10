@@ -1490,3 +1490,350 @@ summary {
     transition: none !important;
   }
 }
+
+#rescue-hud {
+  position: absolute;
+  right: 34px;
+  top: 114px;
+  width: 160px;
+  background: #173d43ec;
+  border: 1px solid #b9ddba66;
+  border-radius: 4px;
+}
+.rescue-heading {
+  display: flex;
+  justify-content: space-between;
+  gap: 6px;
+  padding: 9px 8px;
+  font-size: 8px;
+  color: #ccdfc9;
+}
+.rescue-heading strong {
+  color: #9ff5c2;
+  white-space: nowrap;
+}
+#rescue-map {
+  display: block;
+  width: 100%;
+  height: 190px;
+  pointer-events: auto;
+  touch-action: none;
+  cursor: crosshair;
+}
+.rescue-waypoint {
+  position: relative;
+  padding: 9px 42px 9px 8px;
+  font-size: 9px;
+  min-height: 46px;
+}
+.rescue-waypoint span,
+.rescue-waypoint strong {
+  display: block;
+}
+.rescue-waypoint strong {
+  color: #ffe198;
+  margin-top: 4px;
+}
+#next-signal {
+  position: absolute;
+  right: 1px;
+  top: 1px;
+  min-width: 40px;
+  width: 40px;
+  height: 44px;
+}
+body[data-chapter="2"] .world-caption {
+  display: none;
+}
+body[data-chapter="2"] .mission-hud > p {
+  max-width: 220px;
+}
+#rescue-actions {
+  position: absolute;
+  bottom: 78px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 150px;
+}
+#rescue-status {
+  display: block;
+  text-align: center;
+  font-size: 9px;
+  color: #e4f0d1;
+  margin-bottom: 7px;
+  background: #173d43de;
+  padding: 5px 3px;
+}
+.rescue-buttons {
+  display: flex;
+  gap: 6px;
+}
+#flare-action {
+  position: relative;
+  width: 46px;
+  min-width: 46px;
+  height: 46px;
+  background: #26545af2;
+  border: 1px solid #93e0d48a;
+}
+#winch-action {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  background: #24444bf2;
+  color: #cce5cf;
+  border: 1px solid #a6cbb16e;
+  border-radius: 4px;
+  font-size: 10px;
+  touch-action: none;
+  user-select: none;
+}
+#winch-action.available {
+  background: #315b4cf5;
+  border-color: #a9ffc8;
+  color: #f1ffe8;
+}
+#winch-progress {
+  position: absolute;
+  left: 3px;
+  right: 3px;
+  height: 3px;
+  bottom: 3px;
+  background: #a9ffc8;
+  transform-origin: left;
+  transform: scaleX(0);
+}
+.weapon-bar .icon-button {
+  position: relative;
+}
+.weapon-bar small,
+#flare-action small {
+  position: absolute;
+  bottom: 2px;
+  right: 4px;
+  font-size: 9px;
+  font-weight: bold;
+  color: inherit;
+}
+html[data-touch="true"] {
+  --pad-size: 104px;
+  --pad-edge: 20px;
+  --pad-bottom: max(44px, calc(env(safe-area-inset-bottom) + 22px));
+}
+html[data-touch="true"] .joystick {
+  display: block;
+  width: var(--pad-size);
+  height: var(--pad-size);
+  left: var(--pad-edge);
+  bottom: var(--pad-bottom);
+}
+html[data-touch="true"] .fire-stick {
+  left: auto;
+  right: var(--pad-edge);
+}
+html[data-touch="true"] .desktop-combat {
+  display: none;
+}
+html[data-touch="true"] .weapon-bar {
+  right: 20px;
+  bottom: 160px;
+}
+html[data-touch="true"] #shield-hud {
+  left: 20px;
+  bottom: 166px;
+  min-width: 0;
+}
+html[data-touch="true"] #rescue-actions {
+  width: 124px;
+  bottom: 55px;
+}
+html[data-touch="true"] #flare-action {
+  width: 42px;
+  min-width: 42px;
+  height: 44px;
+}
+html[data-touch="true"] #winch-action {
+  font-size: 9px;
+}
+html[data-touch="true"] #winch-action svg {
+  width: 16px;
+}
+html[data-touch="true"] #rescue-status {
+  font-size: 8px;
+}
+html[data-touch="true"] #powerup {
+  left: 50%;
+  right: auto;
+  transform: translateX(-50%);
+  width: 124px;
+  bottom: 60px;
+}
+html[data-touch="true"] body[data-chapter="2"] #shield-hud {
+  bottom: 218px;
+  padding: 9px 10px;
+  gap: 6px;
+}
+html[data-touch="true"] #shield-hud > svg {
+  width: 18px;
+  height: 18px;
+}
+html[data-touch="true"] #shield-count {
+  font-size: 10px;
+  margin-left: 4px;
+}
+html[data-touch="true"] #shield-segments {
+  gap: 4px;
+}
+html[data-touch="true"] #shield-segments i {
+  width: 8px;
+  height: 4px;
+}
+@media (max-width: 700px) {
+  #rescue-hud {
+    top: 85px;
+    right: 14px;
+    width: 106px;
+  }
+  #rescue-map {
+    height: 132px;
+  }
+  .rescue-heading {
+    font-size: 7px;
+    padding: 7px 5px;
+  }
+  .rescue-waypoint {
+    font-size: 8px;
+    padding-left: 6px;
+  }
+  body[data-chapter="2"] .mission-hud {
+    width: calc(100% - 148px);
+  }
+  body[data-chapter="2"] .mission-hud h1 {
+    font-size: 22px;
+  }
+  body[data-chapter="2"] .objective-status {
+    flex-wrap: wrap;
+  }
+  body[data-chapter="2"] .objective-status strong {
+    font-size: 20px;
+  }
+  body[data-chapter="2"] .mission-progress {
+    max-width: 100%;
+  }
+  body[data-chapter="2"] .mission-meta {
+    max-width: 100%;
+  }
+  body[data-chapter="2"] .transmission {
+    display: none;
+  }
+}
+@media (max-width: 375px) {
+  html[data-touch="true"] {
+    --pad-size: 88px;
+    --pad-edge: 10px;
+  }
+  html[data-touch="true"] #rescue-actions,
+  html[data-touch="true"] #powerup {
+    width: 116px;
+  }
+}
+@media (orientation: landscape) and (max-height: 520px) {
+  html[data-touch="true"] {
+    --pad-size: 88px;
+    --pad-edge: 14px;
+    --pad-bottom: 16px;
+  }
+  .topbar,
+  .chapter-tab {
+    height: 52px;
+  }
+  .topbar {
+    padding-left: max(14px, env(safe-area-inset-left));
+    padding-right: max(14px, env(safe-area-inset-right));
+  }
+  .brand span {
+    display: none;
+  }
+  .brand strong {
+    font-size: 19px;
+  }
+  .mission-hud,
+  body[data-chapter="2"] .mission-hud {
+    left: 14px;
+    top: 62px;
+    width: 175px;
+  }
+  .mission-hud h1,
+  body[data-chapter="2"] .mission-hud h1 {
+    font-size: 19px;
+    margin: 5px 0;
+  }
+  .mission-hud > p,
+  .mission-progress,
+  .mission-meta,
+  .transmission,
+  .world-caption {
+    display: none;
+  }
+  .objective-status strong,
+  body[data-chapter="2"] .objective-status strong {
+    font-size: 17px;
+  }
+  .objective-status {
+    margin: 8px 0 0;
+  }
+  html[data-touch="true"] #shield-hud,
+  html[data-touch="true"] body[data-chapter="2"] #shield-hud {
+    left: 126px;
+    bottom: 18px;
+    padding: 9px 10px;
+    gap: 6px;
+  }
+  html[data-touch="true"] #rescue-actions,
+  html[data-touch="true"] #powerup {
+    left: auto;
+    right: 126px;
+    bottom: 18px;
+    transform: none;
+    width: 124px;
+  }
+  html[data-touch="true"] .weapon-bar {
+    right: 14px;
+    bottom: 118px;
+  }
+  html[data-touch="true"] body[data-chapter="2"] .weapon-bar {
+    right: 148px;
+    top: 58px;
+    bottom: auto;
+  }
+  #rescue-hud {
+    top: 58px;
+    right: 14px;
+    width: 120px;
+  }
+  #rescue-map {
+    height: 80px;
+  }
+  .rescue-heading {
+    padding: 5px;
+    font-size: 7px;
+  }
+  .rescue-waypoint {
+    min-height: 44px;
+    padding-top: 6px;
+    padding-bottom: 5px;
+    font-size: 8px;
+  }
+  .mission-footer {
+    bottom: 2px;
+    font-size: 6px;
+  }
+  #toast {
+    top: 128px;
+    font-size: 9px;
+  }
+}
