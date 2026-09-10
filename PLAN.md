@@ -154,10 +154,12 @@ State owns object lifetime. Every gameplay object has a type, world position, he
 - [x] Implement all three river missions, hazards, pickups, shield health, and retaliation.
 - [x] Implement all three helicopter defenses, progressive caves, interception, and shield sectors.
 - [x] Verify rules, desktop/mobile framing, nonblank canvas, input, retries, and asset loads.
-- [ ] Commit the separate local repository and push via Git SSH.
-- [ ] Deploy the production build to GitHub Pages and verify the public URL.
+- [x] Commit the separate local repository and push via Git SSH.
+- [x] Deploy the production build to GitHub Pages and verify the public URL.
 
 ## 10. Acceptance Checks
+
+Release delivered at `C:\Users\n\source\repos\Attack_terrorist_3D`. The playable build is [Tidelock on GitHub Pages](https://buicongnguyen.github.io/Attack_terrorist_3D/). Commit `de1689d` passed the [production build, browser checks, and deployment](https://github.com/buicongnguyen/Attack_terrorist_3D/actions/runs/34484150202). The original Games repository was not modified.
 
 1. Every chapter renders a clearly different, nonblank 3D scene on desktop and portrait/landscape mobile.
 2. All Blender models load locally from the build; vehicle dimensions remain stable during movement.

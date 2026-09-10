@@ -24,6 +24,14 @@ The initial suite passed 28 browser assertions with zero runtime/resource errors
 
 All six Chapter 1 missions were simulated to success with actual falling/drilling pods and their configured ammo budgets: 1/1, 1/1, 1/1, 3/3, 6/6, and 10/10 opponents. These tests selected release positions programmatically but used ordinary projectile physics and damage. A separate browser test uses the actual Space key release for the first mission.
 
+Full-length automated play also reached the objectives in all three river missions and all three helicopter defenses using ordinary movement, weapon cooldowns, pickups, interception, and rockets. The harder missions required prioritizing launchers, collecting repair supplies, and using rocket suppression. These controlled runs show that the campaign is completable; they do not replace human difficulty playtests.
+
+Additional pixel checks covered every chapter at both 390x844 and 844x390. Each scene contained 88-142 quantized sampled colors and different canvas hashes at different water-animation times, confirming nonblank animated rendering in both phone orientations.
+
+The first Linux CI run exposed a fixed-wall-clock assumption in the joystick test on software WebGL. The test now waits for observed movement with a bounded timeout. Paused missions also stop unnecessary GPU rendering while still redrawing on resize. The corrected [GitHub Actions run](https://github.com/buicongnguyen/Attack_terrorist_3D/actions/runs/34484150202) passed both jobs and deployed commit `de1689d` to [the public game](https://buicongnguyen.github.io/Attack_terrorist_3D/).
+
+The public URL returned HTTP 200 with the expected release asset `index-_Qx5-d9A.js`. The complete 28-assertion browser suite also passed against the deployed GitHub Pages URL, including all thirteen model loads and both mobile orientations, with zero runtime or resource errors.
+
 Visual review found and corrected washed-out Blender materials, overly dense water highlights, near-plane clipping on tall portrait viewports, and decorative rocks/palms covering cave entrances. The models now have explicit linear-space colors; terrain and vehicles remain separate from the animated water.
 
 Logic review found and corrected duplicate drill-layer counts at adjacent tile edges, damage leaking past remaining boat armor, and mismatch between visible shield arcs and sector indexing. Friendly and enemy projectiles use distinct colors and shapes; hit detection follows their travel.
