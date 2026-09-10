@@ -370,6 +370,7 @@ export class WorldView {
     this.camera.lookAt(this.target);
     this.camera.updateProjectionMatrix();
     this.baseCamera = this.camera.position.clone();
+    this.needsRender = true;
   }
 
   aim(clientX, clientY, entities = []) {
@@ -400,6 +401,7 @@ export class WorldView {
   }
 
   render(time, shake = 0) {
+    this.needsRender = false;
     this.water.material.uniforms.time.value = time;
     this.camera.position.copy(this.baseCamera);
     if (shake > 0) {

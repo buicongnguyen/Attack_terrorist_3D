@@ -23,6 +23,7 @@ async function boot() {
   view.resize();
   const clock = new FixedClock();
   let previous = performance.now();
+  let wasPaused = false;
   const animate = (now) => {
     const delta = Math.min((now - previous) / 1000, 0.1);
     previous = now;
@@ -30,7 +31,10 @@ async function boot() {
     if (!game.paused) clock.advance(delta, (dt) => game.update(dt));
     else clock.reset();
     ui.updateHUD();
-    view.render(game.time, game.reducedMotion ? 0 : game.shake);
+    if (!game.paused || !wasPaused || view.needsRender) {
+      view.render(game.time, game.reducedMotion ? 0 : game.shake);
+    }
+    wasPaused = game.paused;
     requestAnimationFrame(animate);
   };
   requestAnimationFrame(animate);

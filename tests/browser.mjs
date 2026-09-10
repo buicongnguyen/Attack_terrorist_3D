@@ -251,7 +251,11 @@ try {
     );
     await mobile.mouse.down();
     await mobile.mouse.move(stick.x + stick.width - 8, stick.y + 15);
-    await mobile.waitForTimeout(600);
+    await mobile.waitForFunction(
+      (from) => __TIDELOCK__.game.player.position.x > from + 0.5,
+      from,
+      { timeout: 15000 },
+    );
     await mobile.mouse.up();
     check(
       `mobile ${size.width} joystick movement`,
