@@ -6,35 +6,42 @@ import {
   Pause,
   Play,
   SlidersHorizontal,
-  Plane,
-  Ship,
   Scan,
-  Radio,
-  Shield,
-  Bomb,
-  ChevronDown,
+  Siren,
+  Building2,
+  MoveHorizontal,
+  ChevronsDown,
+  ChevronsUp,
+  Layers,
   ArrowDownToLine,
   Move,
   Rocket,
-  X,
-  RotateCcw,
-  SkipForward,
-  BadgeCheck,
-  ArrowRight,
-  Star,
-  TriangleAlert,
+  Target,
+  Shield,
+  Ship,
   Navigation,
   Sparkles,
   ArrowUpFromLine,
-  Target,
+  X,
+  RotateCcw,
+  SkipForward,
+  BookOpen,
+  BadgeCheck,
+  ArrowRight,
+  Star,
+  Drill,
+  Bomb,
+  LocateFixed,
+  Plane,
+  TriangleAlert,
+  Radio,
+  Check,
+  Circle,
+  Users,
 } from "lucide";
-import {
-  CHAPTERS,
-  MISSIONS,
-  DEFAULT_LOADOUT,
-  missionNumber,
-  saveResult,
-} from "./data.js";
+import { CHAPTERS, MISSIONS, missionNumber, chapterSize, saveResult } from "./data.js";
+import { BOMBS, BOMB_ORDER } from "./strike-data.js";
+import { CAST, PROLOGUE, CHAPTER_STORY, MISSION_STORY, FINALE, speaker } from "./story.js";
 import { activeBonuses } from "./pickups.js";
 import { RescueHUD } from "./rescue-hud.js";
 import { isHostileEntity } from "./rescue-data.js";
@@ -46,34 +53,47 @@ const iconSet = {
   Pause,
   Play,
   SlidersHorizontal,
-  Plane,
-  Ship,
   Scan,
-  Radio,
-  Shield,
-  Bomb,
-  ChevronDown,
+  Siren,
+  Building2,
+  MoveHorizontal,
+  ChevronsDown,
+  ChevronsUp,
+  Layers,
   ArrowDownToLine,
   Move,
   Rocket,
-  X,
-  RotateCcw,
-  SkipForward,
-  BadgeCheck,
-  ArrowRight,
-  Star,
-  TriangleAlert,
+  Target,
+  Shield,
+  Ship,
   Navigation,
   Sparkles,
   ArrowUpFromLine,
-  Target,
+  X,
+  RotateCcw,
+  SkipForward,
+  BookOpen,
+  BadgeCheck,
+  ArrowRight,
+  Star,
+  Drill,
+  Bomb,
+  LocateFixed,
+  Plane,
+  TriangleAlert,
+  Radio,
+  Check,
+  Circle,
+  Users,
 };
+const BOMB_ICON = { drill: "drill", scatter: "sparkles", shockwave: "bomb", lance: "locate-fixed" };
 const $ = (id) => document.getElementById(id);
-export const refreshIcons = () =>
-  createIcons({ icons: iconSet, attrs: { "aria-hidden": "true" } });
+const SAVE_KEY = "tidelock-v2";
+export const refreshIcons = () => createIcons({ icons: iconSet, attrs: { "aria-hidden": "true" } });
+
 export function readSave() {
   try {
-    const saved = JSON.parse(localStorage.getItem("tidelock-v1") || "{}");
+    const saved = JSON.parse(localStorage.getItem(SAVE_KEY) || "{}");
     const records = {};
     for (const [key, value] of Object.entries(saved.records || {})) {
       if (
@@ -83,19 +103,30 @@ export function readSave() {
         Number.isFinite(value?.score) &&
         Number.isFinite(value?.stars)
       )
-        records[key] = {
-          score: Math.max(0, value.score),
-          stars: Math.min(3, Math.max(0, value.stars)),
-        };
+        records[key] = { score: Math.max(0, value.score), stars: Math.min(3, Math.max(0, value.stars)) };
     }
     return {
       records,
       muted: Boolean(saved.muted),
       reducedMotion: Boolean(saved.reducedMotion),
+      seenPrologue: Boolean(saved.seenPrologue),
     };
   } catch {
-    return { records: {}, muted: false, reducedMotion: false };
+    return { records: {}, muted: false, reducedMotion: false, seenPrologue: false };
   }
+}
+
+const escape = (text) =>
+  String(text).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
+
+function portrait(who) {
+  const cast = speaker(who);
+  return `<span class="portrait ${cast.hostile ? "hostile" : ""}" style="--tone:${cast.color}">${cast.initials}</span>`;
+}
+
+function lineMarkup(line) {
+  const cast = speaker(line.who);
+  return `${portrait(line.who)}<div><b>${escape(cast.name)}</b><small>${escape(cast.role)}</small><p>${escape(line.text)}</p></div>`;
 }
 
 export class UI {
@@ -103,6 +134,8 @@ export class UI {
     this.game = game;
     this.view = view;
     this.save = save;
+    this.params = new URLSearchParams(location.search);
+    this.qa = this.params.has("qa");
     this.keys = new Set();
     this.pointerFire = false;
     this.pointerPosition = null;
@@ -112,10 +145,11 @@ export class UI {
     this.padResets = [];
     this.lastHUD = -1;
     this.toastTime = 0;
+    this.comboTime = 0;
+    this.labels = new Map();
     this.dialog = $("menu-dialog");
-    this.game.reducedMotion =
-      save.reducedMotion ||
-      matchMedia("(prefers-reduced-motion: reduce)").matches;
+    this.brief = $("brief-dialog");
+    this.game.reducedMotion = save.reducedMotion || matchMedia("(prefers-reduced-motion: reduce)").matches;
     $("reduced-motion").checked = this.game.reducedMotion;
     $("audio-enabled").checked = !save.muted;
     this.updateSound();
@@ -125,9 +159,7 @@ export class UI {
     this.rescueHUD = new RescueHUD(game);
     const touchQuery = matchMedia("(any-pointer: coarse)");
     const touchLayout = () => {
-      document.documentElement.dataset.touch = String(
-        touchQuery.matches || navigator.maxTouchPoints > 0,
-      );
+      document.documentElement.dataset.touch = String(touchQuery.matches || navigator.maxTouchPoints > 0);
       this.clearInput();
     };
     touchLayout();
@@ -136,7 +168,7 @@ export class UI {
     refreshIcons();
     this.badgeOverlays = [
       ...document.querySelectorAll(
-        ".topbar, .mission-hud, .world-caption, #shield-hud, #powerup, .joystick, .weapon-bar, #rescue-hud, #rescue-actions",
+        ".topbar, .mission-hud, #comms, #shield-hud, #powerup, .joystick, .weapon-bar, #rescue-hud, #rescue-actions, #flight-panel, #ladder, #convoy-hud, #intel",
       ),
     ];
     this.overlayObserver = new ResizeObserver(() => this.updateBadgeBounds());
@@ -153,17 +185,28 @@ export class UI {
 
   persist() {
     try {
-      localStorage.setItem("tidelock-v1", JSON.stringify(this.save));
+      localStorage.setItem(SAVE_KEY, JSON.stringify(this.save));
     } catch {
       /* Private-mode storage is optional. */
     }
   }
 
+  get strike() {
+    return this.game.chapter === 0 ? this.game.op : null;
+  }
+
   bind() {
     $("drop").onclick = () => {
       this.game.audio.unlock();
-      this.game.drop();
+      this.strike?.release();
     };
+    $("salvo").onclick = () => {
+      this.game.audio.unlock();
+      this.strike?.salvo();
+    };
+    $("formation").onclick = () => this.strike?.toggleFormation();
+    $("floor-up").onclick = () => this.strike?.setFloor(this.strike.floor + 1);
+    $("floor-down").onclick = () => this.strike?.setFloor(this.strike.floor - 1);
     $("settings").onclick = () => this.menu();
     $("pause").onclick = () => this.menu();
     $("resume").onclick = $("menu-close").onclick = () => this.resume();
@@ -171,22 +214,27 @@ export class UI {
       e.preventDefault();
       this.resume();
     });
-    $("retry").onclick = $("result-retry").onclick = () =>
-      this.start(this.game.index);
-    $("skip").onclick = () =>
-      this.start((this.game.index + 1) % MISSIONS.length);
+    $("retry").onclick = $("result-retry").onclick = () => this.start(this.game.index);
+    $("skip").onclick = () => this.start((this.game.index + 1) % MISSIONS.length);
+    $("story").onclick = () => {
+      this.dialog.close();
+      this.prologue(true);
+    };
     $("result-next").onclick = () =>
-      this.start(
-        this.game.status === "success"
-          ? (this.game.index + 1) % MISSIONS.length
-          : this.game.index,
-      );
+      this.start(this.game.status === "success" ? (this.game.index + 1) % MISSIONS.length : this.game.index);
     $("result-dialog").addEventListener("cancel", (e) => e.preventDefault());
+    $("brief-launch").onclick = () => this.launch();
+    this.brief.addEventListener("cancel", (e) => {
+      e.preventDefault();
+      this.launch();
+    });
+    $("prologue-start").onclick = () => this.closePrologue();
+    $("prologue-dialog").addEventListener("cancel", (e) => {
+      e.preventDefault();
+      this.closePrologue();
+    });
     document.querySelectorAll("[data-chapter]").forEach((button) => {
-      button.onclick = () =>
-        this.start(
-          MISSIONS.findIndex((m) => m.chapter === +button.dataset.chapter),
-        );
+      button.onclick = () => this.start(MISSIONS.findIndex((m) => m.chapter === +button.dataset.chapter));
     });
     $("sound").onclick = () => {
       this.game.audio.unlock();
@@ -204,20 +252,6 @@ export class UI {
       this.save.reducedMotion = this.game.reducedMotion;
       this.persist();
     };
-    $("loadout-toggle").onclick = () => $("loadout").classList.toggle("open");
-    $("loadout-close").onclick = () => $("loadout").classList.remove("open");
-    document.querySelectorAll("[data-bomb]").forEach(
-      (button) =>
-        (button.onclick = () => {
-          document
-            .querySelectorAll("[data-bomb]")
-            .forEach((b) => b.classList.toggle("selected", b === button));
-          this.updateLoadout();
-        }),
-    );
-    ["angle", "speed", "fuse", "walls", "flight-path", "scope"].forEach((id) =>
-      $(id).addEventListener("input", () => this.updateLoadout()),
-    );
     $("gun-weapon").onclick = () => this.weapon("gun");
     $("rocket-weapon").onclick = () => this.weapon("rocket");
     $("guided-weapon").onclick = () => this.weapon("guided");
@@ -229,40 +263,17 @@ export class UI {
       winch.setPointerCapture(event.pointerId);
       this.winchHeld = true;
     };
-    winch.onpointerup =
-      winch.onpointercancel =
-      winch.onlostpointercapture =
-        () => (this.winchHeld = false);
-    window.addEventListener("keydown", (e) => {
-      if (
-        e.target instanceof HTMLInputElement ||
-        e.target instanceof HTMLSelectElement
-      )
-        return;
-      const key = e.key.toLowerCase();
-      if (
-        [" ", "arrowup", "arrowdown", "arrowleft", "arrowright"].includes(key)
-      )
-        e.preventDefault();
-      if (key === "escape" && !e.repeat && !$("result-dialog").open) {
-        this.dialog.open ? this.resume() : this.menu();
-        return;
-      }
-      if (this.game.paused || this.game.status !== "playing") return;
-      this.game.audio.unlock();
-      this.keys.add(key);
-      if (!e.repeat) {
-        if (key === " " && this.game.chapter === 0) this.game.drop();
-        if (key === "r") this.start(this.game.index);
-        if (key === "1") this.weapon("gun");
-        if (key === "2") this.weapon("rocket");
-        if (key === "3") this.weapon("guided");
-        if (key === "f") this.game.rescue?.flare();
-      }
+    winch.onpointerup = winch.onpointercancel = winch.onlostpointercapture = () => (this.winchHeld = false);
+    $("flight-cards").addEventListener("click", (event) => {
+      const chip = event.target.closest("[data-bomb]");
+      if (chip) this.strike?.select(chip.dataset.bomb);
     });
-    window.addEventListener("keyup", (e) =>
-      this.keys.delete(e.key.toLowerCase()),
-    );
+    $("ladder-floors").addEventListener("pointerdown", (event) => {
+      const row = event.target.closest("[data-floor]");
+      if (row && this.strike) this.strike.setFloor(+row.dataset.floor + 1);
+    });
+    window.addEventListener("keydown", (e) => this.keydown(e));
+    window.addEventListener("keyup", (e) => this.keys.delete(e.key.toLowerCase()));
     this.view.canvas.addEventListener("pointermove", (e) => {
       if (e.pointerType !== "touch") this.aim(e.clientX, e.clientY);
     });
@@ -273,30 +284,62 @@ export class UI {
       this.pointerFire = true;
       this.view.canvas.setPointerCapture(e.pointerId);
     });
-    const release = () => {
-      this.pointerFire = false;
-    };
+    const release = () => (this.pointerFire = false);
     this.view.canvas.addEventListener("pointerup", release);
     this.view.canvas.addEventListener("pointercancel", release);
     this.view.canvas.addEventListener("lostpointercapture", release);
     window.addEventListener("blur", () => {
       this.clearInput();
-      if (this.game.status === "playing") this.menu();
+      if (this.game.status === "playing" && !this.anyDialog()) this.menu();
     });
     document.addEventListener("visibilitychange", () => {
-      if (document.hidden && this.game.status === "playing") this.menu();
+      if (document.hidden && this.game.status === "playing" && !this.anyDialog()) this.menu();
     });
+  }
+
+  anyDialog() {
+    return [this.dialog, this.brief, $("result-dialog"), $("prologue-dialog")].some((d) => d.open);
+  }
+
+  keydown(e) {
+    if (e.target instanceof HTMLInputElement || e.target instanceof HTMLSelectElement) return;
+    const key = e.key.toLowerCase();
+    if ([" ", "arrowup", "arrowdown", "arrowleft", "arrowright"].includes(key)) e.preventDefault();
+    if (this.brief.open) {
+      if ((key === "enter" || key === " ") && !e.repeat) this.launch();
+      return;
+    }
+    if (key === "escape" && !e.repeat && !$("result-dialog").open && !$("prologue-dialog").open) {
+      this.dialog.open ? this.resume() : this.menu();
+      return;
+    }
+    if (this.game.paused || this.game.status !== "playing") return;
+    this.game.audio.unlock();
+    this.keys.add(key);
+    if (e.repeat) return;
+    if (key === "r") return this.start(this.game.index);
+    const strike = this.strike;
+    if (strike) {
+      const pick = BOMB_ORDER[+key - 1];
+      if (pick) strike.select(pick);
+      if (key === " ") strike.release();
+      if (key === "x") strike.salvo();
+      if (key === "q") strike.toggleFormation();
+      if (key === "e") strike.setFloor(strike.floor + 1);
+      if (key === "c") strike.setFloor(strike.floor - 1);
+      return;
+    }
+    if (key === "1") this.weapon("gun");
+    if (key === "2") this.weapon("rocket");
+    if (key === "3") this.weapon("guided");
+    if (key === "f") this.game.rescue?.flare();
   }
 
   aim(x, y) {
     this.pointerPosition = { x, y };
+    if (this.game.chapter === 0) return;
     const shots = this.game.projectiles.filter((s) => s.hostile && s.missile);
-    this.game.input.aim.copy(
-      this.view.aim(x, y, [
-        ...this.game.entities.filter(isHostileEntity),
-        ...shots,
-      ]),
-    );
+    this.game.input.aim.copy(this.view.aim(x, y, [...this.game.entities.filter(isHostileEntity), ...shots]));
   }
 
   bindStick(id, fire) {
@@ -330,8 +373,7 @@ export class UI {
     const reset = () => {
       const old = pointer;
       pointer = null;
-      if (old !== null && element.hasPointerCapture(old))
-        element.releasePointerCapture(old);
+      if (old !== null && element.hasPointerCapture(old)) element.releasePointerCapture(old);
       knob.style.transform = "";
       if (fire) this.fireStick = null;
       else this.moveStick = { x: 0, z: 0 };
@@ -340,10 +382,7 @@ export class UI {
       if (pointer === event.pointerId) reset();
     };
     this.padResets.push(reset);
-    element.onpointerup =
-      element.onpointercancel =
-      element.onlostpointercapture =
-        release;
+    element.onpointerup = element.onpointercancel = element.onlostpointercapture = release;
   }
 
   clearInput() {
@@ -352,70 +391,42 @@ export class UI {
     this.pointerFire = false;
     this.fireStick = null;
     this.winchHeld = false;
-    this.game.input.winch = false;
     this.moveStick = { x: 0, z: 0 };
-    this.game.input.fire = false;
-    this.game.input.stickAim = null;
-    this.game.input.x = 0;
-    this.game.input.z = 0;
-    document
-      .querySelectorAll(".stick-knob")
-      .forEach((el) => (el.style.transform = ""));
+    Object.assign(this.game.input, { winch: false, fire: false, stickAim: null, x: 0, z: 0 });
+    document.querySelectorAll(".stick-knob").forEach((el) => (el.style.transform = ""));
   }
 
   updateInput() {
     if (this.game.paused) return;
     const held = (key) => (this.keys.has(key) ? 1 : 0);
-    this.game.input.x =
-      held("d") +
-      held("arrowright") -
-      held("a") -
-      held("arrowleft") +
-      this.moveStick.x;
-    this.game.input.z =
-      held("s") +
-      held("arrowdown") -
-      held("w") -
-      held("arrowup") +
-      this.moveStick.z;
-    this.game.input.fire =
-      this.pointerFire || this.keys.has(" ") || Boolean(this.fireStick);
-    this.game.input.stickAim = this.fireStick;
-    if (this.game.input.fire && !this.fireStick && this.pointerPosition)
-      this.aim(this.pointerPosition.x, this.pointerPosition.y);
-    this.game.input.winch =
-      this.game.chapter === 2 && (this.winchHeld || this.keys.has("e"));
+    const input = this.game.input;
+    input.x = held("d") + held("arrowright") - held("a") - held("arrowleft") + this.moveStick.x;
+    input.z = held("s") + held("arrowdown") - held("w") - held("arrowup") + this.moveStick.z;
+    input.x = Math.max(-1, Math.min(1, input.x));
+    input.z = Math.max(-1, Math.min(1, input.z));
+    if (this.game.chapter === 0) {
+      input.fire = false;
+      // In the portrait camera, screen right runs north (-z) and screen down runs east (+x).
+      if (this.view.strikePortrait) {
+        const right = input.x,
+          down = input.z;
+        input.x = down;
+        input.z = -right;
+      }
+      return;
+    }
+    input.fire = this.pointerFire || this.keys.has(" ") || Boolean(this.fireStick);
+    input.stickAim = this.fireStick;
+    if (input.fire && !this.fireStick && this.pointerPosition) this.aim(this.pointerPosition.x, this.pointerPosition.y);
+    input.winch = this.game.chapter === 2 && (this.winchHeld || this.keys.has("e"));
     if (this.game.chapter === 2) {
-      const input = this.game.input,
-        length = Math.min(1, Math.hypot(input.x, input.z));
+      const length = Math.min(1, Math.hypot(input.x, input.z));
       if (length > 0) {
         const direction = this.view.screenDirection(input);
         input.x = direction.x * length;
         input.z = direction.z * length;
       }
     }
-  }
-
-  updateLoadout() {
-    const config = {
-      type: document.querySelector("[data-bomb].selected").dataset.bomb,
-      path: $("flight-path").value,
-      angle: +$("angle").value,
-      speed: +$("speed").value,
-      fuse: +$("fuse").value,
-      walls: +$("walls").value,
-    };
-    if ($("scope").value === "next") this.game.nextLoadout = config;
-    else {
-      this.game.loadout = config;
-      this.game.nextLoadout = null;
-    }
-    $("angle-value").textContent = `${config.angle}\u00b0`;
-    $("speed-value").textContent = `${config.speed} m/s`;
-    $("fuse-value").textContent = `${config.fuse.toFixed(1)} s`;
-    $("walls-value").textContent = config.walls;
-    $("walls").disabled = config.type !== "drill";
-    $("fuse").disabled = config.type === "drill";
   }
 
   weapon(kind) {
@@ -425,212 +436,328 @@ export class UI {
     $("rocket-weapon").classList.toggle("selected", kind === "rocket");
     $("guided-weapon").classList.toggle("selected", kind === "guided");
     $("weapon-label").textContent =
-      kind === "guided"
-        ? "GUIDED MISSILES"
-        : kind === "rocket"
-          ? "ROCKET PODS"
-          : this.game.chapter === 1
-            ? "DECK GUN"
-            : "CHAIN GUN";
+      kind === "guided" ? "GUIDED MISSILES" : kind === "rocket" ? "ROCKET PODS" : this.game.chapter === 1 ? "DECK GUN" : "CHAIN GUN";
   }
 
   updateSound() {
     this.game.audio.muted = this.save.muted;
-    $("sound").innerHTML =
-      `<i data-lucide="${this.save.muted ? "volume-x" : "volume-2"}"></i>`;
-    $("sound").setAttribute(
-      "aria-label",
-      this.save.muted ? "Unmute sound" : "Mute sound",
-    );
+    $("sound").innerHTML = `<i data-lucide="${this.save.muted ? "volume-x" : "volume-2"}"></i>`;
+    $("sound").setAttribute("aria-label", this.save.muted ? "Unmute sound" : "Mute sound");
     $("sound").title = this.save.muted ? "Unmute sound" : "Mute sound";
     $("audio-enabled").checked = !this.save.muted;
     refreshIcons();
   }
 
+  // ------------------------------------------------------------------ dialogs
+
+  prologue(force = false) {
+    if (!force && (this.save.seenPrologue || (this.qa && !this.params.has("prologue")))) return false;
+    this.game.paused = true;
+    this.clearInput();
+    $("prologue-eyebrow").textContent = PROLOGUE.eyebrow;
+    $("prologue-title").textContent = PROLOGUE.title;
+    $("prologue-text").innerHTML = PROLOGUE.paragraphs.map((p) => `<p>${escape(p)}</p>`).join("");
+    $("prologue-action").textContent = force ? "Back to the mission" : PROLOGUE.action;
+    $("prologue-dialog").showModal();
+    return true;
+  }
+
+  closePrologue() {
+    $("prologue-dialog").close();
+    this.save.seenPrologue = true;
+    this.persist();
+    this.game.audio.unlock();
+    if (this.pendingBrief && this.game.status === "playing") this.showBrief();
+    else if (!this.anyDialog()) this.game.paused = false;
+  }
+
+  showBrief() {
+    this.pendingBrief = false;
+    const g = this.game,
+      story = MISSION_STORY[g.index],
+      chapter = CHAPTER_STORY[g.chapter];
+    const first = MISSIONS.findIndex((m) => m.chapter === g.chapter) === g.index;
+    $("brief-eyebrow").textContent = `CHAPTER 0${g.chapter + 1} / ${chapter.title.toUpperCase()} / MISSION ${missionNumber(g.index)}`;
+    $("brief-clock").textContent = `${story.place} / ${story.clock}`;
+    $("brief-title").textContent = g.mission.name;
+    $("brief-chapter").textContent = first ? chapter.intro : "";
+    $("brief-chapter").hidden = !first;
+    $("brief-goals").innerHTML = story.goals.map((goal) => `<li><i data-lucide="target"></i>${escape(goal)}</li>`).join("");
+    $("brief-lines").innerHTML = story.brief.map((line) => `<div class="radio-line">${lineMarkup(line)}</div>`).join("");
+    $("brief-controls").innerHTML = this.controlHints(g.chapter);
+    refreshIcons();
+    g.paused = true;
+    this.brief.showModal();
+    $("brief-launch").focus();
+  }
+
+  controlHints(chapter) {
+    const hints = [
+      [
+        ["W / S", "Steer the formation"],
+        ["A / D", "Throttle"],
+        ["1-4", "Payload"],
+        ["SPACE", "Release"],
+        ["X", "Salvo"],
+        ["E / C", "Drill floor"],
+      ],
+      [
+        ["WASD", "Steer Marlin"],
+        ["POINTER", "Aim and fire"],
+        ["BLOCK", "Sit between guns and barges"],
+      ],
+      [
+        ["WASD", "Fly Lantern"],
+        ["1 / 2 / 3", "Gun / rockets / guided"],
+        ["HOLD E", "Winch or land"],
+        ["F", "Flares"],
+      ],
+    ][chapter];
+    return hints.map(([key, text]) => `<span><kbd>${key}</kbd>${text}</span>`).join("");
+  }
+
+  launch() {
+    if (!this.brief.open) return;
+    this.brief.close();
+    this.clearInput();
+    this.game.audio.unlock();
+    this.game.paused = false;
+  }
+
   menu() {
-    if ($("result-dialog").open || this.dialog.open || !this.game.mission)
-      return;
+    if (this.anyDialog() || !this.game.mission) return;
     this.game.paused = true;
     this.clearInput();
     this.fillMissions();
-    $("mission-briefing").textContent = this.game.mission.text;
+    const story = MISSION_STORY[this.game.index];
+    $("mission-briefing").textContent = `${this.game.mission.name}: ${story.goals.join(". ")}.`;
     this.dialog.showModal();
   }
+
   resume() {
     this.dialog.close();
     this.clearInput();
     this.game.paused = false;
   }
+
   start(index) {
     this.dialog.close();
     $("result-dialog").close();
+    this.brief.close();
     this.clearInput();
     this.game.audio.unlock();
-    $("loadout").classList.remove("open");
     this.game.start(index);
   }
 
   fillMissions() {
-    $("mission-list").innerHTML = "";
-    MISSIONS.forEach((mission, index) => {
-      const button = document.createElement("button");
-      button.textContent = `${mission.chapter + 1}.${missionNumber(index)}`;
-      button.title = mission.name;
-      button.setAttribute(
-        "aria-label",
-        `Mission ${mission.chapter + 1}.${missionNumber(index)}: ${mission.name}`,
-      );
-      button.className = `${index === this.game.index ? "active" : ""} ${this.save.records[index] ? "completed" : ""}`;
-      button.onclick = () => this.start(index);
-      $("mission-list").append(button);
+    const list = $("mission-list");
+    list.innerHTML = "";
+    CHAPTERS.forEach((chapter, c) => {
+      const group = document.createElement("div");
+      group.className = "mission-group";
+      group.innerHTML = `<span class="group-title" style="--tone:${chapter.color}">0${c + 1} ${chapter.name}</span>`;
+      MISSIONS.forEach((mission, index) => {
+        if (mission.chapter !== c) return;
+        const record = this.save.records[index];
+        const button = document.createElement("button");
+        button.className = `${index === this.game.index ? "active" : ""} ${record ? "completed" : ""}`;
+        button.innerHTML = `<span>${c + 1}.${missionNumber(index)}</span>${escape(mission.name)}<em>${"★".repeat(record?.stars || 0)}${"☆".repeat(3 - (record?.stars || 0))}</em>`;
+        button.setAttribute("aria-label", `Mission ${c + 1}.${missionNumber(index)}: ${mission.name}`);
+        button.onclick = () => this.start(index);
+        group.append(button);
+      });
+      list.append(group);
     });
   }
 
+  // ------------------------------------------------------------------ events
+
   onEvent(type, data) {
-    if (type === "start") {
-      const c = this.game.chapter,
-        m = data.mission;
-      document.body.dataset.chapter = c;
-      document
-        .querySelectorAll("[data-chapter]")
-        .forEach((button) =>
-          button.classList.toggle("active", +button.dataset.chapter === c),
-        );
-      $("chapter-label").textContent =
-        `CHAPTER 0${c + 1} / ${CHAPTERS[c].label.toUpperCase()}`;
-      $("mission-name").textContent = m.name;
-      $("objective").textContent = [
-        "Clear the relay garrison",
-        "Reach the mountain station",
-        "Rescue the soldiers and return to base",
-      ][c];
-      $("mission-index").textContent =
-        `MISSION ${String(missionNumber(data.index)).padStart(2, "0")} / ${c === 0 ? "06" : "03"}`;
-      $("transmission").textContent = m.text;
-      $("coordinate-detail").textContent = [
-        "SECTOR A / 06:42 AM",
-        "SECTOR B / 08:16 AM",
-        "SECTOR C / 09:35 AM",
-      ][c];
-      $("footer-mode").textContent = [
-        "AIRBORNE / ACTIVE",
-        "UPRIVER / ACTIVE",
-        "EXTRACTION / ACTIVE",
-      ][c];
-      $("loadout").hidden = c !== 0;
-      $("bomb-actions").hidden = c !== 0;
-      $("combat-controls").hidden = c === 0;
-      $("shield-hud").hidden = c === 0;
-      $("rocket-weapon").hidden = c !== 2;
-      $("guided-weapon").hidden = c !== 2;
-      $("rescue-hud").hidden = $("rescue-actions").hidden = c !== 2;
-      $("rocket-stock").hidden = c !== 2;
-      $("rocket-weapon").disabled = false;
-      $("shield-title").textContent =
-        c === 1 ? "SHIELD INTEGRITY" : "SHIELD SECTORS";
-      $("scope").value = "all";
-      this.updateLoadout();
-      this.weapon("gun");
-      $("toast").classList.remove("visible");
-      this.lastHUD = -1;
-      this.updateHUD(true);
-    } else if (type === "toast") {
+    if (type === "start") this.onStart(data);
+    else if (type === "toast") {
       $("toast").textContent = data;
       $("toast").classList.add("visible");
       this.toastTime = performance.now() + 2100;
+    } else if (type === "radio") this.radio(data);
+    else if (type === "combo") {
+      $("combo-count").textContent = `MULTI-KILL x${data.count}`;
+      $("combo-bonus").textContent = `+${data.bonus}`;
+      $("combo").classList.remove("visible");
+      void $("combo").offsetWidth;
+      $("combo").classList.add("visible");
+      this.comboTime = performance.now() + 1600;
+    } else if (type === "checkpoint") {
+      $("toast").textContent = data;
+      $("toast").classList.add("visible", "checkpoint");
+      this.toastTime = performance.now() + 2600;
     } else if (type === "result") this.showResult(data);
+  }
+
+  onStart(data) {
+    const c = this.game.chapter,
+      m = data.mission,
+      story = MISSION_STORY[data.index];
+    document.body.dataset.chapter = c;
+    document.querySelectorAll("[data-chapter]").forEach((button) =>
+      button.classList.toggle("active", +button.dataset.chapter === c),
+    );
+    $("chapter-label").textContent = `CHAPTER 0${c + 1} / ${CHAPTER_STORY[c].subtitle.toUpperCase()}`;
+    $("mission-name").textContent = m.name;
+    $("objective").textContent = story.goals[0];
+    $("mission-index").textContent = `MISSION ${String(missionNumber(data.index)).padStart(2, "0")} / ${String(chapterSize(c)).padStart(2, "0")}`;
+    $("footer-mode").textContent = [`${story.place} / AIRBORNE`, `${story.place} / UPRIVER`, `${story.place} / EXTRACTION`][c];
+    $("flight-panel").hidden = $("ladder").hidden = $("intel").hidden = c !== 0;
+    $("combat-controls").hidden = c === 0;
+    $("shield-hud").hidden = c === 0;
+    $("convoy-hud").hidden = c !== 1;
+    $("rocket-weapon").hidden = c !== 2;
+    $("guided-weapon").hidden = c !== 2;
+    $("rescue-hud").hidden = $("rescue-actions").hidden = c !== 2;
+    $("rocket-stock").hidden = c !== 2;
+    $("rocket-weapon").disabled = false;
+    $("shield-title").textContent = c === 1 ? "MARLIN SHIELDS" : "LANTERN SHIELDS";
+    $("comms").innerHTML = "";
+    for (const el of this.labels.values()) el.remove();
+    this.labels.clear();
+    if (c === 0) this.buildFlightCards();
+    this.weapon("gun");
+    $("toast").classList.remove("visible", "checkpoint");
+    $("flak-warning").hidden = true;
+    this.intelKey = this.ladderKey = null;
+    this.lastHUD = -1;
+    this.updateHUD(true);
+    const skip = this.qa && !this.params.has("brief");
+    if (skip) this.game.paused = false;
+    else if (!this.prologue()) this.showBrief();
+    else this.pendingBrief = true;
+  }
+
+  radio(line) {
+    const feed = $("comms");
+    const cast = speaker(line.who);
+    const item = document.createElement("div");
+    item.className = `radio-line live ${cast.hostile ? "intercept" : ""}`;
+    item.innerHTML = lineMarkup(line);
+    feed.prepend(item);
+    while (feed.children.length > 2) feed.lastChild.remove();
+    setTimeout(() => item.classList.add("fading"), 7000);
+    setTimeout(() => item.remove(), 7800);
+  }
+
+  buildFlightCards() {
+    const op = this.game.op;
+    $("flight-cards").innerHTML = op.aircraft
+      .map((a) => {
+        const cast = CAST[a.crew] || CAST.iona;
+        const chips = BOMB_ORDER.filter((kind) => a.payload[kind] !== undefined)
+          .map(
+            (kind) =>
+              `<button class="bomb-chip" data-bomb="${kind}" style="--bomb:${BOMBS[kind].css}" title="${BOMBS[kind].name}: ${BOMBS[kind].summary} (${BOMB_ORDER.indexOf(kind) + 1})"><i data-lucide="${BOMB_ICON[kind]}"></i><span>${BOMBS[kind].name}</span><strong>0</strong></button>`,
+          )
+          .join("");
+        return `<div class="flight-card" data-aircraft="${a.index}" style="--tone:${["#ffc62b", "#ff8a6b", "#33d69f"][a.index]}"><div class="card-head"><i data-lucide="plane"></i><b>${escape(a.callsign)}</b><span class="hp"></span></div><div class="chips">${chips}</div><small>${escape(cast.name)}</small></div>`;
+      })
+      .join("");
+    refreshIcons();
   }
 
   showResult(result) {
     this.clearInput();
     this.game.paused = true;
     if (result.success) {
-      this.save.records = saveResult(
-        this.save.records,
-        result.index,
-        result.score,
-        result.stars,
-      );
+      this.save.records = saveResult(this.save.records, result.index, result.score, result.stars);
       this.persist();
     }
+    const story = MISSION_STORY[result.index];
     const finale = result.success && result.index === MISSIONS.length - 1;
+    const chapterEnd = result.success && MISSIONS[result.index + 1]?.chapter !== MISSIONS[result.index].chapter;
     $("result-eyebrow").textContent = finale
-      ? "OPERATION COMPLETE"
+      ? FINALE.eyebrow
       : result.success
-        ? "MISSION COMPLETE"
-        : "MISSION INTERRUPTED";
-    $("result-title").textContent = finale
-      ? "Everyone is coming home."
-      : result.success
-        ? ["Relay secured", "Channel cleared", "Team delivered"][
-            this.game.chapter
-          ]
-        : "Another approach.";
-    $("result-story").textContent = finale
-      ? "The rescue team is safe. The relief corridor is open. Well flown, Kestrel."
-      : result.success
-        ? [
-            "The relay is silent. One step closer to opening the relief corridor.",
-            "The launch made it through. Your next waypoint is ready.",
-            "The rescued soldiers are safe at base. Your next sortie is ready.",
-          ][this.game.chapter]
-        : this.game.chapter === 0
-          ? "The garrison is still active. Adjust the release point and payload for another pass."
-          : "We lost protection before reaching the objective. Regroup and try the route again.";
+        ? chapterEnd
+          ? `CHAPTER 0${this.game.chapter + 1} COMPLETE`
+          : "MISSION COMPLETE"
+        : "MISSION FAILED";
+    $("result-title").textContent = finale ? FINALE.title : result.success ? this.game.mission.name : "Regroup, Kestrel.";
+    $("result-story").textContent = finale ? `${story.success} ${FINALE.text}` : result.success ? story.success : this.failureText(result, story);
     $("result-stars").innerHTML = Array.from(
       { length: 3 },
-      (_, i) =>
-        `<i data-lucide="star" class="${i < result.stars ? "earned" : ""}"></i>`,
+      (_, i) => `<i data-lucide="star" class="${i < result.stars ? "earned" : ""}"></i>`,
     ).join("");
     $("result-stars").setAttribute("aria-label", `${result.stars} of 3 stars`);
+    $("result-criteria").innerHTML = this.criteria(result)
+      .map(([ok, text]) => `<li class="${ok ? "met" : ""}"><i data-lucide="${ok ? "check" : "circle"}"></i>${escape(text)}</li>`)
+      .join("");
     $("result-score").textContent = result.score.toLocaleString();
     $("result-targets").textContent = result.kills;
-    $("result-best").textContent = (
-      this.save.records[result.index]?.score || 0
-    ).toLocaleString();
-    $("result-next").innerHTML =
-      `${finale ? "Play again" : result.success ? "Next mission" : "Try again"}<i data-lucide="arrow-right"></i>`;
+    $("result-best").textContent = (this.save.records[result.index]?.score || 0).toLocaleString();
+    $("result-next").innerHTML = `${finale ? "Play again" : result.success ? "Next mission" : "Try again"}<i data-lucide="arrow-right"></i>`;
     refreshIcons();
     $("result-dialog").showModal();
   }
 
+  failureText(result, story) {
+    return (
+      {
+        shelter: "A bomb struck the civilian shelter and the strike was aborted. Keep every pipper off the blue roof.",
+        flight: "Kestrel Flight was shot down. Silence the flak first and change lane when a red lock line appears.",
+        barges: "Both barges sank before reaching the lock. Shield them with Marlin and steer them clear of mines.",
+      }[result.reason] || story.failure
+    );
+  }
+
+  criteria(result) {
+    const g = this.game,
+      op = g.op;
+    if (g.chapter === 0)
+      return [
+        [result.success, "Eliminate every target"],
+        [result.success && op.used <= op.layout.par, `Use ${op.layout.par} bombs or fewer (used ${op.used})`],
+        [result.success && !op.damaged, "Bring the whole flight home unscathed"],
+      ];
+    if (g.chapter === 1) {
+      const lost = op.barges.filter((b) => !b.alive).length;
+      return [
+        [result.success, "Deliver the convoy"],
+        [result.success && lost === 0, "Both barges survive"],
+        [result.stars >= 3, "Barges above 60% with Marlin barely scratched"],
+      ];
+    }
+    return [
+      [result.success, "Everyone aboard and home"],
+      [result.stars >= 2, "Take at most one hit"],
+      [result.stars >= 3, "Take no hits"],
+    ];
+  }
+
+  // ------------------------------------------------------------------ HUD
+
   updateHUD(force = false) {
     if (!this.game.mission) return;
     const now = performance.now();
-    if (now > this.toastTime) $("toast").classList.remove("visible");
-    if (!force && now - this.lastHUD < 85) return;
+    if (now > this.toastTime) $("toast").classList.remove("visible", "checkpoint");
+    if (now > this.comboTime) $("combo").classList.remove("visible");
+    if (!force && now - this.lastHUD < 80) return;
     this.lastHUD = now;
     const state = this.game.snapshot(),
-      chapter = state.chapter;
+      chapter = state.chapter,
+      op = state.op;
     $("score").textContent = String(state.score).padStart(5, "0");
-    if (innerWidth <= 900)
-      $("coordinate-detail").textContent =
-        `SCORE ${String(state.score).padStart(5, "0")}`;
     $("mission-progress").style.width = `${state.progress * 100}%`;
     $("mission-percent").textContent = `${Math.floor(state.progress * 100)}%`;
-    $("objective-count").textContent =
-      chapter === 0
-        ? String(state.remaining).padStart(2, "0")
-        : chapter === 2
-          ? `${state.rescue.rescued} / ${state.rescue.total}`
-          : `${Math.ceil(Math.max(0, this.game.mission.duration - state.time))}s`;
-    $("objective-unit").textContent =
-      chapter === 0
-        ? "HOSTILES REMAINING"
-        : chapter === 1
-          ? "TO WAYPOINT"
-          : "SOLDIERS ABOARD";
-    $("ammo").textContent = String(state.ammo || 0).padStart(2, "0");
-    $("drop").disabled = !state.ammo || state.status !== "playing";
-    const total = state.shields.reduce((a, b) => a + b, 0);
-    $("shield-count").textContent = `${total} / ${chapter ? 9 : 3}`;
-    const max = chapter ? 3 : 1;
-    $("shield-segments").innerHTML = state.shields
-      .map(
-        (value) =>
-          `<span>${Array.from({ length: max }, (_, i) => `<i class="${i >= value ? "lost" : ""}"></i>`).join("")}</span>`,
-      )
-      .join("");
+    if (chapter === 0) this.updateStrike(op);
+    else {
+      const total = state.shields.reduce((a, b) => a + b, 0);
+      $("shield-count").textContent = `${total} / 9`;
+      $("shield-segments").innerHTML = state.shields
+        .map((value) => `<span>${Array.from({ length: 3 }, (_, i) => `<i class="${i >= value ? "lost" : ""}"></i>`).join("")}</span>`)
+        .join("");
+    }
+    if (chapter === 1) this.updateRiver(state, op);
+    if (chapter === 2) {
+      $("objective-count").textContent = `${op.rescued} / ${op.total}`;
+      $("objective-unit").textContent = "SOLDIERS ABOARD";
+    }
     const bonuses = activeBonuses(state);
     $("powerup").hidden = chapter !== 1 || bonuses.length === 0;
     for (const kind of ["star", "gun"]) {
@@ -638,12 +765,123 @@ export class UI {
       const row = $(`bonus-${kind}`);
       row.hidden = !bonus;
       if (!bonus) continue;
-      row.querySelector("strong").textContent =
-        `${bonus.remaining.toFixed(1)}s`;
-      row.querySelector(".bonus-fill").style.transform =
-        `scaleX(${Math.min(1, bonus.remaining / bonus.duration)})`;
+      row.querySelector("strong").textContent = `${bonus.remaining.toFixed(1)}s`;
+      row.querySelector(".bonus-fill").style.transform = `scaleX(${Math.min(1, bonus.remaining / bonus.duration)})`;
     }
+    this.updateLabels(op.labels || []);
     if (force) this.updateBadgeBounds();
     this.rescueHUD.update(state);
+  }
+
+  updateStrike(op) {
+    const left = op.left.enemies + op.left.aa + op.left.masts + op.left.trucks;
+    $("objective-count").textContent = String(left).padStart(2, "0");
+    const parts = [
+      op.left.enemies && `${op.left.enemies} FIGHTERS`,
+      op.left.aa && `${op.left.aa} FLAK`,
+      op.left.masts && `${op.left.masts} JAMMER`,
+      op.left.trucks && `${op.left.trucks} TRUCKS`,
+    ].filter(Boolean);
+    $("objective-unit").textContent = parts.join(" / ") || "TARGETS LEFT";
+    op.aircraft.forEach((a, i) => {
+      const card = document.querySelector(`[data-aircraft="${i}"]`);
+      if (!card) return;
+      card.classList.toggle("down", !a.alive);
+      card.querySelector(".hp").innerHTML = a.alive
+        ? Array.from({ length: a.maxHp }, (_, k) => `<i class="${k < a.hp ? "" : "lost"}"></i>`).join("")
+        : "DOWN";
+      card.querySelectorAll("[data-bomb]").forEach((chip) => {
+        const kind = chip.dataset.bomb;
+        chip.querySelector("strong").textContent = a.payload[kind] ?? 0;
+        chip.disabled = !a.alive || !a.payload[kind];
+        chip.classList.toggle("selected", kind === op.selected && a.payload[kind] > 0);
+      });
+    });
+    $("floor-value").textContent = `F${op.floor}`;
+    $("formation-label").textContent = op.wide ? "WIDE" : "TIGHT";
+    $("speed-value").textContent = `${Math.round((op.speed / 10) * 100)}%`;
+    const ready = op.phase === "pass" && this.game.status === "playing";
+    const any = op.aircraft.some((a) => a.alive && Object.values(a.payload).some((n) => n > 0));
+    $("drop").disabled = !ready || !any;
+    $("salvo").disabled = !ready || !any;
+    $("drop-label").textContent = ready ? `Release ${BOMBS[op.selected]?.name || ""}` : `Turning ${Math.max(0, op.turn).toFixed(1)}s`;
+    const events = op.events.filter((e) => e.alive > 0);
+    const intelKey = events.map((e) => e.label).join("|");
+    if (intelKey !== this.intelKey) {
+      this.intelKey = intelKey;
+      $("intel").innerHTML = events
+        .map((e) => `<div class="intel-chip"><i data-lucide="users"></i><b>${escape(e.label)}</b><span>${escape(e.place)}</span><strong></strong></div>`)
+        .join("");
+      refreshIcons();
+    }
+    [...$("intel").children].forEach((chip, i) => {
+      const e = events[i];
+      chip.className = `intel-chip ${e.active ? "hot" : e.next < 8 ? "soon" : ""}`;
+      chip.querySelector("strong").textContent = e.active ? `NOW ${Math.ceil(e.remaining)}s` : `${Math.ceil(e.next)}s`;
+    });
+    $("intel").hidden = events.length === 0;
+    $("flak-warning").hidden = !op.flak;
+    if (op.flak) $("flak-text").textContent = `FLAK LOCK / ${op.flak.toUpperCase()}`;
+    const ladder = op.ladder;
+    $("ladder").classList.toggle("empty", !ladder);
+    $("ladder-name").textContent = ladder ? `${ladder.name}${ladder.kind === "shelter" ? " / NO STRIKE" : ""}` : "PIPPER ON OPEN GROUND";
+    $("ladder").classList.toggle("shelter", ladder?.kind === "shelter" || op.shelter);
+    const ladderKey = ladder ? `${ladder.name}|${ladder.floors.length}` : "";
+    if (ladderKey !== this.ladderKey) {
+      this.ladderKey = ladderKey;
+      $("ladder-floors").innerHTML = ladder
+        ? ladder.floors.map((f) => `<button data-floor="${f.f}"><span>${f.label}</span><em></em></button>`).join("")
+        : "";
+    }
+    if (ladder)
+      [...$("ladder-floors").children].forEach((row, i) => {
+        const f = ladder.floors[i];
+        row.classList.toggle("drill", f.f === ladder.drillFloor);
+        row.classList.toggle("set", f.f + 1 === op.floor);
+        const marks = `${"●".repeat(Math.min(6, f.count))}${f.props ? "▲".repeat(f.props) : ""}`;
+        const em = row.querySelector("em");
+        if (em.textContent !== marks) em.textContent = marks;
+      });
+  }
+
+  updateRiver(state, op) {
+    $("objective-count").textContent = `${Math.max(0, Math.ceil(op.length - op.distance))}`;
+    $("objective-unit").textContent = op.holding ? "CONVOY HOLDING" : "METRES TO GO";
+    $("barge-bars").innerHTML = op.barges
+      .map(
+        (b, i) =>
+          `<div class="bar ${b.alive ? "" : "lost"}"><span>${i ? "RELIEF TWO" : "HARBOR MERCY"}</span><div><i style="transform:scaleX(${b.hp / b.max})"></i></div></div>`,
+      )
+      .join("");
+    $("boss-bars").hidden = !op.boss || op.boss.phase === "approach";
+    if (op.boss)
+      $("boss-bars").innerHTML = [
+        ...op.boss.towers.map((hp, i) => `<div class="bar hostile"><span>GATE TOWER ${i ? "EAST" : "WEST"}</span><div><i style="transform:scaleX(${hp})"></i></div></div>`),
+        `<div class="bar hostile ${op.boss.shielded ? "shielded" : ""}"><span>GENERATOR${op.boss.shielded ? " / SHIELDED" : ""}</span><div><i style="transform:scaleX(${op.boss.generator})"></i></div></div>`,
+      ].join("");
+  }
+
+  updateLabels(labels) {
+    const layer = $("world-labels");
+    const seen = new Set();
+    for (const label of labels) {
+      seen.add(label.id);
+      let el = this.labels.get(label.id);
+      if (!el) {
+        el = document.createElement("div");
+        el.className = "world-label";
+        layer.append(el);
+        this.labels.set(label.id, el);
+      }
+      const p = this.view.project(label);
+      el.textContent = label.text;
+      el.classList.toggle("hot", Boolean(label.hot));
+      el.style.transform = `translate(${p.x}px, ${p.y}px) translate(-50%, -100%)`;
+    }
+    for (const [id, el] of this.labels)
+      if (!seen.has(id)) {
+        el.remove();
+        this.labels.delete(id);
+      }
   }
 }

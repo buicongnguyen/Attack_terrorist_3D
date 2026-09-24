@@ -1,128 +1,1104 @@
 {
   "author": "Original procedural assets authored for Tidelock",
-  "blender": "4.5.0",
+  "generator": "tools/blender/build_assets.py",
+  "blender": "4.5.9 LTS",
   "units": "metres",
-  "forward": "-Z in glTF",
+  "up": "+Y in glTF (Blender +Z)",
+  "forward": "-Z in glTF (Blender +Y)",
+  "totalBytes": 3279820,
   "assets": [
-    {
-      "name": "boat",
-      "file": "boat.glb",
-      "meshes": 23,
-      "bytes": 289444
-    },
-    {
-      "name": "helicopter",
-      "file": "helicopter.glb",
-      "meshes": 13,
-      "bytes": 290168
-    },
-    {
-      "name": "plane",
-      "file": "plane.glb",
-      "meshes": 9,
-      "bytes": 186296
-    },
     {
       "name": "enemy",
       "file": "enemy.glb",
-      "meshes": 16,
-      "bytes": 167856
-    },
-    {
-      "name": "cannon",
-      "file": "cannon.glb",
-      "meshes": 8,
-      "bytes": 49440
-    },
-    {
-      "name": "launcher",
-      "file": "launcher.glb",
-      "meshes": 8,
-      "bytes": 166864
-    },
-    {
-      "name": "mine",
-      "file": "mine.glb",
-      "meshes": 4,
-      "bytes": 71816
-    },
-    {
-      "name": "missile-friendly",
-      "file": "missile-friendly.glb",
-      "meshes": 5,
-      "bytes": 62904
-    },
-    {
-      "name": "missile-enemy",
-      "file": "missile-enemy.glb",
-      "meshes": 5,
-      "bytes": 62972
-    },
-    {
-      "name": "palm",
-      "file": "palm.glb",
-      "meshes": 3,
-      "bytes": 6876
-    },
-    {
-      "name": "rock",
-      "file": "rock.glb",
-      "meshes": 1,
-      "bytes": 3364
-    },
-    {
-      "name": "supply",
-      "file": "supply.glb",
-      "meshes": 5,
-      "bytes": 42768
-    },
-    {
-      "name": "pickup-health",
-      "file": "pickup-health.glb",
-      "meshes": 6,
-      "bytes": 67832
-    },
-    {
-      "name": "pickup-star",
-      "file": "pickup-star.glb",
-      "meshes": 5,
-      "bytes": 52464
-    },
-    {
-      "name": "pickup-gun",
-      "file": "pickup-gun.glb",
-      "meshes": 7,
-      "bytes": 69308
-    },
-    {
-      "name": "pickup-medal",
-      "file": "pickup-medal.glb",
-      "meshes": 7,
-      "bytes": 66464
-    },
-    {
-      "name": "beacon",
-      "file": "beacon.glb",
-      "meshes": 5,
-      "bytes": 50860
+      "kind": "character",
+      "chapters": [
+        "city",
+        "valley"
+      ],
+      "meshes": 19,
+      "triangles": 2960,
+      "bytes": 93296,
+      "nodes": [
+        "ArmL",
+        "ArmR",
+        "LegL",
+        "LegR"
+      ],
+      "materials": [
+        "Hostile accent"
+      ],
+      "boundsGltf": {
+        "min": [
+          -0.466,
+          -0.005,
+          -0.92
+        ],
+        "max": [
+          0.466,
+          1.46,
+          0.35
+        ]
+      }
     },
     {
       "name": "rescue-soldier",
       "file": "rescue-soldier.glb",
-      "meshes": 8,
-      "bytes": 101536
+      "kind": "character",
+      "chapters": [
+        "valley"
+      ],
+      "meshes": 15,
+      "triangles": 2668,
+      "bytes": 85340,
+      "nodes": [
+        "WaveArm"
+      ],
+      "materials": [],
+      "boundsGltf": {
+        "min": [
+          -0.448,
+          0.0,
+          -0.313
+        ],
+        "max": [
+          0.81,
+          1.91,
+          0.365
+        ]
+      }
+    },
+    {
+      "name": "boat",
+      "file": "boat.glb",
+      "kind": "vehicle",
+      "chapters": [
+        "river"
+      ],
+      "meshes": 29,
+      "triangles": 6568,
+      "bytes": 200096,
+      "nodes": [
+        "Turret",
+        "SingleGun",
+        "Muzzle",
+        "TwinGunL",
+        "TwinGunR",
+        "MuzzleL",
+        "MuzzleR",
+        "SupportRack",
+        "Radar"
+      ],
+      "materials": [],
+      "boundsGltf": {
+        "min": [
+          -1.147,
+          -0.32,
+          -2.535
+        ],
+        "max": [
+          1.147,
+          2.155,
+          2.835
+        ]
+      }
+    },
+    {
+      "name": "helicopter",
+      "file": "helicopter.glb",
+      "kind": "vehicle",
+      "chapters": [
+        "valley"
+      ],
+      "meshes": 18,
+      "triangles": 5852,
+      "bytes": 184464,
+      "nodes": [
+        "Rotor",
+        "TailRotor",
+        "ChinTurret",
+        "HeliMuzzle"
+      ],
+      "materials": [],
+      "boundsGltf": {
+        "min": [
+          -2.585,
+          -1.185,
+          -2.485
+        ],
+        "max": [
+          2.585,
+          1.6,
+          4.667
+        ]
+      }
+    },
+    {
+      "name": "bomber",
+      "file": "bomber.glb",
+      "kind": "vehicle",
+      "chapters": [
+        "city"
+      ],
+      "meshes": 14,
+      "triangles": 5856,
+      "bytes": 152444,
+      "nodes": [
+        "PropellerL",
+        "PropellerR",
+        "PylonL",
+        "PylonR",
+        "PylonC"
+      ],
+      "materials": [
+        "Livery"
+      ],
+      "boundsGltf": {
+        "min": [
+          -4.587,
+          -1.02,
+          -3.62
+        ],
+        "max": [
+          4.587,
+          1.544,
+          3.54
+        ]
+      }
+    },
+    {
+      "name": "barge",
+      "file": "barge.glb",
+      "kind": "vehicle",
+      "chapters": [
+        "river"
+      ],
+      "meshes": 16,
+      "triangles": 7516,
+      "bytes": 228420,
+      "nodes": [],
+      "materials": [],
+      "boundsGltf": {
+        "min": [
+          -1.734,
+          -0.4,
+          -4.026
+        ],
+        "max": [
+          1.734,
+          2.89,
+          4.008
+        ]
+      }
+    },
+    {
+      "name": "cannon",
+      "file": "cannon.glb",
+      "kind": "vehicle",
+      "chapters": [
+        "river"
+      ],
+      "meshes": 9,
+      "triangles": 3712,
+      "bytes": 100588,
+      "nodes": [
+        "Turret",
+        "Muzzle"
+      ],
+      "materials": [],
+      "boundsGltf": {
+        "min": [
+          -0.999,
+          0.0,
+          -1.77
+        ],
+        "max": [
+          0.999,
+          1.357,
+          1.05
+        ]
+      }
+    },
+    {
+      "name": "launcher",
+      "file": "launcher.glb",
+      "kind": "vehicle",
+      "chapters": [
+        "river",
+        "valley"
+      ],
+      "meshes": 10,
+      "triangles": 3248,
+      "bytes": 96656,
+      "nodes": [],
+      "materials": [],
+      "boundsGltf": {
+        "min": [
+          -1.698,
+          0.0,
+          -1.629
+        ],
+        "max": [
+          1.698,
+          3.115,
+          1.35
+        ]
+      }
+    },
+    {
+      "name": "mine",
+      "file": "mine.glb",
+      "kind": "prop",
+      "chapters": [
+        "river"
+      ],
+      "meshes": 5,
+      "triangles": 1968,
+      "bytes": 62524,
+      "nodes": [],
+      "materials": [],
+      "boundsGltf": {
+        "min": [
+          -0.719,
+          -0.36,
+          -0.637
+        ],
+        "max": [
+          0.719,
+          0.782,
+          0.637
+        ]
+      }
     },
     {
       "name": "aa-truck",
       "file": "aa-truck.glb",
-      "meshes": 8,
-      "bytes": 128460
+      "kind": "vehicle",
+      "chapters": [
+        "valley"
+      ],
+      "meshes": 12,
+      "triangles": 3440,
+      "bytes": 102160,
+      "nodes": [
+        "TruckTurret"
+      ],
+      "materials": [],
+      "boundsGltf": {
+        "min": [
+          -0.98,
+          0.004,
+          -1.54
+        ],
+        "max": [
+          0.98,
+          2.218,
+          1.5
+        ]
+      }
     },
     {
       "name": "drone",
       "file": "drone.glb",
+      "kind": "vehicle",
+      "chapters": [
+        "valley"
+      ],
+      "meshes": 9,
+      "triangles": 1804,
+      "bytes": 55240,
+      "nodes": [
+        "DroneRotor"
+      ],
+      "materials": [],
+      "boundsGltf": {
+        "min": [
+          -1.62,
+          -0.26,
+          -1.07
+        ],
+        "max": [
+          1.62,
+          0.476,
+          1.05
+        ]
+      }
+    },
+    {
+      "name": "aa-nest",
+      "file": "aa-nest.glb",
+      "kind": "vehicle",
+      "chapters": [
+        "city"
+      ],
+      "meshes": 7,
+      "triangles": 3896,
+      "bytes": 101364,
+      "nodes": [
+        "Turret",
+        "MuzzleL",
+        "MuzzleR"
+      ],
+      "materials": [],
+      "boundsGltf": {
+        "min": [
+          -1.23,
+          0.0,
+          -1.23
+        ],
+        "max": [
+          1.23,
+          1.826,
+          1.23
+        ]
+      }
+    },
+    {
+      "name": "relay-mast",
+      "file": "relay-mast.glb",
+      "kind": "vehicle",
+      "chapters": [
+        "city"
+      ],
+      "meshes": 11,
+      "triangles": 2604,
+      "bytes": 103016,
+      "nodes": [
+        "Dish",
+        "Beacon"
+      ],
+      "materials": [
+        "Beacon light"
+      ],
+      "boundsGltf": {
+        "min": [
+          -0.735,
+          0.0,
+          -0.9
+        ],
+        "max": [
+          0.735,
+          5.401,
+          0.735
+        ]
+      }
+    },
+    {
+      "name": "technical",
+      "file": "technical.glb",
+      "kind": "vehicle",
+      "chapters": [
+        "city"
+      ],
+      "meshes": 17,
+      "triangles": 5880,
+      "bytes": 171272,
+      "nodes": [
+        "Turret"
+      ],
+      "materials": [],
+      "boundsGltf": {
+        "min": [
+          -1.094,
+          0.004,
+          -2.36
+        ],
+        "max": [
+          1.094,
+          2.069,
+          2.182
+        ]
+      }
+    },
+    {
+      "name": "skiff",
+      "file": "skiff.glb",
+      "kind": "vehicle",
+      "chapters": [
+        "river"
+      ],
+      "meshes": 13,
+      "triangles": 3312,
+      "bytes": 100184,
+      "nodes": [
+        "Turret"
+      ],
+      "materials": [],
+      "boundsGltf": {
+        "min": [
+          -0.83,
+          -0.18,
+          -2.19
+        ],
+        "max": [
+          0.83,
+          1.56,
+          2.535
+        ]
+      }
+    },
+    {
+      "name": "gate-tower",
+      "file": "gate-tower.glb",
+      "kind": "vehicle",
+      "chapters": [
+        "river"
+      ],
+      "meshes": 12,
+      "triangles": 4228,
+      "bytes": 118700,
+      "nodes": [
+        "Turret",
+        "Muzzle"
+      ],
+      "materials": [],
+      "boundsGltf": {
+        "min": [
+          -1.75,
+          0.0,
+          -2.77
+        ],
+        "max": [
+          1.75,
+          6.952,
+          1.75
+        ]
+      }
+    },
+    {
+      "name": "lock-gate",
+      "file": "lock-gate.glb",
+      "kind": "vehicle",
+      "chapters": [
+        "river"
+      ],
+      "meshes": 22,
+      "triangles": 7720,
+      "bytes": 230660,
+      "nodes": [
+        "GateL",
+        "GateR",
+        "Generator"
+      ],
+      "materials": [],
+      "boundsGltf": {
+        "min": [
+          -10.95,
+          -1.2,
+          -1.85
+        ],
+        "max": [
+          10.95,
+          7.427,
+          1.85
+        ]
+      }
+    },
+    {
+      "name": "missile-friendly",
+      "file": "missile-friendly.glb",
+      "kind": "prop",
+      "chapters": [
+        "river"
+      ],
       "meshes": 5,
-      "bytes": 94664
+      "triangles": 856,
+      "bytes": 29688,
+      "nodes": [],
+      "materials": [],
+      "boundsGltf": {
+        "min": [
+          -0.172,
+          -0.172,
+          -0.55
+        ],
+        "max": [
+          0.172,
+          0.172,
+          0.62
+        ]
+      }
+    },
+    {
+      "name": "missile-enemy",
+      "file": "missile-enemy.glb",
+      "kind": "prop",
+      "chapters": [
+        "river",
+        "valley"
+      ],
+      "meshes": 4,
+      "triangles": 572,
+      "bytes": 21108,
+      "nodes": [],
+      "materials": [],
+      "boundsGltf": {
+        "min": [
+          -0.27,
+          -0.27,
+          -0.54
+        ],
+        "max": [
+          0.27,
+          0.27,
+          0.62
+        ]
+      }
+    },
+    {
+      "name": "bomb-penetrator",
+      "file": "bomb-penetrator.glb",
+      "kind": "prop",
+      "chapters": [
+        "city"
+      ],
+      "meshes": 4,
+      "triangles": 1296,
+      "bytes": 50136,
+      "nodes": [],
+      "materials": [],
+      "boundsGltf": {
+        "min": [
+          -0.193,
+          -0.193,
+          -0.71
+        ],
+        "max": [
+          0.193,
+          0.193,
+          0.706
+        ]
+      }
+    },
+    {
+      "name": "bomb-cluster",
+      "file": "bomb-cluster.glb",
+      "kind": "prop",
+      "chapters": [
+        "city"
+      ],
+      "meshes": 3,
+      "triangles": 1232,
+      "bytes": 35496,
+      "nodes": [],
+      "materials": [],
+      "boundsGltf": {
+        "min": [
+          -0.325,
+          -0.325,
+          -0.6
+        ],
+        "max": [
+          0.325,
+          0.325,
+          0.637
+        ]
+      }
+    },
+    {
+      "name": "bomb-blast",
+      "file": "bomb-blast.glb",
+      "kind": "prop",
+      "chapters": [
+        "city"
+      ],
+      "meshes": 3,
+      "triangles": 1112,
+      "bytes": 33512,
+      "nodes": [],
+      "materials": [],
+      "boundsGltf": {
+        "min": [
+          -0.285,
+          -0.281,
+          -0.53
+        ],
+        "max": [
+          0.285,
+          0.281,
+          0.568
+        ]
+      }
+    },
+    {
+      "name": "bomb-guided",
+      "file": "bomb-guided.glb",
+      "kind": "prop",
+      "chapters": [
+        "city"
+      ],
+      "meshes": 3,
+      "triangles": 832,
+      "bytes": 26212,
+      "nodes": [],
+      "materials": [],
+      "boundsGltf": {
+        "min": [
+          -0.214,
+          -0.214,
+          -0.71
+        ],
+        "max": [
+          0.214,
+          0.214,
+          0.707
+        ]
+      }
+    },
+    {
+      "name": "bomblet",
+      "file": "bomblet.glb",
+      "kind": "prop",
+      "chapters": [
+        "city"
+      ],
+      "meshes": 3,
+      "triangles": 344,
+      "bytes": 13472,
+      "nodes": [],
+      "materials": [],
+      "boundsGltf": {
+        "min": [
+          -0.126,
+          -0.123,
+          -0.117
+        ],
+        "max": [
+          0.126,
+          0.123,
+          0.2
+        ]
+      }
+    },
+    {
+      "name": "roof-tank",
+      "file": "roof-tank.glb",
+      "kind": "prop",
+      "chapters": [
+        "city"
+      ],
+      "meshes": 6,
+      "triangles": 1752,
+      "bytes": 68124,
+      "nodes": [],
+      "materials": [],
+      "boundsGltf": {
+        "min": [
+          -0.8,
+          -0.006,
+          -0.788
+        ],
+        "max": [
+          0.8,
+          2.53,
+          0.795
+        ]
+      }
+    },
+    {
+      "name": "roof-hvac",
+      "file": "roof-hvac.glb",
+      "kind": "prop",
+      "chapters": [
+        "city"
+      ],
+      "meshes": 5,
+      "triangles": 1564,
+      "bytes": 48392,
+      "nodes": [],
+      "materials": [],
+      "boundsGltf": {
+        "min": [
+          -1.01,
+          0.0,
+          -0.58
+        ],
+        "max": [
+          0.8,
+          1.05,
+          0.55
+        ]
+      }
+    },
+    {
+      "name": "car",
+      "file": "car.glb",
+      "kind": "prop",
+      "chapters": [
+        "city"
+      ],
+      "meshes": 8,
+      "triangles": 2292,
+      "bytes": 68692,
+      "nodes": [],
+      "materials": [
+        "Car paint"
+      ],
+      "boundsGltf": {
+        "min": [
+          -1.053,
+          0.004,
+          -2.12
+        ],
+        "max": [
+          1.053,
+          1.46,
+          2.12
+        ]
+      }
+    },
+    {
+      "name": "barricade",
+      "file": "barricade.glb",
+      "kind": "prop",
+      "chapters": [
+        "city"
+      ],
+      "meshes": 6,
+      "triangles": 940,
+      "bytes": 34828,
+      "nodes": [],
+      "materials": [],
+      "boundsGltf": {
+        "min": [
+          -1.16,
+          0.0,
+          -0.35
+        ],
+        "max": [
+          1.16,
+          0.95,
+          0.3
+        ]
+      }
+    },
+    {
+      "name": "street-tree",
+      "file": "street-tree.glb",
+      "kind": "prop",
+      "chapters": [
+        "city"
+      ],
+      "meshes": 7,
+      "triangles": 1460,
+      "bytes": 46128,
+      "nodes": [],
+      "materials": [],
+      "boundsGltf": {
+        "min": [
+          -1.028,
+          0.0,
+          -1.011
+        ],
+        "max": [
+          1.078,
+          3.62,
+          1.008
+        ]
+      }
+    },
+    {
+      "name": "streetlight",
+      "file": "streetlight.glb",
+      "kind": "prop",
+      "chapters": [
+        "city"
+      ],
+      "meshes": 5,
+      "triangles": 680,
+      "bytes": 24324,
+      "nodes": [],
+      "materials": [],
+      "boundsGltf": {
+        "min": [
+          -0.34,
+          0.0,
+          -1.281
+        ],
+        "max": [
+          0.34,
+          4.105,
+          0.26
+        ]
+      }
+    },
+    {
+      "name": "fuel-drums",
+      "file": "fuel-drums.glb",
+      "kind": "prop",
+      "chapters": [
+        "river",
+        "city"
+      ],
+      "meshes": 6,
+      "triangles": 2368,
+      "bytes": 78808,
+      "nodes": [],
+      "materials": [],
+      "boundsGltf": {
+        "min": [
+          -0.75,
+          0.0,
+          -0.75
+        ],
+        "max": [
+          0.75,
+          1.075,
+          0.75
+        ]
+      }
+    },
+    {
+      "name": "jungle-tree",
+      "file": "jungle-tree.glb",
+      "kind": "prop",
+      "chapters": [
+        "river",
+        "valley"
+      ],
+      "meshes": 6,
+      "triangles": 2000,
+      "bytes": 61252,
+      "nodes": [],
+      "materials": [],
+      "boundsGltf": {
+        "min": [
+          -1.808,
+          -0.018,
+          -1.572
+        ],
+        "max": [
+          1.81,
+          4.257,
+          1.703
+        ]
+      }
+    },
+    {
+      "name": "stilt-house",
+      "file": "stilt-house.glb",
+      "kind": "prop",
+      "chapters": [
+        "river"
+      ],
+      "meshes": 11,
+      "triangles": 2068,
+      "bytes": 87592,
+      "nodes": [],
+      "materials": [],
+      "boundsGltf": {
+        "min": [
+          -1.898,
+          -0.302,
+          -1.88
+        ],
+        "max": [
+          1.898,
+          4.06,
+          1.85
+        ]
+      }
+    },
+    {
+      "name": "palm",
+      "file": "palm.glb",
+      "kind": "prop",
+      "chapters": [
+        "river",
+        "city"
+      ],
+      "meshes": 6,
+      "triangles": 1284,
+      "bytes": 41988,
+      "nodes": [],
+      "materials": [],
+      "boundsGltf": {
+        "min": [
+          -1.4,
+          -0.107,
+          -2.0
+        ],
+        "max": [
+          2.4,
+          3.606,
+          1.8
+        ]
+      }
+    },
+    {
+      "name": "rock",
+      "file": "rock.glb",
+      "kind": "prop",
+      "chapters": [
+        "river",
+        "valley"
+      ],
+      "meshes": 2,
+      "triangles": 290,
+      "bytes": 14504,
+      "nodes": [],
+      "materials": [],
+      "boundsGltf": {
+        "min": [
+          -1.3,
+          -0.13,
+          -0.875
+        ],
+        "max": [
+          1.45,
+          1.546,
+          1.0
+        ]
+      }
+    },
+    {
+      "name": "supply",
+      "file": "supply.glb",
+      "kind": "prop",
+      "chapters": [
+        "valley"
+      ],
+      "meshes": 4,
+      "triangles": 964,
+      "bytes": 32096,
+      "nodes": [],
+      "materials": [],
+      "boundsGltf": {
+        "min": [
+          -0.465,
+          0.0,
+          -0.408
+        ],
+        "max": [
+          0.465,
+          0.798,
+          0.393
+        ]
+      }
+    },
+    {
+      "name": "beacon",
+      "file": "beacon.glb",
+      "kind": "prop",
+      "chapters": [
+        "valley"
+      ],
+      "meshes": 7,
+      "triangles": 1448,
+      "bytes": 49224,
+      "nodes": [],
+      "materials": [],
+      "boundsGltf": {
+        "min": [
+          -0.633,
+          0.0,
+          -0.69
+        ],
+        "max": [
+          0.633,
+          2.31,
+          0.62
+        ]
+      }
+    },
+    {
+      "name": "pickup-health",
+      "file": "pickup-health.glb",
+      "kind": "prop",
+      "chapters": [
+        "river"
+      ],
+      "meshes": 4,
+      "triangles": 1868,
+      "bytes": 50112,
+      "nodes": [],
+      "materials": [],
+      "boundsGltf": {
+        "min": [
+          -0.8,
+          0.027,
+          -0.73
+        ],
+        "max": [
+          0.8,
+          0.97,
+          0.73
+        ]
+      }
+    },
+    {
+      "name": "pickup-star",
+      "file": "pickup-star.glb",
+      "kind": "prop",
+      "chapters": [
+        "river"
+      ],
+      "meshes": 5,
+      "triangles": 1972,
+      "bytes": 53100,
+      "nodes": [],
+      "materials": [],
+      "boundsGltf": {
+        "min": [
+          -0.8,
+          0.027,
+          -0.73
+        ],
+        "max": [
+          0.8,
+          1.01,
+          0.73
+        ]
+      }
+    },
+    {
+      "name": "pickup-gun",
+      "file": "pickup-gun.glb",
+      "kind": "prop",
+      "chapters": [
+        "river"
+      ],
+      "meshes": 5,
+      "triangles": 2360,
+      "bytes": 63052,
+      "nodes": [],
+      "materials": [],
+      "boundsGltf": {
+        "min": [
+          -0.8,
+          0.027,
+          -0.73
+        ],
+        "max": [
+          0.8,
+          1.17,
+          0.73
+        ]
+      }
+    },
+    {
+      "name": "pickup-medal",
+      "file": "pickup-medal.glb",
+      "kind": "prop",
+      "chapters": [
+        "river"
+      ],
+      "meshes": 5,
+      "triangles": 2232,
+      "bytes": 61556,
+      "nodes": [],
+      "materials": [],
+      "boundsGltf": {
+        "min": [
+          -0.8,
+          0.027,
+          -0.73
+        ],
+        "max": [
+          0.8,
+          1.035,
+          0.73
+        ]
+      }
     }
   ]
 }

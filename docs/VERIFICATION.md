@@ -1,5 +1,44 @@
 # Release Verification
 
+## Tidelock 2.0 (Operation Breakwater redesign)
+
+The redesign ([REDESIGN.md](REDESIGN.md)) was verified on 2026-09-25 with the commands below against the production build (`vite preview`, SwiftShader WebGL, the same setup CI uses) and again against the dev server with GPU rendering.
+
+- **39 Node tests** (`npm test`):
+  - rally schedules converge in every cycle and are spread out between cycles;
+  - walkers never cross building footprints and change floors only at stair cores;
+  - the pipper forecast matches a mirror of the live bomb loop to 1e-6;
+  - the Drill reports the floor it actually reaches, and warns when it would pass through the shelter;
+  - Scatter covers a solid disc, and one shelter rule serves both the warning and the abort;
+  - pincer skiffs meet abreast, and river scripts are ordered;
+  - story coherence: every mission has a place, goals, briefing, radio and both debriefs; Marrow speaks in every chapter; Reyes carries the key home;
+  - every GLB has the nodes and materials the runtime animates or recolours, and the model set stays under 4.5 MiB.
+- **155 browser checks** (`npm run test:browser`, 128 s):
+  - all 41 models load;
+  - the prologue, briefing and radio flow;
+  - real keyboard steering, release and floor keys, plus a 200 ms ladder press;
+  - the shelter abort and victory debriefs with star criteria;
+  - convoy mechanics: wake following, body-blocking, drum chains, pincer meeting and chain, full columns;
+  - Chapter 1 regressions: flight loss waits for bombs in flight, people fall through holes, the tallest roof is selectable;
+  - **scripted pilots complete all twelve missions** with ordinary controls:
+
+    | Missions | Result |
+    | --- | --- |
+    | Strike 1.1–1.6 | bombs used against par: 1/1, 2/2, 4/3, 5/5, 5/6, 10/8 |
+    | River 2.1–2.3 | 2–3 stars, with real barge damage |
+    | Rescue 3.1–3.3 | full sorties home |
+
+  - rendering: non-blank scenes under 900 draw calls;
+  - layouts: phone and tablet layouts without overlap at 320×740, 390×844, 844×390, 768×1024, 568×320 and 667×375, including the portrait strike camera and touch sticks;
+  - zero runtime or resource errors.
+- **Independent review.** A separate review pass reproduced 12 defects, and all were fixed with regression tests (see [REDESIGN.md §8](REDESIGN.md#8-code-and-logic-review)). The scripted-pilot runs are deterministic: the one random gameplay choice (boss wave side) now alternates.
+
+**Limits.** Browser emulation is not real-device testing. The scripted pilots prove reachability and pacing, not human difficulty. Ballistics and patrols are arcade models, not simulations. Destruction removes slab and wall tiles but there is no structural collapse. Progress saves only in the local browser.
+
+## Earlier releases
+
+The sections below record the first releases, before the redesign.
+
 ## Launcher Shutdown Update
 
 Chapter 3 cave launchers and mobile anti-air racks now stop firing permanently after a landed hit. Traveling-projectile tests verify shutdown, twenty seconds without new launches, one-time cave rewards, preservation of missiles already airborne, and fresh launchers on retry. The suite now has 16 Node tests and 103 browser assertions. Chapter 2 launchers retain their existing rules.

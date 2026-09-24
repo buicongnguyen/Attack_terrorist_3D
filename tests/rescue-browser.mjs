@@ -131,7 +131,7 @@ export async function checkRescue(page, browser, url, check, errors) {
     const shots = g.projectiles.length,
       score = g.score,
       kills = g.kills;
-    for (let i = 0; i < 2400; i++) g.updateCaves(1 / 120);
+    for (let i = 0; i < 2400; i++) g.rescue.updateCaves(1 / 120);
     out.caveNeverRearms =
       cave.phase === "disabled" && g.projectiles.length === shots;
     g.damage(cave, 5, true);

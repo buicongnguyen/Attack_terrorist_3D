@@ -1,9 +1,12 @@
+import "@fontsource-variable/fredoka/wght.css";
 import "./style.css";
 import { WorldView } from "./world.js";
 import { Game } from "./game.js";
 import { AudioBus } from "./audio.js";
 import { FixedClock } from "./physics.js";
 import { UI, readSave } from "./ui.js";
+import * as strikeData from "./strike-data.js";
+import * as rescueData from "./rescue-data.js";
 
 async function boot() {
   const view = new WorldView(document.getElementById("world"));
@@ -41,6 +44,8 @@ async function boot() {
   window.addEventListener("resize", () => view.resize());
   if (new URLSearchParams(location.search).has("qa")) {
     window.__TIDELOCK__ = { game, view, ui, clock };
+    window.__TIDELOCK_STRIKE__ = strikeData;
+    window.__TIDELOCK_RESCUE__ = rescueData;
   }
   document.documentElement.dataset.ready = "true";
 }

@@ -1,91 +1,104 @@
 # Tidelock: Operation Breakwater
 
-A playable 3D remake of the Sky Drill arcade campaign, built with **Three.js**, **cannon-es**, and original **Blender** models.
+A three-chapter 3D story campaign for the browser, built with **Three.js**, **cannon-es** and 41 original **Blender** models.
 
 **[Play Tidelock](https://buicongnguyen.github.io/Attack_terrorist_3D/)**
 
-![Breakwater mission](docs/chapter1.png)
+![Kestrel Flight salvo over the Glass Tower](docs/chapter1.png)
 
-The Ashen Front has closed the Meridia relief corridor. Disable its coastal relays, bring a relief launch upriver, then fly into the valley to rescue stranded soldiers and bring them home.
+Solace Harbor lies three metres below the tide. Only the Tidelock, a storm barrier at the mouth of the Verde River, keeps it dry. Its designer, now the terrorist leader Marrow, has seized the city's towers and the barrier's control station. He will hold the gates open when Typhoon Ilse peaks at last light tomorrow. You fly for the Kestrel Response Unit.
 
 ## Campaign
 
-- **Breakwater**: six precision missions. Configure drill, bounce, or timed pods; choose ballistic, hook, or zigzag flight; time your release from the carrier aircraft. Later missions demand room-sized blasts and efficient use of limited ammunition.
-- **Relief Run**: three river legs. Pilot a crewed patrol boat, aim its turret, intercept mines, and destroy bank guns and launcher houses. Pickups repair shields or temporarily grant twin automatic guns and guided missiles.
-- **Last Light**: three search-and-rescue sorties across a 92 by 250 world-unit valley. Choose rescue signals on the tactical map, clear pickup zones, hover to winch two, three, or four soldiers aboard, and return to base. Fight infantry, cannons, cave launchers, mobile anti-air trucks, and drones with a chain gun, rockets, guided missiles, and defensive flares. Supply caches and the southern base restore equipment and shields.
+| Chapter | You command | The job |
+| --- | --- | --- |
+| **1 Breakwater** (6 missions) | Kestrel Flight: up to three strike aircraft | Break the Front's hold on the Glass District. Echo recon reads the enemy's patrol schedules; time your passes so the gatherings are hit together. |
+| **2 Relief Run** (3 missions) | The gunboat *Marlin* | Escort Dr. Okafor's relief barges up the Verde River and break the Highwater lock gate. |
+| **3 Last Light** (3 missions) | The rescue helicopter *Lantern* | Winch Echo team out of Cinder Valley and bring the override key home before the storm. |
 
-![Valley rescue mission](docs/chapter3.png)
+![Relief barges in Marlin's wake, a skiff pincer closing](docs/chapter2.png)
 
-All twelve missions are available from Mission Control for testing. Completion records save locally. Retry starts a fresh attempt; only completed best scores are retained.
+### Chapter 1: city strikes
+
+- A destructible grid of 2–7-storey towers. Glass south faces let you see which floors are occupied.
+- Four bombs with different jobs:
+  - **Drill** punches through slabs and detonates on the floor you set;
+  - **Scatter** bursts into eight bomblets over crowds;
+  - **Shockwave** tears open roofs and flak nests;
+  - **Lance** is a guided bomb for moving trucks.
+- The pipper forecasts each aircraft's impact exactly, including the floor a Drill will reach. **Salvo** drops one bomb from every aircraft at once.
+- Enemies walk scheduled routes through doors, stairs and streets. The intel strip counts down to shift changes, musters and the lieutenants' meeting, when a whole cell stands together. Late missions add hiding after the first blast, flak locks you must dodge, a technical convoy, and a civilian shelter that must never be hit.
+
+### Chapter 2: river convoy
+
+- The barges follow Marlin's wake. Guns and skiffs show a red aim line before they fire, and you can block shots with the gunboat.
+- Fuel drums and a bridge ammunition crate chain-detonate whole crews. Skiff pincers meet at a marked point, where one hit sets off the rest.
+- The Lock Gate boss: two gun towers, then the shielded generator, then the gates swing open.
+
+### Chapter 3: valley rescue
+
+- Hover low and slow over a clear zone and hold the winch. Everyone must return to the Highwater pad.
+- You carry a chain gun, rockets, guided missiles and flares. Supply caches, anti-air trucks, cave launchers and drones are spread through a jungle valley at sunset.
+
+![Lantern over Cinder Valley](docs/chapter3.png)
+
+Every mission opens with a briefing and ends with a story debrief and star criteria. All twelve missions can be selected from Mission Control, and progress saves locally.
 
 ## Controls
 
-| Action                    | Desktop                                               | Touch                                 |
-| ------------------------- | ----------------------------------------------------- | ------------------------------------- |
-| Release pod               | Space or Release pod                                  | Release pod                           |
-| Adjust pod                | Bottom loadout controls                               | Bottom-left settings icon             |
-| Move boat / helicopter    | WASD or arrow keys                                    | Left stick                            |
-| Aim and fire              | Point and hold primary mouse button; Space also fires | Right stick                           |
-| Helicopter weapon         | 1 gun, 2 rockets, 3 guided missiles                   | Weapon icons with ammunition counts   |
-| Defensive flares          | F                                                     | Flare icon                            |
-| Rescue / return to base   | Hold E while hovering in a clear landing zone         | Hold winch / land button              |
-| Rescue waypoint           | Select map signal or next-signal icon                 | Select map signal or next-signal icon |
-| Pause / mission selection | Escape or top settings icon                           | Top settings icon                     |
-| Retry                     | R or Mission Control                                  | Mission Control                       |
+| Action | Desktop | Touch |
+| --- | --- | --- |
+| Steer formation (lane, throttle) | W S, A D | Left stick |
+| Payload, release, salvo | 1–4, Space, X | Payload chips, Release, Salvo |
+| Drill floor, formation spacing | E / C, Q | Floor ladder or ± buttons, spacing button |
+| Move boat or helicopter | WASD / arrows | Left stick |
+| Aim and fire | Pointer (hold), or Space | Right stick |
+| Helicopter weapons, flares | 1 gun, 2 rockets, 3 guided, F | Weapon icons, flare icon |
+| Winch / land | Hold E over a clear zone | Hold Winch |
+| Pause, retry | Esc, R | Top bar |
 
-## Run Locally
+On portrait phones, Chapter 1's camera looks along the flight path so the district fills the width.
 
-Requires Node.js 22.12+ or a compatible current LTS release.
+## Run locally
+
+Requires Node.js 22.12+ (or a compatible current release).
 
 ```sh
 npm ci
 npm run dev
 ```
 
-Vite prints the local URL. Use the development server; opening `index.html` directly cannot load JavaScript modules and GLB assets correctly.
-
 ```sh
-npm test
+npm test                                  # 39 Node tests: rules, schedules, ballistics, story, GLB contracts
 npm run build
 npm run preview -- --port 5183
-npm run test:browser
+npm run test:browser                      # Chrome suite: 155 checks incl. scripted pilots for all 12 missions
 ```
 
-Browser tests use system Chrome on Windows. On other platforms, run `npx playwright install chromium` first. Override the executable with `CHROME_PATH` and the served URL with `GAME_URL` when needed. Browser screenshots go to the ignored `test-results/` directory.
+The browser tests use system Chrome on Windows (`CHROME_PATH` overrides it) and SwiftShader by default. Set `GPU=1` to render on the real GPU, and `GAME_URL` to test another server. Screenshots go to `test-results/`. The QA handle `window.__TIDELOCK__` exists only with `?qa=1`. Add `&brief=1` or `&prologue=1` to keep the story dialogs in QA runs.
 
-## Blender Source
+## Blender assets
 
-- Editable library: [`art/tidelock-assets.blend`](art/tidelock-assets.blend)
-- Reproducible authoring/export script: [`tools/build_assets.py`](tools/build_assets.py)
-- Runtime models: [`public/models/`](public/models/)
-- Asset sizes and provenance: [`public/models/manifest.json`](public/models/manifest.json)
-
-Regenerate with Blender 4.5 LTS:
+- **Generators:** [`tools/blender/`](tools/blender/): `style.py` (kit and palette), `catalog.py` (asset contracts), and one asset module per family.
+- **Editable library:** [`art/tidelock-assets.blend`](art/tidelock-assets.blend).
+- **Runtime models:** [`public/models/`](public/models/). There are 41 GLBs, about 3.1 MiB in total; [`manifest.json`](public/models/manifest.json) records sizes, triangles and nodes.
 
 ```sh
-blender --background --python tools/build_assets.py -- --output public/models
+blender --background --factory-startup --python tools/blender/build_assets.py -- --output public/models
+blender --background --factory-startup --python tools/blender/render_sheet.py -- --models public/models --docs docs
 ```
 
-The 20 GLB models total approximately 1.94 MiB. They include a detailed turret-equipped patrol boat and crew, helicopter with an articulated chin gun, carrier plane, articulated opponent, waving rescue soldier, mobile anti-air truck, drone, cannon, launcher house, mine, two missile designs, palm, rock, supply case, beacon, and four distinct floating pickup cases. Geometry and material data are shared between runtime instances; static details are batched by material and articulated pivot during export.
+The build fails if a node or material the game animates or recolours is missing. The contact sheets in `docs/` are compressed JPEG copies of the renders. At load time the game merges each model's static parts into vertex-coloured meshes, and draws scenery props instanced.
 
-Supply cases use clear camera-facing symbols: a green **+** for shield repair, gold **twin barrels / x2** for twin automatic guns, a cyan **rocket** for guided support, and a gold **medal / +250** for score. Both weapon timers remain visible when bonuses overlap. The boat's gun and missile-rack models also change with its active loadout.
+![Asset contact sheet](docs/asset-sheet.jpg)
 
-## Design and Verification
+## Design and verification
 
-- [Detailed evaluation, redesign plan, and future suggestions](PLAN.md)
-- [Verification notes and known limitations](docs/VERIFICATION.md)
-- [Asset and dependency credits](docs/CREDITS.md)
-- [3D detail and pickup readability review](docs/REVIEW-DETAILS.md)
-- [Chapter 3 rescue design, implementation, and review](docs/CHAPTER3-RESCUE.md)
+- [Redesign: evaluation, research, story, mechanics and review](docs/REDESIGN.md)
+- [Verification record and known limits](docs/VERIFICATION.md)
+- [Credits and licences](docs/CREDITS.md)
+- History: [first-release plan](PLAN.md), [rescue chapter notes](docs/CHAPTER3-RESCUE.md), [detail review](docs/REVIEW-DETAILS.md)
 
-The first release uses a fixed 120 Hz simulation, cannon-es rigid bodies for bombs and fragments, and swept collision tests for fast projectiles. Guided flight programs are arcade mechanics. The forecast stops at first contact; it does not claim an exact preview of later bounces or drilling.
+## Repository and deployment
 
-## Repository and Deployment
-
-Local project: `C:\Users\n\source\repos\Attack_terrorist_3D`
-
-SSH remote: `git@github.com:buicongnguyen/Attack_terrorist_3D.git`
-
-The GitHub Actions workflow tests and builds the static game, checks it in Chrome, and deploys `dist/` to GitHub Pages on pushes to `main`. The build uses relative asset paths and bundles runtime dependencies locally. No CDN or server backend is needed during play.
-
-The original [Sky Drill](https://buicongnguyen.github.io/Games/) and [Sky Drill 2](https://buicongnguyen.github.io/SkyDrill2/) remain separate games.
+SSH remote: `git@github.com:buicongnguyen/Attack_terrorist_3D.git`. Pushing to `main` runs the GitHub Actions workflow: tests, build, the Chrome suite against the production preview, then deployment of `dist/` to GitHub Pages. The build is fully static, with no CDN or server backend.

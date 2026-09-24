@@ -1,5 +1,7 @@
 # Tidelock: Operation Breakwater
 
+> **History.** This is the plan for the first release. The current game was redesigned in Tidelock 2.0: see [docs/REDESIGN.md](docs/REDESIGN.md) for the new story, mechanics, art pipeline and review.
+
 ## 1. Purpose and Scope
 
 Turn the original Sky Drill prototype into a coherent, playable 3D browser game. The repository requested by the owner is `Attack_terrorist_3D`; the player-facing title is **Tidelock: Operation Breakwater**. Keep the original three chapter ideas and twelve missions, but rebuild rendering, interaction, art, progression, and physics around a shared engine.

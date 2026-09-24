@@ -12,8 +12,8 @@ const sites = [
   { x: 23, z: -204, name: "ECHO 04", sector: "NORTH RIDGE" },
 ];
 
-export function rescueLayout(team = 2) {
-  const survivors = sites.slice(0, team).map((s) => ({ ...s }));
+export function rescueLayout(team = 2, crew = []) {
+  const survivors = sites.slice(0, team).map((s, i) => ({ ...s, person: crew[i] || s.name }));
   return {
     bounds: { ...RESCUE_BOUNDS },
     base: { ...RESCUE_BASE },
@@ -43,11 +43,24 @@ export function rescueProgress(rescued, total, distanceToBase) {
   );
 }
 
+const HOSTILE_TYPES = new Set([
+  "mine",
+  "cannon",
+  "launcher",
+  "enemy",
+  "cave",
+  "aa-truck",
+  "drone",
+  "skiff",
+  "drums",
+  "crate",
+  "tower",
+  "generator",
+]);
+
 export const isHostileEntity = (e) =>
   !e.dead &&
   !e.friendly &&
-  ["mine", "cannon", "launcher", "enemy", "cave", "aa-truck", "drone"].includes(
-    e.type,
-  ) &&
-  (e.type !== "cave" ||
-    !["hidden", "closed", "opening", "disabled"].includes(e.phase));
+  !e.shielded &&
+  HOSTILE_TYPES.has(e.type) &&
+  (e.type !== "cave" || !["hidden", "opening", "disabled"].includes(e.phase));

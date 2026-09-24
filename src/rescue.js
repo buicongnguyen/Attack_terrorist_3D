@@ -2,6 +2,7 @@ import * as THREE from "three";
 import {
   rescueLayout,
   RESCUE_HEIGHT,
+  RESCUE_BOUNDS,
   RESCUE_GEAR,
   WINCH_SECONDS,
   hoverReady,
@@ -9,6 +10,7 @@ import {
   isHostileEntity,
 } from "./rescue-data.js";
 import { clamp } from "./physics.js";
+import { MISSION_STORY } from "./story.js";
 
 const V = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
 const distance = (a, b) => Math.hypot(a.x - b.x, a.z - b.z);
@@ -16,7 +18,27 @@ const distance = (a, b) => Math.hypot(a.x - b.x, a.z - b.z);
 export class RescueOperation {
   constructor(game) {
     this.game = game;
-    this.layout = rescueLayout(game.mission.team);
+    const view = game.view;
+    game.player = view.model("helicopter", V(0, RESCUE_HEIGHT, 18), 0.95);
+    this.rotor = game.player.getObjectByName("Rotor");
+    this.tailRotor = game.player.getObjectByName("TailRotor");
+    this.heliTurret = game.player.getObjectByName("ChinTurret");
+    this.heliMuzzle = game.player.getObjectByName("HeliMuzzle");
+    game.shieldMeshes = game.createShields(3.1, 0);
+    view.followPlayer(game.player.position, 0, true);
+    this.vehicle = {
+      accel: 60,
+      drag: 4.1,
+      max: 14,
+      bounds: { left: RESCUE_BOUNDS.left, right: RESCUE_BOUNDS.right, far: RESCUE_BOUNDS.far, near: RESCUE_BOUNDS.near },
+      height: RESCUE_HEIGHT,
+      bob: 1.3,
+      bank: 0.035,
+      pitch: 0.016,
+    };
+    this.story = MISSION_STORY[game.index];
+    this.said = new Set();
+    this.layout = rescueLayout(game.mission.team, game.mission.crew);
     this.gear = { ...RESCUE_GEAR };
     this.rescued = 0;
     this.selected = 0;
@@ -37,6 +59,7 @@ export class RescueOperation {
           rescued: false,
           radius: 0.8,
           name: site.name,
+          person: site.person,
           signal: i + 1,
         },
       );
@@ -166,7 +189,7 @@ export class RescueOperation {
     if (this.rescued === this.soldiers.length)
       return {
         ...this.layout.base,
-        name: "SOUTHERN BASE",
+        name: "HIGHWATER PAD",
         sector: "RETURN TO BASE",
       };
     if (this.soldiers[this.selected]?.rescued)
@@ -175,7 +198,7 @@ export class RescueOperation {
     return {
       x: s.position.x,
       z: s.position.z,
-      name: s.name,
+      name: s.person || s.name,
       sector: this.layout.survivors[this.selected].sector,
     };
   }
@@ -245,11 +268,12 @@ export class RescueOperation {
 
   update(dt) {
     const g = this.game;
+    this.say("start");
     this.countermeasures = Math.max(0, this.countermeasures - dt);
     this.flareCooldown = Math.max(0, this.flareCooldown - dt);
     this.baseCooldown = Math.max(0, this.baseCooldown - dt);
-    if (g.rotor) g.rotor.rotation.y += dt * 35;
-    if (g.tailRotor) g.tailRotor.rotation.x += dt * 44;
+    if (this.rotor) this.rotor.rotation.y += dt * 35;
+    if (this.tailRotor) this.tailRotor.rotation.x += dt * 44;
     for (const e of g.entities) {
       if (e.dead) continue;
       const d = distance(e.position, g.player.position);
@@ -323,7 +347,7 @@ export class RescueOperation {
                 : 3;
       }
     }
-    g.updateCaves(dt);
+    this.updateCaves(dt);
     this.updateWinch(dt);
     g.entities = g.entities.filter((e) => !e.dead || e.fallTime !== undefined);
   }
@@ -395,7 +419,10 @@ export class RescueOperation {
       if (this.hoist >= WINCH_SECONDS) {
         this.hoist = 0;
         if (atBase) {
-          if (this.rescued === this.soldiers.length) g.finish(true);
+          if (this.rescued === this.soldiers.length) {
+            this.say("success");
+            g.finish(true);
+          }
           else if (this.baseCooldown <= 0) {
             g.shields = [3, 3, 3];
             this.gear = { ...RESCUE_GEAR };
@@ -413,8 +440,9 @@ export class RescueOperation {
             "toast",
             this.rescued === this.soldiers.length
               ? "TEAM ABOARD / RETURN TO BASE"
-              : `${soldier.name} ABOARD`,
+              : `${(soldier.person || soldier.name).toUpperCase()} ABOARD`,
           );
+          if (this.rescued === this.soldiers.length) this.say("pickup");
           this.objective();
         }
       }
@@ -424,10 +452,81 @@ export class RescueOperation {
     }
   }
 
+  say(key) {
+    if (this.said.has(key)) return;
+    const line = this.story?.radio?.[key];
+    if (!line) return;
+    this.said.add(key);
+    this.game.radio(line);
+  }
+
+  updateCaves(dt) {
+    const g = this.game;
+    for (const e of g.entities) {
+      if (e.type !== "cave" || e.dead || e.phase === "disabled") continue;
+      if (e.position.distanceTo(g.player.position) > 48) continue;
+      e.age += dt;
+      if (e.phase === "hidden") {
+        if (g.time >= e.appearAt) {
+          e.phase = "opening";
+          e.timer = 0;
+        }
+        continue;
+      }
+      e.timer += dt;
+      if (e.phase === "opening") {
+        e.mesh.scale.setScalar(e.size * clamp(e.timer / 1.4, 0.01, 1));
+        if (e.timer >= 1.4) {
+          e.phase = "enemy";
+          e.timer = 0;
+          e.crew.visible = true;
+        }
+      } else if (e.phase === "enemy" && e.timer >= 3) {
+        e.phase = "launcher";
+        e.timer = 0;
+        e.launcher.visible = true;
+      } else if (e.phase === "launcher" && e.timer >= 5) {
+        g.spawnShot(g.targetPosition(e).add(V(0, 0.8, 0)), g.player.position.clone(), true, true);
+        e.timer = 2.5;
+      }
+      if (e.crew.visible) {
+        e.crew.position.y = -0.6 + Math.min(e.timer, 1) * 0.15;
+        e.crew.rotation.x = e.phase === "enemy" ? Math.max(0, 1 - e.timer) * 0.9 : 0;
+      }
+      e.warningRing.visible = e.phase === "launcher";
+      if (e.warningRing.visible) e.warningRing.material.opacity = 0.3 + Math.sin(g.time * 7) * 0.25;
+    }
+  }
+
+  // A landed hit collapses the cave mouth for good; missiles already in the air keep flying.
+  disableCave(e, rocket) {
+    const g = this.game;
+    e.phase = "disabled";
+    e.timer = 0;
+    e.mouth.scale.set(0.9, 0.2, 0.2);
+    e.crew.visible = false;
+    e.launcher.visible = false;
+    e.warningRing.visible = false;
+    g.score += rocket ? 150 : 100;
+    g.kills++;
+    g.blast(g.targetPosition(e), 1.5, 0xffd36b);
+  }
+
+  stars(success) {
+    if (!success) return 0;
+    const damage = this.game.damageTaken;
+    return damage === 0 ? 3 : damage <= 1 ? 2 : 1;
+  }
+
+  finishBonus() {
+    return 300 + this.game.shields.reduce((a, b) => a + b, 0) * 40;
+  }
+
   snapshot() {
     const g = this.game,
       objective = this.objective();
     return {
+      mode: "rescue",
       rescued: this.rescued,
       total: this.soldiers.length,
       objective,
