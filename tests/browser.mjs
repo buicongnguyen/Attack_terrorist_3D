@@ -110,7 +110,11 @@ try {
   });
   await page.keyboard.press("f");
   check("F reverses the flight", await page.evaluate(() => __TIDELOCK__.game.op.flight.phase === "turn" && __TIDELOCK__.game.op.flight.dir === -1));
-  await page.waitForFunction(() => __TIDELOCK__.game.op.flight.phase === "pass", null, { timeout: 10000 });
+  // Finish the turn in simulation time: software-rendered CI runs at a few frames a second.
+  await page.evaluate(() => {
+    const g = __TIDELOCK__.game;
+    for (let i = 0; i < 600 && g.op.flight.phase !== "pass"; i++) g.update(1 / 120);
+  });
   await page.mouse.click(720, 450);
   check("a mouse click on the map releases a bomb", await page.evaluate(() => __TIDELOCK__.game.op.used === 1));
 
