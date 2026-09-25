@@ -3,7 +3,7 @@
 export function skipper() {
   const { game: g, ui } = window.__TIDELOCK__;
   const out = [];
-  for (let index = 6; index <= 8; index++) {
+  for (let index = 9; index <= 11; index++) {
     ui.start(index);
     g.paused = false;
     const op = g.op;
@@ -62,7 +62,7 @@ export async function checkRiver(page, check) {
   const mechanics = await page.evaluate(() => {
     const { game: g, ui } = window.__TIDELOCK__;
     const out = {};
-    ui.start(6);
+    ui.start(9);
     g.paused = false;
     const op = g.op;
     out.twoBarges = op.barges.length === 2 && op.barges.every((b) => b.alive && b.hp === b.max);
@@ -85,7 +85,7 @@ export async function checkRiver(page, check) {
     for (let i = 0; i < 240 && !shot.dead; i++) g.update(1 / 120);
     out.bodyBlock = barge.hp === hp && g.shields.reduce((a, b) => a + b, 0) === shields - 1 && op.blocked === 1;
     // Fuel drums take the neighbouring crew with them.
-    ui.start(6);
+    ui.start(9);
     g.paused = false;
     const drumsEvent = { d: 0, type: "guns", side: 1, count: 2, crew: 2, drums: true };
     g.op.spawn(drumsEvent);
@@ -94,7 +94,7 @@ export async function checkRiver(page, check) {
     g.damage(drums, 1);
     out.drumChain = crew.length >= 3 && crew.every((e) => e.dead);
     // Pincer skiffs arrive at the meeting point together.
-    ui.start(7);
+    ui.start(10);
     g.paused = false;
     g.op.spawn({ d: 0, type: "skiffs", pattern: "pincer", count: 6, meet: { x: 0, z: -2 }, delay: 6 });
     for (let i = 0; i < 6 * 120; i++) g.update(1 / 120);
@@ -108,7 +108,7 @@ export async function checkRiver(page, check) {
     g.update(1 / 120);
     out.columnKeepsTrailingBoats = g.entities.filter((e) => e.type === "skiff" && !e.dead).length === 4;
     // Kills inside one second chain into a combo worth n² x 30.
-    ui.start(7);
+    ui.start(10);
     g.paused = false;
     g.op.spawn({ d: 0, type: "skiffs", pattern: "pincer", count: 4, meet: { x: 0, z: -2 }, delay: 6 });
     let combo = null;
@@ -122,7 +122,7 @@ export async function checkRiver(page, check) {
     g.notify = notify;
     out.killsChainIntoACombo = Boolean(combo) && combo.count >= 2 && combo.bonus === combo.count ** 2 * 30;
     // A skiff that rams a barge dies in the ram, even while it is aiming, and pays nothing.
-    ui.start(7);
+    ui.start(10);
     g.paused = false;
     const rammed = g.op.barges[1];
     g.op.spawn({ d: 0, type: "skiffs", pattern: "column", count: 1, x: rammed.position.x });
@@ -134,7 +134,7 @@ export async function checkRiver(page, check) {
     out.ramKillsTheSkiffWithoutReward =
       ram.dead && rammed.hp === before.hp - 3 && g.score === before.score && g.kills === before.kills;
     // The gate towers take hits from base to top, and the medal floats out once the gate opens.
-    ui.start(8);
+    ui.start(11);
     g.paused = false;
     g.op.spawnGate();
     for (const e of g.entities) if (e.scrolling && e.type !== "pickup") e.position.z = -24;
@@ -155,8 +155,8 @@ export async function checkRiver(page, check) {
   for (const [name, value] of Object.entries(mechanics)) check(`river ${name}`, value);
   const runs = await page.evaluate(`(${skipper.toString()})()`);
   for (const run of runs) {
-    console.log(`  river 2.${run.index - 5}: ${run.status} ${run.reason || ""} ${run.distance}/${run.length} barges ${run.barges} shields ${run.shields} stars ${run.stars} blocked ${run.blocked} boss ${run.boss} in ${run.time}s`);
-    check(`river mission 2.${run.index - 5} completed by scripted skipper`, run.status === "success");
+    console.log(`  river 2.${run.index - 8}: ${run.status} ${run.reason || ""} ${run.distance}/${run.length} barges ${run.barges} shields ${run.shields} stars ${run.stars} blocked ${run.blocked} boss ${run.boss} in ${run.time}s`);
+    check(`river mission 2.${run.index - 8} completed by scripted skipper`, run.status === "success");
   }
   return runs;
 }

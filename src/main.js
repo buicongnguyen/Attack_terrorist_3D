@@ -8,6 +8,7 @@ import { UI, readSave } from "./ui.js";
 import { firstOpenMission } from "./data.js";
 import * as strikeData from "./strike-data.js";
 import * as rescueData from "./rescue-data.js";
+import * as harbourData from "./harbour-data.js";
 
 document.documentElement.dataset.boot = "started";
 
@@ -49,6 +50,7 @@ async function boot() {
     window.__TIDELOCK__ = { game, view, ui, clock };
     window.__TIDELOCK_STRIKE__ = strikeData;
     window.__TIDELOCK_RESCUE__ = rescueData;
+    window.__TIDELOCK_HARBOUR__ = harbourData;
   }
   document.documentElement.dataset.ready = "true";
 }

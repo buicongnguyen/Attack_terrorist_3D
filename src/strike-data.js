@@ -1,5 +1,6 @@
 // Chapter 1 "Breakwater": city layouts, enemy schedules, ordnance and ballistics.
 // Everything here is deterministic and free of Three.js so it can be unit tested.
+import { HARBOUR_MISSIONS, WATER_LEVEL, onLand, patternPoints } from "./harbour-data.js";
 
 export const CITY = Object.freeze({
   ground: 1,
@@ -12,24 +13,32 @@ export const CITY = Object.freeze({
   wall: 0.26,
 });
 
+// The flight sweeps back and forth over the district at a third of its old speed: it turns
+// round a short way past each edge (or whenever the player reverses) and never leaves the map.
 export const FLIGHT = Object.freeze({
   altitude: 24,
-  speed: 10,
-  minSpeed: 6.5,
-  maxSpeed: 14,
-  accel: 5,
-  lateral: 8,
-  entryX: -54,
-  exitX: 54,
-  turnTime: 2,
-  egress: 16,
+  speed: 3.4,
+  minSpeed: 2.2,
+  maxSpeed: 5,
+  throttle: 1.4,
+  accel: 2.4,
+  lateral: 6,
+  turnMargin: 8,
+  turnTime: 2.6,
+  turnReach: 4,
+  turnClimb: 3,
   laneMin: -24,
   laneMax: 24,
   tight: 3.4,
   wide: 7,
   trail: 3.4,
-  release: 0.45,
+  release: 0.6,
 });
+
+// Where the flight turns round for a layout: past the district edge by the turn margin.
+export function turnPoint(layout) {
+  return (layout.cols * CITY.pitch) / 2 + FLIGHT.turnMargin;
+}
 
 export const WALK = Object.freeze({ speed: 3, run: 4.4, stair: 1 });
 export const GRAVITY = -9.81;
@@ -45,6 +54,7 @@ export const BOMBS = Object.freeze({
     css: "#ff8a2b",
     radius: 2.9,
     breakRadius: 1.4,
+    shipDamage: 2,
     summary: "Punches through slabs and detonates on the floor you set.",
   },
   scatter: {
@@ -57,6 +67,7 @@ export const BOMBS = Object.freeze({
     bomblets: 8,
     burst: 7,
     spread: 3.8,
+    shipDamage: 1,
     summary: "Bursts into eight bomblets above open ground or rooftops.",
   },
   shockwave: {
@@ -66,6 +77,7 @@ export const BOMBS = Object.freeze({
     css: "#ff5a4a",
     radius: 5.2,
     breakRadius: 3.2,
+    shipDamage: 3,
     summary: "A huge blast on first contact. Tears open roofs and flak nests.",
   },
   lance: {
@@ -76,10 +88,74 @@ export const BOMBS = Object.freeze({
     radius: 2.7,
     breakRadius: 1.2,
     steer: 16,
+    shipDamage: 3,
     summary: "Guided bomb. Locks the target nearest the pipper, even a moving truck.",
   },
+  // Pattern bombs burst above the water into bomblets laid out in a shape the player can turn.
+  // Each bomblet is small: where the pattern lies matters, and the pipper counts what it will hit.
+  stick: {
+    name: "Stick",
+    model: "bomb-cluster",
+    color: 0xffd23f,
+    css: "#ffd23f",
+    radius: 1.3,
+    breakRadius: 0.8,
+    burst: 6,
+    pattern: "stick",
+    shipDamage: 1,
+    summary: "Five bombs in a line. Turn the line to lie along a column or a long hull.",
+  },
+  ell: {
+    name: "L-Pattern",
+    model: "bomb-cluster",
+    color: 0x2fdc7a,
+    css: "#2fdc7a",
+    radius: 1.3,
+    breakRadius: 0.8,
+    burst: 6,
+    pattern: "ell",
+    shipDamage: 1,
+    summary: "Seven bomblets in an L. Fits boats moored round the corner of a pier.",
+  },
+  yoke: {
+    name: "U-Pattern",
+    model: "bomb-cluster",
+    color: 0xff6fb5,
+    css: "#ff6fb5",
+    radius: 1.3,
+    breakRadius: 0.8,
+    burst: 6,
+    pattern: "yoke",
+    shipDamage: 1,
+    summary: "Bomblets in a U. Fits boats along three walls of a dock.",
+  },
+  ring: {
+    name: "O-Ring",
+    model: "bomb-cluster",
+    color: 0x5b8cff,
+    css: "#6f9bff",
+    radius: 1.3,
+    breakRadius: 0.8,
+    burst: 6,
+    pattern: "ring",
+    shipDamage: 1,
+    summary: "A ring of bomblets. Hits a circle of escorts and spares whatever sits inside it.",
+  },
+  box: {
+    name: "Box",
+    model: "bomb-cluster",
+    color: 0xb6f23c,
+    css: "#b6f23c",
+    radius: 1.3,
+    breakRadius: 0.8,
+    burst: 6,
+    pattern: "box",
+    shipDamage: 1,
+    summary: "A 3 x 2 block of bomblets. Covers boats rafted side by side.",
+  },
 });
-export const BOMB_ORDER = ["drill", "scatter", "shockwave", "lance"];
+export const BOMB_ORDER = ["drill", "scatter", "shockwave", "lance", "stick", "ell", "yoke", "ring", "box"];
+export const isPattern = (kind) => Boolean(BOMBS[kind]?.pattern);
 
 const P = (b, f, x = 0, z = 0) => ({ b, f, x, z });
 const S = (x, z) => ({ x, z });
@@ -178,9 +254,9 @@ export const STRIKE_MISSIONS = [
           P("T3", 3, 0.5, 1.5),
         ],
         rally: S(0, 6.75),
-        at: 20,
-        every: 54,
-        stay: 12,
+        at: 24,
+        every: 64,
+        stay: 20,
       },
       { kind: "post", at: P("T2", 6, -2.2, 1.8) },
       { kind: "post", at: P("T2", 6, 2.4, 1.2) },
@@ -214,9 +290,9 @@ export const STRIKE_MISSIONS = [
         place: "DYE WORKS ROOF",
         homes: [P("T2", 1, -1.4, 0.4), P("T2", 2, 1.2, 1), P("T2", 2, -0.8, -1.4)],
         rally: P("T2", 4, 0.2, 0.9),
-        at: 12,
-        every: 28,
-        stay: 12,
+        at: 16,
+        every: 38,
+        stay: 20,
       },
       {
         kind: "patrol",
@@ -234,7 +310,7 @@ export const STRIKE_MISSIONS = [
       { kind: "post", at: P("T5", 1, 0.2, 0.2) },
     ],
     aircraft: [
-      { callsign: "Kestrel One", crew: "iona", payload: { drill: 3 } },
+      { callsign: "Kestrel One", crew: "iona", payload: { drill: 4 } },
       { callsign: "Kestrel Two", crew: "piper", payload: { scatter: 2 } },
       { callsign: "Kestrel Three", crew: "bram", payload: { shockwave: 2 } },
     ],
@@ -270,9 +346,9 @@ export const STRIKE_MISSIONS = [
           P("T2", 2, -1.2, -1.2),
         ],
         rally: S(-6.75, -2),
-        at: 18,
-        every: 44,
-        stay: 12,
+        at: 22,
+        every: 54,
+        stay: 20,
       },
       {
         kind: "patrol",
@@ -332,9 +408,9 @@ export const STRIKE_MISSIONS = [
         ],
         officers: 4,
         rally: P("GT", 5, 0.4, 0.8),
-        at: 30,
-        every: 68,
-        stay: 12,
+        at: 36,
+        every: 78,
+        stay: 20,
       },
       { kind: "post", at: P("T2", 5, -1.6, 1.4) },
       { kind: "post", at: P("T2", 5, 1.8, 1.2) },
@@ -350,7 +426,7 @@ export const STRIKE_MISSIONS = [
       {
         callsign: "Kestrel One",
         crew: "iona",
-        payload: { drill: 4, lance: 1 },
+        payload: { drill: 5, lance: 1 },
       },
       { callsign: "Kestrel Two", crew: "piper", payload: { scatter: 3 } },
       { callsign: "Kestrel Three", crew: "bram", payload: { shockwave: 3 } },
@@ -358,6 +434,8 @@ export const STRIKE_MISSIONS = [
     par: 8,
     alert: 14,
   },
+  // 1.7–1.9: the harbour strikes on the Front's flotilla.
+  ...HARBOUR_MISSIONS,
 ];
 
 // ------------------------------------------------------------------ geometry
@@ -375,7 +453,8 @@ export function storyY(f) {
 
 export function resolveBuildings(layout) {
   return layout.buildings.map((b, index) => {
-    const c = lotCenter(layout, b.col, b.row);
+    // Harbour warehouses sit on the quays at explicit positions rather than on the lot grid.
+    const c = b.x !== undefined ? { x: b.x, z: b.z } : lotCenter(layout, b.col, b.row);
     return {
       ...b,
       index,
@@ -812,12 +891,27 @@ export function stepBomb(state, dt) {
   state.z += state.vz * dt;
 }
 
-// Continuously computed impact point. Drill forecasts report the floor that will detonate.
-export function forecastImpact(blocks, buildings, release, kind, floor = 1) {
+// Ground height at a point: the city plate, or sea level off the quays of a harbour layout.
+export function groundAt(land, x, z) {
+  if (!land) return CITY.ground;
+  return onLand(land, x, z) ? CITY.ground : WATER_LEVEL;
+}
+
+// Seconds a bomblet thrown from a burst at height h (vertical speed vy) takes to land.
+export function bombletFall(vy, h) {
+  return Math.max(0.25, (vy + Math.sqrt(vy * vy + 2 * -GRAVITY * Math.max(0.3, h))) / -GRAVITY);
+}
+
+// Continuously computed impact point. Drill forecasts report the floor that will detonate;
+// every forecast reports `time`, the seconds from release until it lands.
+// `opts.land` marks a harbour's quays (everything else is water); `opts.angle` turns a pattern.
+export function forecastImpact(blocks, buildings, release, kind, floor = 1, opts = {}) {
+  const land = opts.land || null;
   const state = { ...release };
   const points = [{ x: state.x, y: state.y, z: state.z }];
   let crossesShelter = false;
   const crossed = new Set();
+  const def = BOMBS[kind];
   // Same step as the live simulation, so the pipper is exact even at building edges.
   const dt = STEP;
   for (let step = 0; step < 1200; step++) {
@@ -825,20 +919,24 @@ export function forecastImpact(blocks, buildings, release, kind, floor = 1) {
     stepBomb(state, dt);
     const b = { x: state.x, y: state.y, z: state.z };
     if (step % 8 === 0) points.push(b);
-    if (kind === "scatter") {
-      const below = surfaceBelow(buildings, blocks, b.x, b.z);
+    if (kind === "scatter" || def.pattern) {
+      const below = surfaceBelow(buildings, blocks, b.x, b.z, land);
       const hit = blockHits(blocks, buildings, a, b)[0];
-      if (hit || b.y <= below + BOMBS.scatter.burst) {
+      if (hit || b.y <= below + def.burst) {
         const burst = hit ? lerp3(a, b, hit.t) : b;
         // Measure the ground under the burst exactly as the live canister does.
-        const centre = scatterCentre(burst, state, burstGround(buildings, blocks, burst, state));
+        const ground = burstGround(buildings, blocks, burst, state, land);
+        const centre = scatterCentre(burst, state, ground);
         points.push(burst);
+        const surface = surfaceBelow(buildings, blocks, centre.x, centre.z, land);
         return {
           points,
-          impact: { x: centre.x, y: surfaceBelow(buildings, blocks, centre.x, centre.z), z: centre.z },
+          impact: { x: centre.x, y: surface, z: centre.z },
           burst,
           building: buildingAt(buildings, centre.x, centre.z),
           floor: null,
+          angle: opts.angle || 0,
+          time: (step + 1) * dt + bombletFall(state.vy * 0.8, burst.y - surface),
         };
       }
       continue;
@@ -867,6 +965,7 @@ export function forecastImpact(blocks, buildings, release, kind, floor = 1) {
             building,
             floor: Math.max(0, Math.min(target, building.floors, reached)),
             crossesShelter,
+            time: (step + 1) * dt,
           };
         }
         continue;
@@ -881,29 +980,31 @@ export function forecastImpact(blocks, buildings, release, kind, floor = 1) {
           impact: p,
           building: buildings[hit.block.b],
           floor: hit.block.kind === "roof" ? buildings[hit.block.b].floors : hit.block.f,
+          time: (step + 1) * dt,
         };
       }
     }
-    if (b.y <= CITY.ground) {
-      const t = (a.y - CITY.ground) / Math.max(1e-6, a.y - b.y);
+    const ground = groundAt(land, b.x, b.z);
+    if (b.y <= ground) {
+      const t = (a.y - ground) / Math.max(1e-6, a.y - b.y);
       const p = lerp3(a, b, t);
       points.push(p);
-      return { points, impact: p, building: null, floor: 0, crossesShelter };
+      return { points, impact: p, building: null, floor: 0, crossesShelter, time: (step + t) * dt };
     }
   }
-  return { points, impact: points[points.length - 1], building: null, floor: 0, crossesShelter };
+  return { points, impact: points[points.length - 1], building: null, floor: 0, crossesShelter, time: 1200 * dt };
 }
 
-export function burstGround(buildings, blocks, point, velocity) {
-  const below = surfaceBelow(buildings, blocks, point.x, point.z);
+export function burstGround(buildings, blocks, point, velocity, land = null) {
+  const below = surfaceBelow(buildings, blocks, point.x, point.z, land);
   if (point.y >= below - 0.05) return below;
   const len = Math.hypot(velocity.vx, velocity.vz) || 1;
-  return surfaceBelow(buildings, blocks, point.x - (velocity.vx / len) * 0.6, point.z - (velocity.vz / len) * 0.6);
+  return surfaceBelow(buildings, blocks, point.x - (velocity.vx / len) * 0.6, point.z - (velocity.vz / len) * 0.6, land);
 }
 
-export function surfaceBelow(buildings, blocks, x, z) {
+export function surfaceBelow(buildings, blocks, x, z, land = null) {
   const building = buildingAt(buildings, x, z);
-  if (!building) return CITY.ground;
+  if (!building) return groundAt(land, x, z);
   let top = storyY(0);
   for (const block of blocks) {
     if (
@@ -946,7 +1047,7 @@ const aabbDistance = (min, max, p) =>
 // One rule for both the pipper warning and the abort: a detonation breaks a shelter
 // block, or lands within 45% of its blast radius of the shelter.
 export function shelterStruck(blocks, buildings, point, kind, margin = 0) {
-  const def = kind === "bomblet" ? BOMBS.scatter : BOMBS[kind];
+  const def = kind === "bomblet" ? BOMBS.scatter : BOMBS[kind] || BOMBS.scatter;
   for (const b of buildings) {
     if (b.kind !== "shelter") continue;
     if (aabbDistance(b.min, b.max, point) < def.radius * 0.45 + margin) return true;
@@ -963,6 +1064,14 @@ export function shelterStruck(blocks, buildings, point, kind, margin = 0) {
 export function forecastPoints(forecast) {
   if (forecast.kind === "scatter")
     return scatterPattern(forecast.impact).map((p) => ({ x: p.x, y: forecast.impact.y + 0.2, z: p.z, kind: "bomblet" }));
+  const pattern = BOMBS[forecast.kind]?.pattern;
+  if (pattern)
+    return patternPoints(pattern, forecast.impact, forecast.angle || 0).map((p) => ({
+      x: p.x,
+      y: forecast.impact.y + 0.2,
+      z: p.z,
+      kind: forecast.kind,
+    }));
   const p = forecast.detonation || forecast.impact;
   return [{ x: p.x, y: p.y, z: p.z, kind: forecast.kind }];
 }

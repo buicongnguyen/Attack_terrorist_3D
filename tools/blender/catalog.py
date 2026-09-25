@@ -28,6 +28,7 @@ class Spec:
 
 P, F, H, M, W, U = ('assets_people', 'assets_friendly', 'assets_hostile', 'assets_munitions', 'assets_world',
                     'assets_pickups')
+B = 'assets_harbour'
 
 SPECS = [
     # characters
@@ -94,6 +95,17 @@ SPECS = [
     Spec('pickup-star', U + ':pickup_star', 'prop', {}, (), ('river',), 'Twin-gun pickup'),
     Spec('pickup-gun', U + ':pickup_gun', 'prop', {}, (), ('river',), 'Missile pickup'),
     Spec('pickup-medal', U + ':pickup_medal', 'prop', {}, (), ('river',), 'Medal pickup'),
+    # harbour (city chapter): Ashen Front warships, civilian ferry, dockside props
+    Spec('patrol-boat', B + ':patrol_boat', 'vehicle', {'Turret': None}, (), ('city',), 'Ashen patrol boat'),
+    Spec('missile-boat', B + ':missile_boat', 'vehicle', {}, (), ('city',), 'Ashen missile boat'),
+    Spec('frigate', B + ':frigate', 'vehicle', {'Turret': None, 'MuzzleL': 'Turret', 'MuzzleR': 'Turret'}, (),
+         ('city',), 'Ashen frigate'),
+    Spec('destroyer', B + ':destroyer', 'vehicle', {'TurretF': None, 'TurretA': None}, (), ('city',),
+         'Flagship Cinder'),
+    Spec('ferry', B + ':ferry', 'vehicle', {}, (), ('city',), 'Harbour ferry'),
+    Spec('harbour-crane', B + ':harbour_crane', 'prop', {}, (), ('city',), 'Harbour crane'),
+    Spec('buoy', B + ':buoy', 'prop', {}, (), ('city',), 'Channel buoy'),
+    Spec('container-stack', B + ':container_stack', 'prop', {}, (), ('city',), 'Container stack'),
 ]
 
 BY_NAME = {s.name: s for s in SPECS}

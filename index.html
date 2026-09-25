@@ -95,20 +95,23 @@
         <div class="flight-controls">
           <div class="flight-row">
             <button id="formation" class="chip-button" title="Formation spacing (Q)">
-              <i data-lucide="move-horizontal"></i><span id="formation-label">TIGHT</span>
+              <i data-lucide="move-horizontal"></i><span id="formation-label">TIGHT</span><span class="sr-only"> formation</span>
             </button>
             <div id="floor-control" class="floor-control" role="group" aria-label="Drill detonation floor">
-              <button id="floor-down" class="icon-button small" aria-label="Lower drill floor" title="Lower floor (C)">
+              <button id="floor-down" class="icon-button small" aria-label="Lower the Drill floor or turn the pattern left" title="Drill floor down or turn pattern (C)">
                 <i data-lucide="chevrons-down"></i>
               </button>
-              <span><small>DRILL</small><strong id="floor-value">F1</strong></span>
-              <button id="floor-up" class="icon-button small" aria-label="Raise drill floor" title="Raise floor (E)">
+              <span><small id="floor-kind">DRILL</small><strong id="floor-value">F1</strong></span>
+              <button id="floor-up" class="icon-button small" aria-label="Raise the Drill floor or turn the pattern right" title="Drill floor up or turn pattern (E)">
                 <i data-lucide="chevrons-up"></i>
               </button>
             </div>
             <div class="speed-readout"><small>SPEED</small><strong id="speed-value">100%</strong></div>
           </div>
           <div class="flight-row">
+            <button id="reverse" class="chip-button" title="Turn the flight round (F)" aria-label="Reverse the flight">
+              <i data-lucide="arrow-left-right"></i><span>Reverse</span>
+            </button>
             <button id="salvo" class="secondary-button" title="Every aircraft releases at once (X)">
               <i data-lucide="layers"></i><span>Salvo</span><kbd>X</kbd>
             </button>
@@ -242,11 +245,13 @@
         <div class="control-reference touch-only">
           <span>Steer formation / vehicle</span><b class="pad">LEFT STICK</b><span>Aim and fire</span><b class="pad">RIGHT STICK</b>
           <span>Payload / Drill floor</span><b class="pad">CARDS / LADDER</b><span>Winch / land</span><b class="pad">HOLD WINCH</b>
+          <span>Turn the flight round</span><b class="pad">REVERSE</b><span>Turn a pattern bomb</span><b class="pad">ARROWS</b>
           <span>Pause</span><b class="pad">PAUSE BUTTON</b>
         </div>
         <div class="control-reference keys-only">
           <span>Steer formation / vehicle</span><kbd>W A S D</kbd><span>Throttle (flight)</span><kbd>A / D</kbd>
-          <span>Payload select</span><kbd>1 2 3 4</kbd><span>Release / Salvo</span><kbd>Space / X</kbd>
+          <span>Payload select</span><kbd>1 – 9</kbd><span>Release / Salvo</span><kbd>Space or click / X</kbd>
+          <span>Reverse the flight</span><kbd>F</kbd><span>Turn a pattern bomb</span><kbd>E / C / wheel</kbd>
           <span>Drill floor</span><kbd>E / C</kbd><span>Formation spacing</span><kbd>Q</kbd>
           <span>Fire (boat, helicopter)</span><kbd>Space / Pointer</kbd><span>Rockets / Guided</span><kbd>2 / 3</kbd>
           <span>Winch / land</span><kbd>Hold E</kbd><span>Flares</span><kbd>F</kbd>

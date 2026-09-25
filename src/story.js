@@ -33,6 +33,12 @@ export const CAST = Object.freeze({
     initials: "AO",
     color: "#f7f1e1",
   },
+  ines: {
+    name: "Ines Duarte",
+    role: "Harbourmaster",
+    initials: "ID",
+    color: "#6ec3f0",
+  },
   kofi: {
     name: "Cpl. Kofi Mensah",
     role: "Echo radio",
@@ -62,11 +68,11 @@ export const PROLOGUE = {
 export const CHAPTER_STORY = [
   {
     title: "Breakwater",
-    subtitle: "Glass District air strikes",
+    subtitle: "Glass District and harbour strikes",
     place: "GLASS DISTRICT / SOLACE HARBOR",
     clock: "T-36H / 06:40",
     intro:
-      "The Front's jammers blind the whole harbour. Echo recon is hidden inside the district and can read their patrol schedules. Lead Kestrel Flight over the towers and strike when they gather.",
+      "The Front's jammers blind the whole harbour and its flotilla holds the water. Echo recon is hidden inside the district and can read their patrol schedules. Lead Kestrel Flight over the towers, then the quays, and strike when they gather.",
   },
   {
     title: "Relief Run",
@@ -74,7 +80,7 @@ export const CHAPTER_STORY = [
     place: "VERDE RIVER / SOUTH DELTA",
     clock: "T-20H / 14:10",
     intro:
-      "With the jammers down, Dr. Okafor's engineers can sail for Highwater Station. Their barges carry the pumps and the crew who can close the Tidelock. The Front will try to sink them before they reach the lock.",
+      "With the jammers down and the flotilla sunk, Dr. Okafor's engineers can sail for Highwater Station. Their barges carry the pumps and the crew who can close the Tidelock. The Front will try to sink them before they reach the lock.",
   },
   {
     title: "Last Light",
@@ -165,7 +171,7 @@ export const MISSION_STORY = [
       ),
       line(
         "iona",
-        "The intel strip shows each gathering's countdown. Use the throttle to be over the square when they arrive.",
+        "The intel strip shows each gathering's countdown. Use your speed, or Reverse, to be over the square when they arrive.",
       ),
     ],
     radio: {
@@ -189,7 +195,7 @@ export const MISSION_STORY = [
     brief: [
       line(
         "iona",
-        "Two flak nests cover Canal Row. A red line means a gun has locked onto one of you; change lane or throttle before it fires.",
+        "Two flak nests cover Canal Row. A red line means a gun has locked onto one of you; when the HUD says BREAK, change lane.",
       ),
       line(
         "bram",
@@ -278,9 +284,114 @@ export const MISSION_STORY = [
       ),
     },
     success:
-      "The Front's command in the district is gone. Echo team recovered the Tidelock's master override key, then fled north under fire. Marrow's fighters now hold Highwater Station.",
+      "The Front's command in the district is gone. Echo team recovered the Tidelock's master override key, then fled north under fire. Marrow's fighters now hold Highwater Station, and his flotilla still holds the harbour.",
     failure:
       "The lieutenants are still meeting. Clear the flak, then time a Drill for the sixth floor on the countdown.",
+  },
+  // ---------------------------------------------------------------- Chapter 1: the harbour
+  {
+    place: "SOLACE HARBOR / MAIN CHANNEL",
+    clock: "10:30",
+    goals: [
+      "Sink the patrol column waiting in the channel",
+      "Sink the two missile boats at the north quay",
+    ],
+    brief: [
+      line(
+        "iona",
+        "The district is ours, but the Front's flotilla still holds Solace Harbor. Okafor's barges can't reach the river while those boats guard the mouth.",
+      ),
+      line(
+        "ines",
+        "Harbourmaster Duarte. Their patrol column waits at the channel buoys, nose to tail on the diagonal. Two missile boats lie against the north quay.",
+      ),
+      line(
+        "piper",
+        "Stick bombs, Kestrel: five in a line. Turn the line to lie along the column and one pass sinks the lot.",
+      ),
+    ],
+    radio: {
+      start: line("iona", "We fly slow over the water. Turn back whenever you want another look."),
+      multi: line("piper", "The whole column in one line!"),
+      success: line("ines", "The channel is clear. Every one of them is on the bottom."),
+    },
+    success:
+      "The patrol column never left the channel. Duarte's tugs can move again, but the dry dock is still full of Front boats.",
+    failure:
+      "Boats got away. Turn the Stick until it lies along the column, and watch the hit count before you release.",
+  },
+  {
+    place: "SOLACE HARBOR / DRY DOCK",
+    clock: "11:20",
+    goals: [
+      "Sink the boats on the L pier and in the dry dock",
+      "Sink the flak frigate",
+      "Never hit the Island Belle ferry",
+    ],
+    brief: [
+      line(
+        "ines",
+        "They've moored boats round the corner of the fitting-out pier, and against three walls of the dry dock.",
+      ),
+      line(
+        "iona",
+        "Kestrel One carries L-patterns for the pier. Piper has U-patterns: turn the U so its open end faces out of the dock.",
+      ),
+      line(
+        "ines",
+        "The Island Belle is ferrying civilians across the harbour. Keep every bomb off her.",
+      ),
+    ],
+    radio: {
+      start: line("ines", "Island Belle is crossing. She's the one with the blue ring."),
+      flak: line("piper", "Flak from the frigate! Break when it says break."),
+      ferry: line("iona", "Civilians in your pattern. Hold your release."),
+      multi: line("piper", "That shape fit like a glove."),
+      success: line("ines", "Pier and dock are clear, and the Island Belle made it across."),
+    },
+    success:
+      "The dry dock is a wreck and the frigate is on the bottom. Then the Front's last ships close round the Island Belle. They've taken her.",
+    failure:
+      "The strike was called off. Fit the L to the pier corner and the U to the dock, and wait until the ferry is clear.",
+  },
+  {
+    place: "SOLACE HARBOR / INNER BASIN",
+    clock: "12:15",
+    goals: [
+      "Break the escort ring without touching the Island Belle",
+      "Sink the missile boats rafted at the fuel pier",
+      "Sink the destroyer Cinder",
+    ],
+    brief: [
+      line(
+        "ines",
+        "They've seized the Island Belle with forty passengers aboard. Five escorts circle her in the middle of the basin.",
+      ),
+      line(
+        "iona",
+        "The O-Ring bursts in a circle. Centre it on the ferry: the escorts sit on the ring and she stays safe in the middle.",
+      ),
+      line(
+        "marrow",
+        "Every ship out there is mine, Kestrel. Touch that ferry and the whole city will know who drowned it.",
+      ),
+      line(
+        "bram",
+        "Box bombs for the boats rafted at the fuel pier. I'm saving a Stick for Cinder's hull.",
+      ),
+    ],
+    radio: {
+      start: line("ines", "Escorts circling the Belle. Your pattern counts what it will hit."),
+      freed: line("ines", "The escorts are gone! Island Belle is steaming clear to the west roads."),
+      flak: line("bram", "Flak from Cinder and the frigate. Watch the red lines."),
+      ferry: line("ines", "The ferry is inside your pattern. Don't release!"),
+      multi: line("bram", "Scratch one ring."),
+      success: line("iona", "Cinder is down and the harbour mouth is open. Okafor, you're clear to sail."),
+    },
+    success:
+      "The flotilla is gone and the Island Belle rides safe in the west roads. The mouth of the Verde River is open for Okafor's convoy.",
+    failure:
+      "Regroup. Centre the O-Ring on the ferry, box the rafted boats, and lay a Stick along Cinder's hull.",
   },
   // ---------------------------------------------------------------- Chapter 2
   {
@@ -475,12 +586,15 @@ export const MISSION_STORY = [
 
 // Chapter 1 fallbacks for missions that don't script their own line.
 export const STRIKE_RADIO = {
-  flak: line("piper", "Flak lock! Change lane or throttle, now!"),
+  flak: line("piper", "Flak lock! Change lane when it says break!"),
   aa: line("bram", "Flak nest down."),
   shelter: line("iona", "Pipper is over the shelter. Hold your release."),
   abort: line("iona", "Abort, abort! That was the shelter. Pull out, Kestrel."),
   alert: line("echo", "They're scattering for cover. I'm tagging where they hide."),
   multi: line("piper", "Look at that. One pass, one crowd."),
+  ferry: line("iona", "A civilian boat is in your pattern. Hold your release."),
+  ferryHit: line("iona", "The ferry is hit! Abort the strike, Kestrel."),
+  freed: line("ines", "The ferry is free!"),
 };
 
 export const FINALE = {

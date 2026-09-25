@@ -4,6 +4,7 @@ import { mkdir } from "node:fs/promises";
 import { checkRescue } from "./rescue-browser.mjs";
 import { checkStrike } from "./strike-browser.mjs";
 import { checkRiver } from "./river-browser.mjs";
+import { checkHarbour } from "./harbour-browser.mjs";
 
 const url = process.env.GAME_URL || "http://127.0.0.1:5183/";
 const executablePath =
@@ -49,7 +50,7 @@ try {
   // ---------------------------------------------------------------- story flow
   await page.goto(`${url}?qa=1&prologue=1&brief=1`);
   await ready(page);
-  check("all 41 Blender models loaded", await page.evaluate(() => __TIDELOCK__.view.assets.size === 41 && __TIDELOCK__.view.missing.size === 0));
+  check("all 49 Blender models loaded", await page.evaluate(() => __TIDELOCK__.view.assets.size === 49 && __TIDELOCK__.view.missing.size === 0));
   check("prologue opens the campaign", await page.evaluate(() => document.getElementById("prologue-dialog").open && __TIDELOCK__.game.paused));
   await page.getByRole("button", { name: /Begin Operation Breakwater/ }).click();
   check(
@@ -81,6 +82,13 @@ try {
   await page.waitForFunction(() => __TIDELOCK__.game.op.flight.phase === "pass" && __TIDELOCK__.game.op.aircraft[0].forecast);
   await page.keyboard.press("Space");
   check("Space releases the selected payload", await page.evaluate(() => __TIDELOCK__.game.op.used === 1));
+  // E / C drive the dial: the Drill floor on a Drill mission, nothing where there is no Drill.
+  await page.keyboard.press("e");
+  check("E does nothing without a Drill or pattern", await page.evaluate(() => __TIDELOCK__.game.op.floor === 1));
+  await page.evaluate(() => {
+    __TIDELOCK__.ui.start(1);
+    __TIDELOCK__.game.paused = false;
+  });
   await page.keyboard.press("e");
   await page.keyboard.press("e");
   check("E raises the drill floor", await page.evaluate(() => __TIDELOCK__.game.op.floor === 3));
@@ -95,6 +103,16 @@ try {
     return held === -1 && g.input.z === 0;
   });
   check("keys follow the physical layout (AZERTY Z steers like W)", azerty);
+  // F turns the flight round; a mouse click on the map releases like Space.
+  await page.evaluate(() => {
+    __TIDELOCK__.ui.start(0);
+    __TIDELOCK__.game.paused = false;
+  });
+  await page.keyboard.press("f");
+  check("F reverses the flight", await page.evaluate(() => __TIDELOCK__.game.op.flight.phase === "turn" && __TIDELOCK__.game.op.flight.dir === -1));
+  await page.waitForFunction(() => __TIDELOCK__.game.op.flight.phase === "pass", null, { timeout: 10000 });
+  await page.mouse.click(720, 450);
+  check("a mouse click on the map releases a bomb", await page.evaluate(() => __TIDELOCK__.game.op.used === 1));
 
   // ---------------------------------------------------------------- results and debrief
   const debrief = await page.evaluate(() => {
@@ -141,8 +159,8 @@ try {
     __TIDELOCK__.ui.menu();
   });
   check(
-    "mission control lists all twelve missions by chapter",
-    await page.evaluate(() => document.querySelectorAll("#mission-list .mission-group button").length === 12),
+    "mission control lists all fifteen missions by chapter",
+    await page.evaluate(() => document.querySelectorAll("#mission-list .mission-group button").length === 15),
   );
   const pause = await page.evaluate(() => {
     const g = __TIDELOCK__.game;
@@ -185,7 +203,7 @@ try {
     const { ui } = __TIDELOCK__;
     ui.start(5);
     document.getElementById("flak-warning").hidden = false;
-    ui.start(6);
+    ui.start(9);
     return document.getElementById("flak-warning").hidden;
   });
   check("flak warning is cleared when a new mission starts", flak);
@@ -201,8 +219,9 @@ try {
 
   // ---------------------------------------------------------------- chapters
   await checkStrike(page, check);
+  await checkHarbour(page, check);
   await checkRiver(page, check);
-  for (const index of [0, 5, 6, 8, 9]) {
+  for (const index of [0, 5, 7, 8, 9, 11, 12]) {
     await page.evaluate((i) => {
       const { ui, game: g } = __TIDELOCK__;
       ui.start(i);
@@ -226,7 +245,7 @@ try {
     watch(mobile);
     await mobile.goto(`${url}?qa=1`);
     await ready(mobile);
-    for (const index of [0, 5, 6, 9]) {
+    for (const index of [0, 5, 8, 9, 12]) {
       await mobile.evaluate((i) => {
         const { ui, game: g, view } = __TIDELOCK__;
         ui.start(i);
@@ -244,7 +263,7 @@ try {
         const inside = rects.every((r) => r.width > 0 && r.left >= 0 && r.right <= innerWidth + 0.5 && r.top >= 0 && r.bottom <= innerHeight + 0.5);
         const apart = rects.every((a, i) => rects.every((b, j) => i === j || !(a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top)));
         return { inside, apart, scroll: document.documentElement.scrollWidth <= innerWidth };
-      }, index < 6 ? 0 : index < 9 ? 1 : 2);
+      }, index < 9 ? 0 : index < 12 ? 1 : 2);
       for (const [name, value] of Object.entries(layout)) check(`mobile ${size.width}x${size.height} mission ${index} ${name}`, value);
       await mobile.screenshot({ path: `test-results/mobile-${size.width}x${size.height}-${index}.png` });
     }

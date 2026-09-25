@@ -2,7 +2,7 @@ import * as THREE from "three";
 import { RIVER, RIVER_MISSIONS, SKIFF, DECK_GUN_RANGE, skiffPath, riverStars } from "./river-data.js";
 import { MISSION_STORY } from "./story.js";
 import { PICKUPS } from "./pickups.js";
-import { COLORS } from "./data.js";
+import { COLORS, chapterStart } from "./data.js";
 import { clamp, segmentSphere } from "./physics.js";
 
 const V = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
@@ -19,7 +19,7 @@ export class RiverOperation {
     const g = (this.game = game),
       view = g.view;
     this.index = g.index;
-    this.data = RIVER_MISSIONS[g.index - 6];
+    this.data = RIVER_MISSIONS[g.index - chapterStart(1)];
     this.story = MISSION_STORY[g.index];
     this.vehicle = { accel: 34, drag: 3.7, max: 8, bounds: { left: -RIVER.laneX, right: RIVER.laneX, far: RIVER.far, near: RIVER.near }, height: 0.08, bob: 2.5, bank: 0.012, pitch: 0.008 };
     g.player = view.model("boat", V(0, 0.08, 4));

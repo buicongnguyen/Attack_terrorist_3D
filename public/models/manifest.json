@@ -5,7 +5,7 @@
   "units": "metres",
   "up": "+Y in glTF (Blender +Z)",
   "forward": "-Z in glTF (Blender +Y)",
-  "totalBytes": 3279820,
+  "totalBytes": 3794580,
   "assets": [
     {
       "name": "enemy",
@@ -1097,6 +1097,215 @@
           0.8,
           1.035,
           0.73
+        ]
+      }
+    },
+    {
+      "name": "patrol-boat",
+      "file": "patrol-boat.glb",
+      "kind": "vehicle",
+      "chapters": [
+        "city"
+      ],
+      "meshes": 12,
+      "triangles": 1316,
+      "bytes": 50028,
+      "nodes": [
+        "Turret"
+      ],
+      "materials": [],
+      "boundsGltf": {
+        "min": [
+          -0.715,
+          -0.27,
+          -2.2
+        ],
+        "max": [
+          0.715,
+          1.826,
+          2.27
+        ]
+      }
+    },
+    {
+      "name": "missile-boat",
+      "file": "missile-boat.glb",
+      "kind": "vehicle",
+      "chapters": [
+        "city"
+      ],
+      "meshes": 8,
+      "triangles": 2022,
+      "bytes": 68144,
+      "nodes": [],
+      "materials": [],
+      "boundsGltf": {
+        "min": [
+          -0.865,
+          -0.3,
+          -2.9
+        ],
+        "max": [
+          0.865,
+          1.844,
+          2.97
+        ]
+      }
+    },
+    {
+      "name": "frigate",
+      "file": "frigate.glb",
+      "kind": "vehicle",
+      "chapters": [
+        "city"
+      ],
+      "meshes": 14,
+      "triangles": 2422,
+      "bytes": 83968,
+      "nodes": [
+        "Turret",
+        "MuzzleL",
+        "MuzzleR"
+      ],
+      "materials": [],
+      "boundsGltf": {
+        "min": [
+          -1.116,
+          -0.35,
+          -4.2
+        ],
+        "max": [
+          1.116,
+          3.759,
+          4.37
+        ]
+      }
+    },
+    {
+      "name": "destroyer",
+      "file": "destroyer.glb",
+      "kind": "vehicle",
+      "chapters": [
+        "city"
+      ],
+      "meshes": 19,
+      "triangles": 3408,
+      "bytes": 112548,
+      "nodes": [
+        "TurretF",
+        "TurretA"
+      ],
+      "materials": [],
+      "boundsGltf": {
+        "min": [
+          -1.311,
+          -0.4,
+          -6.0
+        ],
+        "max": [
+          1.311,
+          4.91,
+          6.13
+        ]
+      }
+    },
+    {
+      "name": "ferry",
+      "file": "ferry.glb",
+      "kind": "vehicle",
+      "chapters": [
+        "city"
+      ],
+      "meshes": 10,
+      "triangles": 2692,
+      "bytes": 88260,
+      "nodes": [],
+      "materials": [],
+      "boundsGltf": {
+        "min": [
+          -1.368,
+          -0.3,
+          -3.675
+        ],
+        "max": [
+          1.368,
+          2.993,
+          3.85
+        ]
+      }
+    },
+    {
+      "name": "harbour-crane",
+      "file": "harbour-crane.glb",
+      "kind": "prop",
+      "chapters": [
+        "city"
+      ],
+      "meshes": 5,
+      "triangles": 1346,
+      "bytes": 45056,
+      "nodes": [],
+      "materials": [],
+      "boundsGltf": {
+        "min": [
+          -1.58,
+          0.0,
+          -5.697
+        ],
+        "max": [
+          1.58,
+          7.24,
+          1.794
+        ]
+      }
+    },
+    {
+      "name": "buoy",
+      "file": "buoy.glb",
+      "kind": "prop",
+      "chapters": [
+        "city"
+      ],
+      "meshes": 5,
+      "triangles": 772,
+      "bytes": 29796,
+      "nodes": [],
+      "materials": [],
+      "boundsGltf": {
+        "min": [
+          -0.475,
+          -0.3,
+          -0.475
+        ],
+        "max": [
+          0.475,
+          1.075,
+          0.475
+        ]
+      }
+    },
+    {
+      "name": "container-stack",
+      "file": "container-stack.glb",
+      "kind": "prop",
+      "chapters": [
+        "city"
+      ],
+      "meshes": 6,
+      "triangles": 848,
+      "bytes": 36960,
+      "nodes": [],
+      "materials": [],
+      "boundsGltf": {
+        "min": [
+          -1.087,
+          0.0,
+          -2.535
+        ],
+        "max": [
+          1.088,
+          2.04,
+          2.511
         ]
       }
     }

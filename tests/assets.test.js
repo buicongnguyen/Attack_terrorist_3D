@@ -19,6 +19,9 @@ const NODES = {
   skiff: ["Turret"],
   "gate-tower": ["Turret", "Muzzle"],
   "lock-gate": ["GateL", "GateR", "Generator"],
+  "patrol-boat": ["Turret"],
+  frigate: ["Turret", "MuzzleL", "MuzzleR"],
+  destroyer: ["TurretF", "TurretA"],
 };
 const MATERIALS = {
   enemy: ["Hostile accent"],

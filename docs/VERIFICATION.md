@@ -1,5 +1,51 @@
 # Release Verification
 
+## Tidelock 2.2 (slow flight and harbour strikes)
+
+The slower back-and-forth flight and the three harbour missions ([REDESIGN.md §10](REDESIGN.md#10-tidelock-22-the-slow-flight-and-the-harbour-strikes)) were verified on 2026-09-25 against the production build (`vite preview`, GPU rendering).
+
+- **54 Node tests** (`npm test`). New since 2.1:
+  - pattern shapes and their rotation;
+  - hull segments and blast reach;
+  - every harbour group has a pattern and angle that sinks it in one release, sidesteps included, without touching a civilian;
+  - the angle lessons fail when the pattern is turned a quarter the wrong way;
+  - the L's sweet spot on the L pier is at least four times any other shape's;
+  - the O-Ring spares the ferry when centred and hits her two metres off;
+  - no hull overlaps another or runs aground over four minutes of every timetable, including its turns and the freed ferry's run;
+  - stations count down, and permanent stations are always on;
+  - the gathering windows outlast the worst wait with Reverse;
+  - saves from before the harbour keep their records on the right missions.
+- **215 browser checks**, zero runtime or resource errors. New since 2.1:
+  - the flight: Reverse starts a wingover and flies back along the same lane; the edges turn the flight round by themselves; speed is screen-relative; F reverses; a mouse click on the map releases;
+  - pattern bombs:
+    - the harbour opens on its pattern, and the pattern turns by 45°;
+    - a Stick bursts into five bomblets, an aligned Stick sinks the column, and sunk ships count;
+    - **the hit counter matches what actually sinks**: a Stick on the column and an O-Ring on the ferry are released live, sidesteps included;
+  - controls:
+    - payload keys follow the chips on screen;
+    - the wheel turns the dial one step per notch;
+    - Reverse is refused where the edge would only turn the flight round again;
+    - the aircraft carry their speed on the tick a turn ends;
+    - E / C do nothing where there is nothing to set;
+  - ships dodge falling bombs, but moored boats can't; ship flak dies with its ship;
+  - civilians: hitting the launch aborts the strike; the forecast sees the ferry in a pattern; breaking the escort ring frees the ferry;
+  - all 49 models load; river and rescue checks run at their new mission numbers.
+- **Scripted pilots complete all fifteen missions** with ordinary controls:
+
+  | Missions | Result |
+  | --- | --- |
+  | Strike 1.1–1.6 | bombs used against par: 1/1, 2/2, 3/3, 7/5, 5/6, 10/8 |
+  | Harbour 1.7–1.9 | 3/2, 4/4, 4/6, using Reverse 2, 1 and 2 times |
+  | River 2.1–2.3 | 3, 3 and 2 stars |
+  | Rescue 3.1–3.3 | full sorties home |
+- **Layout audit** at 320×568, 320×740, 390×844, 844×390, 568×320, 768×1024 and 1440×900, across all nine Chapter 1 missions, with coach and flak callouts showing:
+  - no HUD overlaps, no control off-screen, and every flight-panel button inside the panel;
+  - on the 320×568 phone the coach line steps aside while a radio line is showing.
+- **Draw calls** stay under 500 in every tested scene: the harbour missions 1.8 and 1.9 draw 250 and 348, the Glass Tower 499.
+- **Independent review.** A separate reviewer reproduced 12 defects in the harbour update, among them a hit counter that ignored ship sidesteps and hull headings that disagreed between forecast and live. All are fixed ([REDESIGN.md §10](REDESIGN.md#independent-review-of-the-harbour-update)).
+
+Limits: the scripted pilots are greedy and prove only that each mission can be finished; on 1.7 and in the city they still use more bombs than par. Ship evasion is deliberately gentle and has not been tuned with real players.
+
 ## Tidelock 2.1 (second evaluation and review pass)
 
 The fixes in [REDESIGN.md §9](REDESIGN.md#9-second-review-pass-tidelock-21) were verified on 2026-09-25 against the production build (`vite preview`, GPU rendering).

@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { FixedClock, movement, segmentSphere, createPhysics, addBox } from "../src/physics.js";
-import { STEP, saveResult, damageShields, MISSIONS, firstOpenMission } from "../src/data.js";
+import { STEP, saveResult, damageShields, MISSIONS, firstOpenMission, migrateSave } from "../src/data.js";
 
 test("120 Hz simulation is independent of render frequency", () => {
   const run = (rate) => {
@@ -65,8 +65,18 @@ test("mission records store bests instead of accumulating retry scores", () => {
   assert.deepEqual(records[0], { score: 600, stars: 3 });
   assert.deepEqual(
     [0, 1, 2].map((c) => MISSIONS.filter((m) => m.chapter === c).length),
-    [6, 3, 3],
+    [9, 3, 3],
   );
+});
+
+test("saves from before the harbour missions keep their records on the right missions", () => {
+  const v2 = { records: { 0: { score: 1, stars: 3 }, 5: { score: 2, stars: 2 }, 6: { score: 3, stars: 1 }, 11: { score: 4, stars: 3 } }, muted: true };
+  const v3 = migrateSave(v2);
+  assert.deepEqual(Object.keys(v3.records).map(Number), [0, 5, 9, 14]);
+  assert.equal(MISSIONS[9].name, "Mangrove Mile");
+  assert.equal(v3.records[14].score, 4);
+  assert.equal(v3.muted, true);
+  assert.deepEqual(migrateSave({}).records, {});
 });
 
 test("the campaign resumes at the first mission without a record", () => {

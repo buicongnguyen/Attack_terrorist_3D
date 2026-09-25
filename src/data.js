@@ -40,12 +40,20 @@ export const MODELS = [
   "lock-gate",
   "jungle-tree",
   "stilt-house",
+  "patrol-boat",
+  "missile-boat",
+  "frigate",
+  "destroyer",
+  "ferry",
+  "harbour-crane",
+  "buoy",
+  "container-stack",
 ];
 
-export const ASSET_REVISION = "breakwater-2";
+export const ASSET_REVISION = "harbour-1";
 
 export const CHAPTERS = [
-  { name: "Breakwater", label: "Glass District strikes", icon: "plane", color: "#ffc62b" },
+  { name: "Breakwater", label: "City and harbour strikes", icon: "plane", color: "#ffc62b" },
   { name: "Relief Run", label: "River convoy", icon: "ship", color: "#33d69f" },
   { name: "Last Light", label: "Valley rescue", icon: "helicopter", color: "#ff8a6b" },
 ];
@@ -57,6 +65,9 @@ export const MISSIONS = [
   { chapter: 0, name: "Flak Alley" },
   { chapter: 0, name: "Scatter" },
   { chapter: 0, name: "The Glass Tower" },
+  { chapter: 0, name: "Harbour Mouth" },
+  { chapter: 0, name: "Dry Dock" },
+  { chapter: 0, name: "The Ring" },
   { chapter: 1, name: "Mangrove Mile" },
   { chapter: 1, name: "The Narrows" },
   { chapter: 1, name: "Lock Gate" },
@@ -97,8 +108,21 @@ export function missionNumber(index) {
   return index - MISSIONS.findIndex((m) => m.chapter === chapter) + 1;
 }
 
+// Index of the first mission in a chapter.
+export function chapterStart(chapter) {
+  return MISSIONS.findIndex((m) => m.chapter === chapter);
+}
+
 export function chapterSize(chapter) {
   return MISSIONS.filter((m) => m.chapter === chapter).length;
+}
+
+// Saves from before the harbour missions (key tidelock-v2) number every mission after 1.6
+// three lower: those records move up by three.
+export function migrateSave(saved) {
+  const records = {};
+  for (const [key, value] of Object.entries(saved?.records || {})) records[+key >= 6 ? +key + 3 : +key] = value;
+  return { ...saved, records };
 }
 
 // The campaign resumes at the first mission without a record (the start once all are done).

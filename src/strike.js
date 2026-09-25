@@ -37,7 +37,12 @@ import {
   convoyRoute,
   resolvePlace,
   lerp3,
+  turnPoint,
+  isPattern,
+  groundAt,
 } from "./strike-data.js";
+import { patternPoints, patternDiagram, predictHits, ROTATION_STEP, SHAPES } from "./harbour-data.js";
+import { Fleet, dampAngle } from "./harbour.js";
 import { CityView } from "./city.js";
 import { MISSION_STORY, STRIKE_RADIO } from "./story.js";
 import { clamp } from "./physics.js";
@@ -45,11 +50,13 @@ import { clamp } from "./physics.js";
 const V = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
 const forward = V(0, 0, -1);
 const LIVERY = ["#ffc62b", "#ff8a6b", "#33d69f"];
-const HIDE_SECONDS = 12;
-// Flak telegraphs for 1.5 s; one volley can hurt an aircraft at most once.
-// The fire solution freezes `solution` seconds before the shot: a lane or throttle change after
-// that moment (the HUD shows BREAK) throws the volley off.
-const FLAK = { range: 13, lock: 1.5, solution: 0.6, speed: 34, burst: 2.1, cooldown: 3.8, grace: 3.5 };
+const HIDE_SECONDS = 18;
+// Flak telegraphs for 2 s; a volley can hurt only the aircraft it locked, and only once.
+// The fire solution freezes `solution` seconds before the shot: a lane change after that moment
+// (the HUD shows BREAK) throws the volley off. The slow flight stays in range longer, so nests
+// reload slowly.
+const FLAK = { range: 13, lock: 2, solution: 0.8, speed: 34, burst: 2.1, cooldown: 7, grace: 5 };
+const yawFor = (dir) => -dir * (Math.PI / 2);
 
 const markerCache = new Map();
 function markerMaterial(kind) {
@@ -57,7 +64,13 @@ function markerMaterial(kind) {
   const canvas = document.createElement("canvas");
   canvas.width = canvas.height = 64;
   const c = canvas.getContext("2d");
-  const fill = { enemy: "#ff4b2b", officer: "#ffc62b", hidden: "#ff9f1c", truck: "#ff4b2b" }[kind];
+  // Ship markers carry their hit points; "target" marks ships under the current pattern.
+  const ship = /^(ship|target)(\d)$/.exec(kind);
+  const fill = ship
+    ? ship[1] === "target"
+      ? "#ffd23f"
+      : "#ff4b2b"
+    : { enemy: "#ff4b2b", officer: "#ffc62b", hidden: "#ff9f1c", truck: "#ff4b2b", civilian: "#2f86e8" }[kind];
   c.translate(32, 32);
   c.rotate(Math.PI / 4);
   c.fillStyle = "#1a1420";
@@ -71,6 +84,13 @@ function markerMaterial(kind) {
   c.textBaseline = "middle";
   if (kind === "officer") c.fillText("★", 0, 1);
   if (kind === "hidden") c.fillText("!", 0, 1);
+  if (ship && +ship[2] > 1) c.fillText(ship[2], 0, 1);
+  if (kind === "civilian") {
+    c.fillStyle = "#ffffff";
+    c.beginPath();
+    c.arc(0, 0, 6, 0, Math.PI * 2);
+    c.fill();
+  }
   const texture = new THREE.CanvasTexture(canvas);
   texture.colorSpace = THREE.SRGBColorSpace;
   const material = new THREE.SpriteMaterial({
@@ -104,7 +124,10 @@ export class StrikeOperation {
     this.story = MISSION_STORY[g.index];
     this.buildings = resolveBuildings(this.layout);
     this.blocks = buildBlocks(this.buildings);
-    this.maxFloor = Math.max(...this.buildings.map((b) => b.floors)) + 1;
+    this.maxFloor = Math.max(1, ...this.buildings.map((b) => b.floors)) + 1;
+    // Harbour layouts mark their quays; bombs anywhere else fall to sea level.
+    this.land = this.layout.harbour?.land || null;
+    this.turnX = turnPoint(this.layout);
     // Floor tiles by building, storey and grid cell: support checks are O(1) per person.
     this.tileSize = (CITY.half * 2) / CITY.tiles;
     this.slabs = new Map();
@@ -112,18 +135,23 @@ export class StrikeOperation {
       if (block.kind === "slab" || block.kind === "roof")
         this.slabs.set(this.tileKey(block.b, block.f, block.min[0] + 0.01, block.min[2] + 0.01), block);
     this.city = new CityView(view, this.layout, this.buildings, this.blocks, g.index);
+    // The flight enters from the west edge and sweeps back and forth; `dir` is +1 flying east.
     this.flight = {
-      x: FLIGHT.entryX + 16,
-      lane: 3,
+      x: -this.turnX + 2,
+      dir: 1,
+      lane: this.layout.startLane ?? 3,
       speed: FLIGHT.speed,
       lateral: 0,
       phase: "pass",
       turn: 0,
+      turnFrom: 1,
+      turnX0: 0,
       spacing: FLIGHT.tight,
       wide: false,
       pass: 1,
     };
     this.floor = 1;
+    this.patternStep = 0;
     this.bombs = [];
     this.shells = [];
     this.used = 0;
@@ -135,13 +163,16 @@ export class StrikeOperation {
     this.emptyTimer = 0;
     const slots = formationSlots(this.layout.aircraft.length, FLIGHT.tight);
     this.aircraft = this.layout.aircraft.map((a, i) => this.createAircraft(a, i, slots[i]));
-    this.selected = BOMB_ORDER.find((kind) => this.aircraft.some((a) => a.payload[kind] > 0));
+    // Harbour missions open on the pattern they teach.
+    const loaded = (kind) => this.aircraft.some((a) => a.payload[kind] > 0);
+    this.selected = loaded(this.layout.select) ? this.layout.select : BOMB_ORDER.find(loaded);
     const { plans, events } = planEnemies(this.layout, this.buildings);
     this.events = events.map((e) => ({ ...e, fired: false, ring: null }));
     this.enemies = plans.map((plan) => this.createEnemy(plan));
     this.aa = this.layout.aa.map((place, i) => this.createFlak(place, i));
     this.masts = this.layout.masts.map((place) => this.createMast(place));
     this.trucks = this.createConvoy();
+    this.fleet = this.layout.fleet ? new Fleet(this) : null;
     for (const event of this.events) {
       event.ring = view.ring(V(event.centre.x, event.centre.y + 0.08, event.centre.z), 2.6, 0xffc62b, 0.22);
       event.ring.renderOrder = 6;
@@ -150,6 +181,8 @@ export class StrikeOperation {
     this.lockMarker.material.depthTest = false;
     this.lockMarker.renderOrder = 11;
     this.lockMarker.visible = false;
+    // Place the flight before the first frame: a release must never start from the models' origin.
+    this.updateFlight(0);
   }
 
   // ------------------------------------------------------------------ setup
@@ -200,6 +233,24 @@ export class StrikeOperation {
     const [inner, outer] = layer(true);
     const [ghostInner, ghostOuter] = layer(false);
     view.level.add(pipper);
+    const cells = new THREE.Group();
+    cells.visible = false;
+    const cellRings = Array.from({ length: 12 }, () => {
+      // Thick rings, so blue or yellow cells still read against the water.
+      const ring = view.ring(V(), 1, 0xffffff, 0.3, cells);
+      ring.material.depthTest = false;
+      ring.renderOrder = 9;
+      return ring;
+    });
+    const outline = new THREE.Line(
+      new THREE.BufferGeometry().setAttribute("position", new THREE.BufferAttribute(new Float32Array(13 * 3), 3)),
+      new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.8, depthTest: false }),
+    );
+    outline.frustumCulled = false;
+    outline.renderOrder = 9;
+    outline.userData.disposable = true;
+    cells.add(outline);
+    view.level.add(cells);
     return {
       ...data,
       payload: { ...data.payload },
@@ -217,6 +268,9 @@ export class StrikeOperation {
       arc,
       pipper,
       pipperRings: { inner: [inner, ghostInner], outer: [outer, ghostOuter] },
+      cells,
+      cellRings,
+      outline,
       forecast: null,
       velocity: V(),
     };
@@ -304,6 +358,35 @@ export class StrikeOperation {
     });
   }
 
+  marker(kind) {
+    return markerMaterial(kind);
+  }
+
+  // Flak on a ship: a nest that rides the hull and dies with it.
+  createShipFlak(ship) {
+    const g = this.game;
+    const nest = g.entity("aa", null, ship.position.clone(), { hp: 1, radius: 1.3 });
+    nest.cur = { b: null, f: 0 };
+    nest.state = "idle";
+    // Ship guns open up a few seconds after the rooftop nests would, one after another.
+    nest.cooldown = FLAK.grace + 4 + this.aa.length * 1.5;
+    nest.lock = 0;
+    nest.mounted = ship;
+    nest.turret = ship.turret || null;
+    nest.warning = g.view.ring(V(0, 0.12 - ship.def.flak.y, 0), 2.4, 0xff3b3b, 0.16, nest.mesh);
+    nest.warning.material.opacity = 0.15;
+    nest.beam = this.beam(0xff3b3b);
+    this.aa.push(nest);
+    return nest;
+  }
+
+  destroyMounted(nest) {
+    nest.dead = true;
+    nest.state = "idle";
+    nest.beam.visible = false;
+    this.game.view.disposeObject(nest.mesh);
+  }
+
   beam(color) {
     const line = new THREE.Line(
       new THREE.BufferGeometry().setFromPoints([V(), V(0, 1, 0)]),
@@ -346,6 +429,39 @@ export class StrikeOperation {
     this.forecastTimer = 0;
   }
 
+  // Turn a pattern bomb by 45° steps (clockwise on screen for positive steps).
+  rotate(steps = 1) {
+    this.patternStep = (((this.patternStep + steps) % 8) + 8) % 8;
+    this.rotated = true;
+    this.forecastTimer = 0;
+  }
+
+  get patternAngle() {
+    return this.patternStep * ROTATION_STEP;
+  }
+
+  // Reverse is refused mid-turn, and at an edge where turning round would point the flight
+  // straight back out (the edge would only turn it round again).
+  canReverse() {
+    const f = this.flight;
+    return f.phase === "pass" && this.game.status === "playing" && -f.x * f.dir < this.turnX - 1;
+  }
+
+  // Turn the flight round now: a wingover back along the same lane.
+  reverse(auto = false) {
+    const f = this.flight;
+    if (!auto && !this.canReverse()) return false;
+    if (f.phase !== "pass" || this.game.status !== "playing") return false;
+    f.phase = "turn";
+    f.turn = 0;
+    f.turnFrom = f.dir;
+    f.turnX0 = f.x;
+    f.dir = -f.dir;
+    if (!auto) this.reversed = true;
+    this.forecastTimer = 0;
+    return true;
+  }
+
   kindFor(aircraft) {
     if (aircraft.payload[this.selected] > 0) return this.selected;
     return BOMB_ORDER.find((kind) => aircraft.payload[kind] > 0) || null;
@@ -355,9 +471,17 @@ export class StrikeOperation {
     return this.game.status === "playing" && !this.game.paused && this.flight.phase === "pass";
   }
 
+  // The aircraft that drops the next bomb of `kind`: its pipper is the bright one on screen.
+  shooterFor(kind) {
+    return this.aircraft.find((a) => a.alive && a.payload[kind] > 0) || null;
+  }
+
   release(kind = this.selected) {
     if (!this.canRelease()) return false;
-    const aircraft = this.aircraft.find((a) => a.alive && a.payload[kind] > 0 && a.cooldown <= 0);
+    // The shooter whose pipper is shown drops first; while it re-arms, the next one ripples in.
+    const shooter = this.shooterFor(kind);
+    const aircraft =
+      shooter?.cooldown <= 0 ? shooter : this.aircraft.find((a) => a.alive && a.payload[kind] > 0 && a.cooldown <= 0);
     if (!aircraft) return false;
     this.drop(aircraft, kind);
     this.autoSelect();
@@ -406,8 +530,10 @@ export class StrikeOperation {
     const g = this.game,
       view = g.view;
     aircraft.mesh.updateMatrixWorld(true);
-    const state = this.releaseState(aircraft);
-    aircraft.forecast = { ...forecastImpact(this.blocks, this.buildings, state, kind, this.floor), kind };
+    // The forecast (and its hit count) at the instant of release, so the panel never blinks.
+    const { forecast, state, prediction } = this.preview(aircraft, kind);
+    forecast.prediction = prediction;
+    aircraft.forecast = forecast;
     aircraft.payload[kind]--;
     aircraft.cooldown = FLIGHT.release;
     this.used++;
@@ -425,10 +551,37 @@ export class StrikeOperation {
       trail: 0,
       owner: aircraft,
       target: kind === "lance" ? this.lockTarget(aircraft.forecast?.impact, state) : null,
+      angle: this.patternAngle,
       dead: false,
     };
     this.bombs.push(bomb);
     g.audio.play("release");
+    // Ships see the bombs fall and turn away from where they will land.
+    if (this.fleet) this.fleet.evade(forecastPoints(aircraft.forecast), g.time + aircraft.forecast.time, def.radius);
+  }
+
+  forecast(state, kind, step = this.patternStep) {
+    return forecastImpact(this.blocks, this.buildings, state, kind, this.floor, { land: this.land, angle: step * ROTATION_STEP });
+  }
+
+  // What `aircraft` would do if it released `kind` now, turned to `step`: the forecast, and for a
+  // harbour the ships it would hit where they will be when the bombs land.
+  preview(aircraft, kind, step = this.patternStep) {
+    aircraft.mesh.updateMatrixWorld(true);
+    const state = this.releaseState(aircraft);
+    const forecast = this.forecast(state, kind, step);
+    forecast.kind = kind;
+    const def = BOMBS[kind];
+    const prediction = this.fleet
+      ? predictHits(
+          this.fleet.predicted(this.game.time + forecast.time),
+          forecastPoints(forecast),
+          def.radius,
+          def.shipDamage ?? 1,
+          forecast.time,
+        )
+      : null;
+    return { forecast, state, prediction };
   }
 
   // The Lance locks the nearest target to its pipper (trucks first) that it can actually reach.
@@ -445,8 +598,9 @@ export class StrikeOperation {
   targets() {
     return [
       ...this.trucks.filter((t) => !t.dead),
+      ...(this.fleet ? this.fleet.hostile().filter((s) => !s.dead) : []),
       ...this.masts.filter((t) => !t.dead),
-      ...this.aa.filter((t) => !t.dead),
+      ...this.aa.filter((t) => !t.dead && !t.mounted),
       ...this.enemies.filter((t) => !t.dead),
     ];
   }
@@ -460,6 +614,7 @@ export class StrikeOperation {
     this.updateEnemies(dt);
     this.checkSupport();
     this.updateTrucks(dt);
+    this.fleet?.update(dt);
     this.updateMasts(dt);
     this.updateFlak(dt);
     this.updateBombs(dt);
@@ -480,26 +635,38 @@ export class StrikeOperation {
   updateFlight(dt) {
     const g = this.game,
       f = this.flight;
-    const targetSpeed = clamp(FLIGHT.speed + g.input.x * 4, FLIGHT.minSpeed, FLIGHT.maxSpeed);
+    // Speed is screen-relative: pushing toward the direction of flight speeds the flight up.
+    const targetSpeed = clamp(FLIGHT.speed + g.input.x * f.dir * FLIGHT.throttle, FLIGHT.minSpeed, FLIGHT.maxSpeed);
     f.speed += clamp(targetSpeed - f.speed, -FLIGHT.accel * dt, FLIGHT.accel * dt);
     f.lateral = THREE.MathUtils.damp(f.lateral, g.input.z * FLIGHT.lateral, 5, dt);
     f.lane = clamp(f.lane + f.lateral * dt, FLIGHT.laneMin, FLIGHT.laneMax);
     f.spacing = THREE.MathUtils.damp(f.spacing, f.wide ? FLIGHT.wide : FLIGHT.tight, 4, dt);
+    // Turn progress: a wingover that climbs, swings out and comes back on the same lane.
+    let u = 0,
+      vx = 0;
     if (f.phase === "pass") {
-      f.x += (f.speed + (this.egress ? FLIGHT.egress : 0)) * dt;
-      if (f.x > FLIGHT.exitX) {
-        this.egress = false;
-        f.phase = "turn";
-        f.turn = FLIGHT.turnTime;
-        f.pass++;
-      }
+      f.x += f.speed * f.dir * dt;
+      vx = f.speed * f.dir;
+      if (f.x * f.dir > this.turnX) this.reverse(true);
     } else {
-      f.turn -= dt;
-      if (f.turn <= 0) {
+      f.turn += dt;
+      if (f.turn >= FLIGHT.turnTime) {
         f.phase = "pass";
-        f.x = FLIGHT.entryX;
+        f.pass++;
+        f.x = f.turnX0;
+        // Release is allowed again this tick, so the aircraft must already carry the new speed.
+        vx = f.speed * f.dir;
+      } else {
+        u = f.turn / FLIGHT.turnTime;
+        f.x = f.turnX0 + f.turnFrom * FLIGHT.turnReach * Math.sin(Math.PI * u);
+        vx = ((f.turnFrom * FLIGHT.turnReach * Math.PI) / FLIGHT.turnTime) * Math.cos(Math.PI * u);
       }
     }
+    const turning = f.phase === "turn";
+    const swing = turning ? Math.sin(Math.PI * u) : 0;
+    // Trailing wingmen swap sides through the turn so they end up behind the lead again.
+    const trail = turning ? f.turnFrom * (1 - 2 * u) : f.dir;
+    const yaw = turning ? yawFor(f.turnFrom) + Math.PI * u * f.turnFrom : yawFor(f.dir);
     const slots = formationSlots(this.aircraft.length, f.spacing);
     for (const a of this.aircraft) {
       a.cooldown = Math.max(0, a.cooldown - dt);
@@ -510,23 +677,26 @@ export class StrikeOperation {
       }
       const slot = slots[a.index];
       const bob = Math.sin(g.time * 1.6 + a.index * 1.3) * 0.18;
-      const x = f.x + slot.x;
-      a.velocity.set(f.phase === "pass" ? f.speed + (this.egress ? FLIGHT.egress : 0) : 0, 0, f.lateral);
-      a.mesh.position.set(x, FLIGHT.altitude + bob - a.index * 0.4, f.lane + slot.z);
-      a.mesh.visible = f.phase === "pass";
-      a.mesh.rotation.set(0, -Math.PI / 2, THREE.MathUtils.damp(a.mesh.rotation.z, f.lateral * 0.06, 6, dt));
+      const x = f.x + slot.x * trail;
+      a.velocity.set(vx, 0, f.lateral);
+      a.mesh.position.set(x, FLIGHT.altitude + bob - a.index * 0.4 + FLIGHT.turnClimb * swing, f.lane + slot.z);
+      a.mesh.visible = true;
+      const bank = turning ? -1.15 * swing * f.turnFrom : THREE.MathUtils.damp(a.mesh.rotation.z, f.lateral * 0.08 * f.dir, 6, dt);
+      a.mesh.rotation.set(0, yaw, bank);
+      // The model's nose is its local -Z, so its tail points along (sin yaw, 0, cos yaw).
+      const back = V(Math.sin(yaw), 0, Math.cos(yaw));
       if (a.hp < a.maxHp) {
         a.smoke -= dt;
-        if (a.smoke <= 0 && a.mesh.visible) {
+        if (a.smoke <= 0) {
           a.smoke = 0.08;
-          g.puff(a.mesh.position.clone().add(V(-1.2, 0.2, 0)), 0x3b3440, 0.35, 0.9);
+          g.puff(a.mesh.position.clone().addScaledVector(back, 1.2).add(V(0, 0.2, 0)), 0x3b3440, 0.35, 0.9);
         }
-      } else if (a.mesh.visible) {
+      } else if (!turning) {
         a.contrail = (a.contrail ?? a.index * 0.03) - dt;
         if (a.contrail <= 0) {
-          a.contrail = 0.09;
+          a.contrail = 0.12;
           for (const side of [-1, 1])
-            g.puff(a.mesh.position.clone().add(V(-2.4, 0.1, side * 3.1)), 0xffffff, 0.12, 0.35);
+            g.puff(a.mesh.position.clone().addScaledVector(back, 2.4).add(V(0, 0.1, side * 3.1)), 0xffffff, 0.12, 0.35);
         }
       }
     }
@@ -534,10 +704,11 @@ export class StrikeOperation {
 
   // After the result is decided, ordnance already in the air still lands and aircraft still fly.
   settle(dt) {
+    // updateFlight also carries downed aircraft away.
     this.updateFlight(dt);
     this.updateBombs(dt);
     this.updateFlak(dt);
-    for (const a of this.aircraft) if (!a.alive) this.updateDowned(a, dt);
+    this.fleet?.update(dt);
     if (this.combo.timer > 0) {
       this.combo.timer -= dt;
       if (this.combo.timer <= 0) this.closeCombo();
@@ -547,7 +718,8 @@ export class StrikeOperation {
   updateDowned(a, dt) {
     if (!a.mesh.parent) return;
     a.exit += dt;
-    a.mesh.position.x += dt * 12;
+    a.exitDir ??= this.flight.dir;
+    a.mesh.position.x += dt * 5 * a.exitDir;
     a.mesh.position.y += dt * 4;
     a.mesh.position.z -= dt * 9;
     a.mesh.rotation.z += dt * 0.9;
@@ -717,7 +889,9 @@ export class StrikeOperation {
               )[0];
       if (nest.turret && target) {
         const d = target.mesh.position.clone().sub(nest.position);
-        nest.turret.rotation.y = THREE.MathUtils.damp(nest.turret.rotation.y, Math.atan2(-d.x, -d.z), 6, dt);
+        // A ship-mounted gun turns relative to its hull.
+        const base = nest.mounted ? nest.mounted.mesh.rotation.y : 0;
+        nest.turret.rotation.y = dampAngle(nest.turret.rotation.y, Math.atan2(-d.x, -d.z) - base, 6, dt);
       }
       if (nest.state === "idle" && target && nest.cooldown <= 0) {
         nest.state = "lock";
@@ -756,7 +930,7 @@ export class StrikeOperation {
         g.blast(shell.mesh.position, 1.4, 0x2f2c35, { smoke: true, quiet: true });
         g.audio.play("flak");
         for (const a of this.aircraft)
-          if (a.alive && !shell.volley.hit.has(a) && a.mesh.position.distanceTo(shell.mesh.position) < FLAK.burst) {
+          if (a === shell.volley.target && a.alive && !shell.volley.hit.has(a) && a.mesh.position.distanceTo(shell.mesh.position) < FLAK.burst) {
             shell.volley.hit.add(a);
             this.hitAircraft(a);
           }
@@ -776,7 +950,8 @@ export class StrikeOperation {
     const target = s.position.clone().addScaledVector(s.velocity, s.ahead);
     const tof = origin.distanceTo(target) / FLAK.speed;
     const lead = target.addScaledVector(s.velocity, tof);
-    const volley = { hit: new Set() };
+    // A volley threatens only the aircraft its lock line named, so the HUD's warning is the whole story.
+    const volley = { hit: new Set(), target: nest.target };
     for (let i = 0; i < 3; i++) {
       const aim = lead.clone().add(V((i - 1) * 1.8, (i % 2) * 0.8, (i - 1) * 0.9));
       const mesh = g.view.sphere(origin.clone(), V(0.22, 0.22, 0.22), 0xffcc1f);
@@ -805,6 +980,7 @@ export class StrikeOperation {
       for (const key of Object.keys(a.payload)) a.payload[key] = 0;
       a.arc.visible = false;
       a.pipper.visible = false;
+      a.cells.visible = false;
       g.radio({ who: a.crew === "iona" ? "iona" : a.crew, text: `${a.callsign} is hit! Breaking off.` });
       this.autoSelect();
     } else g.notify("toast", `${a.callsign.toUpperCase()} HIT`);
@@ -828,17 +1004,18 @@ export class StrikeOperation {
         this.game.puff(bomb.mesh.position, bomb.kind === "bomblet" ? 0xe5c7ff : 0xfff1d6, 0.14, 0.4);
       }
       if (bomb.kind === "drill") this.updateDrill(bomb, a, b);
-      else if (bomb.kind === "scatter") {
-        const below = surfaceBelow(this.buildings, this.blocks, b.x, b.z);
+      else if (bomb.kind === "scatter" || isPattern(bomb.kind)) {
+        const below = surfaceBelow(this.buildings, this.blocks, b.x, b.z, this.land);
         const hit = blockHits(this.blocks, this.buildings, a, b)[0];
-        if (hit || b.y <= below + BOMBS.scatter.burst) this.burst(bomb, hit ? lerp3(a, b, hit.t) : b);
+        if (hit || b.y <= below + BOMBS[bomb.kind].burst) this.burst(bomb, hit ? lerp3(a, b, hit.t) : b);
       } else {
         const hit = blockHits(this.blocks, this.buildings, a, b)[0];
         if (hit) this.detonate(bomb, lerp3(a, b, hit.t));
       }
-      if (!bomb.dead && b.y <= CITY.ground) {
-        // Detonate at the exact ground crossing, the point the pipper forecast shows.
-        const t = (a.y - CITY.ground) / Math.max(1e-6, a.y - b.y);
+      const ground = groundAt(this.land, b.x, b.z);
+      if (!bomb.dead && b.y <= ground) {
+        // Detonate at the exact ground (or sea) crossing, the point the pipper forecast shows.
+        const t = (a.y - ground) / Math.max(1e-6, a.y - b.y);
         this.detonate(bomb, lerp3(a, b, t));
       }
       if (!bomb.dead && bomb.time > 9) this.detonate(bomb, b);
@@ -862,6 +1039,10 @@ export class StrikeOperation {
 
   // Where a target will be `ahead` seconds from now: scheduled walkers and trucks are predictable.
   predict(target, ahead) {
+    if (target.type === "ship") {
+      const p = this.fleet.poseAt(target, this.game.time + ahead);
+      return { x: p.x, y: 0, z: p.z };
+    }
     const route = target.route || (target.state === "route" ? target.plan?.route : null);
     if (!route) return target.position;
     const p = sampleRoute(route, this.game.time + ahead);
@@ -880,8 +1061,10 @@ export class StrikeOperation {
       stepBomb(s, STEP);
       const b = { x: s.x, y: s.y, z: s.z };
       const hit = blockHits(this.blocks, this.buildings, a, b)[0];
-      const end = hit ? lerp3(a, b, hit.t) : b.y <= CITY.ground ? lerp3(a, b, (a.y - CITY.ground) / (a.y - b.y)) : null;
+      const ground = groundAt(this.land, b.x, b.z);
+      const end = hit ? lerp3(a, b, hit.t) : b.y <= ground ? lerp3(a, b, (a.y - ground) / (a.y - b.y)) : null;
       if (!end) continue;
+      if (target.type === "ship") return Math.hypot(end.x - aim.x, end.z - aim.z) < BOMBS.lance.radius + target.def.beam / 2 - 0.4;
       const chest = { x: aim.x, y: aim.y + lift, z: aim.z };
       return (
         Math.hypot(end.x - chest.x, end.y - chest.y, end.z - chest.z) < BOMBS.lance.radius - 0.4 &&
@@ -916,18 +1099,20 @@ export class StrikeOperation {
     bomb.dead = true;
     g.view.disposeObject(bomb.mesh);
     const s = bomb.state;
-    const centre = scatterCentre(point, s, burstGround(this.buildings, this.blocks, point, s));
-    g.blast(point, 0.9, 0xc77dff, { quiet: true });
+    const def = BOMBS[bomb.kind];
+    const centre = scatterCentre(point, s, burstGround(this.buildings, this.blocks, point, s, this.land));
+    g.blast(point, 0.9, def.color, { quiet: true });
     g.audio.play("pop");
     const model = g.view.assets.has("bomblet") ? "bomblet" : "missile-friendly";
     const vy = s.vy * 0.8;
-    for (const p of scatterPattern(centre)) {
+    const points = def.pattern ? patternPoints(def.pattern, centre, bomb.angle || 0) : scatterPattern(centre);
+    for (const p of points) {
       // Each bomblet times its throw to the surface under its own landing point.
-      const h = Math.max(0.3, point.y - surfaceBelow(this.buildings, this.blocks, p.x, p.z));
+      const h = Math.max(0.3, point.y - surfaceBelow(this.buildings, this.blocks, p.x, p.z, this.land));
       const t = Math.max(0.25, (vy + Math.sqrt(vy * vy + 2 * -GRAVITY * h)) / -GRAVITY);
       const state = { x: point.x, y: point.y, z: point.z, vx: (p.x - point.x) / t, vy, vz: (p.z - point.z) / t };
       const mesh = g.view.model(model, V(point.x, point.y, point.z), 1);
-      this.bombs.push({ kind: "bomblet", state, mesh, crossed: new Set(), time: 0, trail: 0, owner: bomb.owner, dead: false });
+      this.bombs.push({ kind: "bomblet", def, state, mesh, crossed: new Set(), time: 0, trail: 0, owner: bomb.owner, dead: false });
     }
   }
 
@@ -955,7 +1140,7 @@ export class StrikeOperation {
     if (bomb.dead) return;
     bomb.dead = true;
     g.view.disposeObject(bomb.mesh);
-    const def = bomb.kind === "bomblet" ? BOMBS.scatter : BOMBS[bomb.kind];
+    const def = bomb.kind === "bomblet" ? bomb.def || BOMBS.scatter : BOMBS[bomb.kind];
     const radius = def.radius;
     const breakRadius = def.breakRadius;
     const p = V(point.x, point.y, point.z);
@@ -986,8 +1171,10 @@ export class StrikeOperation {
       kills++;
       g.score += e.officer ? 200 : 100;
     }
+    // Hulls in reach take the bomb's ship damage; the Island Belle aborts the strike.
+    if (this.fleet) kills += this.fleet.hit(point, def, def.shipDamage ?? 1).length;
     for (const nest of this.aa) {
-      if (nest.dead || !exposed(nest, 0.6)) continue;
+      if (nest.dead || nest.mounted || !exposed(nest, 0.6)) continue;
       this.destroy(nest, 150);
       this.say("aa");
       kills++;
@@ -1070,7 +1257,7 @@ export class StrikeOperation {
     }
     // A flak nest or jammer whose roof tile is gone drops into the building and is wrecked.
     for (const prop of [...this.aa, ...this.masts]) {
-      if (prop.dead) continue;
+      if (prop.dead || prop.mounted) continue;
       const building = buildingById(this.buildings, prop.cur.b);
       if (!this.supported(building, prop.cur.f, prop.position.x, prop.position.z)) {
         this.destroy(prop, prop.type === "mast" ? 250 : 150);
@@ -1079,11 +1266,12 @@ export class StrikeOperation {
     }
   }
 
-  abort() {
+  abort(reason = "shelter", what = null) {
     if (this.aborted) return;
     this.aborted = true;
-    this.say("abort");
-    this.game.finish(false, "shelter");
+    this.abortedBy = what;
+    this.say(reason === "ferry" ? "ferryHit" : "abort");
+    this.game.finish(false, reason);
   }
 
   updateEvents() {
@@ -1121,15 +1309,15 @@ export class StrikeOperation {
       a.arc.visible = a.pipper.visible = Boolean(show);
       if (!show) {
         a.forecast = null;
+        a.cells.visible = false;
         continue;
       }
-      a.mesh.updateMatrixWorld(true);
-      const state = this.releaseState(a);
-      const forecast = forecastImpact(this.blocks, this.buildings, state, kind, this.floor);
-      forecast.kind = kind;
+      const { forecast, state, prediction } = this.preview(a, kind);
       a.forecast = forecast;
+      forecast.prediction = prediction;
       const def = BOMBS[kind];
-      const primary = kind === this.selected;
+      // Only the next shooter's pipper is bright; the others show what they carry, dimmed.
+      const primary = kind === this.selected && a === this.shooterFor(kind);
       const positions = a.arc.geometry.attributes.position;
       const count = Math.min(200, forecast.points.length);
       for (let i = 0; i < count; i++) {
@@ -1144,35 +1332,78 @@ export class StrikeOperation {
       a.arc.material.opacity = primary ? 0.95 : 0.4;
       const impact = forecast.impact;
       a.pipper.position.set(impact.x, impact.y + 0.12, impact.z);
-      const ringRadius = kind === "scatter" ? def.spread + def.radius * 0.6 : kind === "shockwave" ? def.radius : kind === "lance" ? 1.8 : 1.3;
+      const ringRadius =
+        kind === "scatter"
+          ? def.spread + def.radius * 0.6
+          : kind === "shockwave"
+            ? def.radius
+            : kind === "lance"
+              ? 1.8
+              : def.pattern
+                ? 0.7
+                : 1.3;
       for (const ring of a.pipperRings.outer) ring.scale.setScalar(ringRadius);
       for (const ring of a.pipperRings.inner) ring.scale.setScalar(primary ? 0.8 : 0.6);
       for (const child of a.pipper.children) {
         child.material.color.set(def.color);
         child.material.opacity = (primary ? 0.95 : 0.45) * (child.userData.solid ? 1 : 0.32);
       }
+      const points = forecastPoints(forecast);
       const risk =
         forecast.crossesShelter ||
-        forecastPoints(forecast).some((p) => shelterStruck(this.blocks, this.buildings, p, p.kind, 0.6));
+        Boolean(forecast.prediction?.civilian) ||
+        points.some((p) => shelterStruck(this.blocks, this.buildings, p, p.kind, 0.6));
       forecast.shelter = risk;
+      this.drawCells(a, def.pattern ? points : null, risk ? 0x2f86e8 : def.color, primary);
       if (risk) {
-        shelterWarning = true;
+        // Every pipper over a no-strike target turns blue; only the next release raises the alarm.
+        if (primary) shelterWarning = true;
         for (const child of a.pipper.children) child.material.color.set(0x2f86e8);
       }
       if (kind === "lance") forecast.lock = this.lockTarget(impact, state);
     }
+    this.markTargets();
     const lead = this.aircraft.find((a) => a.alive && a.forecast && a.forecast.kind === this.selected);
     const drill = lead?.forecast?.kind === "drill" ? lead.forecast : null;
     this.city.showBand(drill?.building || null, drill ? drill.floor : 0, BOMBS.drill.color);
-    if (shelterWarning) this.say("shelter", 25);
+    if (shelterWarning) this.say(this.fleet ? "ferry" : "shelter", 25);
     this.updateLockMarker();
     this.shelterWarning = shelterWarning;
-    // Egress once no aircraft with ordnance can still put its pipper on the district.
-    const edge = (this.layout.cols * CITY.pitch) / 2 + 2;
-    this.egress =
-      this.flight.phase === "pass" &&
-      this.aircraft.every((a) => !a.alive || !a.forecast || a.forecast.impact.x > edge) &&
-      this.aircraft.some((a) => a.alive && a.forecast);
+  }
+
+  // A pattern's bomblet cells and outline on the water.
+  drawCells(a, points, color, primary) {
+    a.cells.visible = Boolean(points);
+    if (!points) return;
+    const def = BOMBS[a.forecast.kind];
+    a.cellRings.forEach((ring, i) => {
+      const p = points[i];
+      ring.visible = Boolean(p);
+      if (!p) return;
+      ring.position.set(p.x, a.forecast.impact.y + 0.14, p.z);
+      ring.scale.setScalar(def.radius);
+      ring.material.color.set(color);
+      ring.material.opacity = primary ? 0.9 : 0.35;
+    });
+    const order = SHAPES[def.pattern].closed ? [...points, points[0]] : points;
+    const positions = a.outline.geometry.attributes.position;
+    order.forEach((p, i) => positions.setXYZ(i, p.x, a.forecast.impact.y + 0.16, p.z));
+    positions.needsUpdate = true;
+    a.outline.geometry.setDrawRange(0, order.length);
+    a.outline.geometry.computeBoundingSphere();
+    a.outline.material.color.set(color);
+    a.outline.material.opacity = primary ? 0.85 : 0.3;
+  }
+
+  // Ships the selected pattern would hit light up yellow; the rest keep their red marker.
+  markTargets() {
+    if (!this.fleet) return;
+    const lead = this.shooterFor(this.selected);
+    const marked = new Set((lead?.forecast?.prediction?.ships || []).map((s) => s.ship.ship));
+    for (const ship of this.fleet.ships) {
+      if (ship.dead || ship.civilian) continue;
+      ship.marker.material = markerMaterial(`${marked.has(ship) ? "target" : "ship"}${Math.max(1, ship.hp)}`);
+    }
   }
 
   updateLockMarker() {
@@ -1193,36 +1424,51 @@ export class StrikeOperation {
     const lead = this.aircraft.find((a) => a.alive && a.forecast?.kind === this.selected);
     const over = lead?.forecast?.building?.id;
     const index = g.index;
+    const lesson = this.layout.lesson;
     if (index === 0 && this.used === 0) {
       const mast = this.masts[0];
       return mast && over === mast.cur.b ? "release" : "steer";
     }
+    if (index === 0 && !this.reversed && this.flight.pass <= 2 && this.left().total > 0) return "reverse";
     if (index === 1 && !this.floorTouched) return "floor";
     if (index === 2 && this.events.some((e) => e.alive && !e.status?.active && e.status?.next < 14)) return "rally";
     if (index === 3 && !this.salvoUsed && this.flight.pass <= 2) return "salvo";
     if (index === 4 && g.time < 14) return "shelter";
     if (this.selected === "lance") return this.lanceLock ? "lance" : "lanceNone";
+    const prediction = lead?.forecast?.prediction;
+    if (prediction?.civilian) return "ferry";
+    if (lesson === "stick" && !this.rotated) return "rotate";
+    if (lesson === "shapes" && this.used < 2) return "shapes";
+    if (lesson === "ring" && this.used === 0) return "ring";
+    if (isPattern(this.selected) && prediction?.sinks >= 2) return "fits";
     return null;
+  }
+
+  left() {
+    const left = this.remaining();
+    return { ...left, total: left.enemies + left.aa + left.masts + left.trucks + left.ships };
   }
 
   remaining() {
     return {
       enemies: this.enemies.filter((e) => !e.dead).length,
-      aa: this.aa.filter((a) => !a.dead).length,
+      aa: this.aa.filter((a) => !a.dead && !a.mounted).length,
       masts: this.masts.filter((m) => !m.dead).length,
       trucks: this.trucks.filter((t) => !t.dead).length,
+      ships: this.fleet ? this.fleet.left() : 0,
     };
   }
 
   totalTargets() {
-    return this.enemies.length + this.aa.length + this.masts.length + this.trucks.length;
+    const fixed = this.aa.filter((n) => !n.mounted).length;
+    return this.enemies.length + fixed + this.masts.length + this.trucks.length + (this.fleet ? this.fleet.hostile().length : 0);
   }
 
   checkOutcome(dt) {
     const g = this.game;
     if (g.status !== "playing") return;
     const left = this.remaining();
-    const total = left.enemies + left.aa + left.masts + left.trucks;
+    const total = left.enemies + left.aa + left.masts + left.trucks + left.ships;
     if (total === 0) {
       if (this.bombs.length) return;
       this.closeCombo();
@@ -1293,17 +1539,24 @@ export class StrikeOperation {
       floor: this.floor,
       wide: this.flight.wide,
       phase: this.flight.phase,
-      turn: this.flight.turn,
+      turn: this.flight.phase === "turn" ? FLIGHT.turnTime - this.flight.turn : 0,
       speed: this.flight.speed,
+      dir: this.flight.dir,
       pass: this.flight.pass,
-      events: this.events.map((e) => ({
-        label: e.label,
-        place: e.place,
-        alive: e.alive ?? e.members,
-        members: e.members,
-        present: e.present ?? 0,
-        ...(e.status || rallyStatus(e, g.time)),
-      })),
+      harbour: Boolean(this.fleet),
+      reversible: this.canReverse(),
+      pattern: this.patternInfo(),
+      events: [
+        ...this.events.map((e) => ({
+          label: e.label,
+          place: e.place,
+          alive: e.alive ?? e.members,
+          members: e.members,
+          present: e.present ?? 0,
+          ...(e.status || rallyStatus(e, g.time)),
+        })),
+        ...(this.fleet ? this.fleet.events() : []),
+      ],
       ladder: this.ladder(),
       left,
       total,
@@ -1312,8 +1565,41 @@ export class StrikeOperation {
       flak: (this.flakLocks || []).sort((a, b) => a.in - b.in),
       hint: this.hint(),
       shelter: this.shelterWarning,
-      progress: total ? 1 - (left.enemies + left.aa + left.masts + left.trucks) / total : 1,
-      labels: this.events
+      progress: total ? 1 - (left.enemies + left.aa + left.masts + left.trucks + left.ships) / total : 1,
+      labels: [...this.patternLabels(), ...(this.fleet ? this.fleet.labels() : []), ...this.rallyLabels()],
+    };
+  }
+
+  // What the pattern panel shows: the selected shape, its angle and what it would hit.
+  patternInfo() {
+    const def = BOMBS[this.selected];
+    if (!def?.pattern) return null;
+    const p = this.shooterFor(this.selected)?.forecast?.prediction;
+    return {
+      kind: this.selected,
+      name: def.name,
+      angle: this.patternStep * 45,
+      diagram: patternDiagram(def.pattern, this.patternAngle),
+      hits: p?.hits ?? 0,
+      sinks: p?.sinks ?? 0,
+      civilian: Boolean(p?.civilian),
+    };
+  }
+
+  // A hit counter floating over the selected pattern.
+  patternLabels() {
+    const lead = this.shooterFor(this.selected);
+    if (!lead?.forecast?.prediction || this.flight.phase !== "pass") return [];
+    const p = lead.forecast.prediction,
+      at = lead.forecast.impact;
+    // Hang the counter just south of the pattern, clear of the group labels over the ships.
+    const south = Math.max(at.z, ...forecastPoints(lead.forecast).map((q) => q.z)) + 1.6;
+    const text = p.civilian ? "CIVILIAN IN THE PATTERN" : p.hits ? `${p.hits} ON TARGET${p.sinks ? ` / ${p.sinks} SINK` : ""}` : "NO SHIPS";
+    return [{ id: "pattern", x: at.x, y: at.y + 0.6, z: south, text, hot: p.hits > 1 && !p.civilian }];
+  }
+
+  rallyLabels() {
+    return this.events
         .filter((e) => (e.alive ?? 1) > 0)
         .map((e) => ({
           id: `rally-${e.group}`,
@@ -1326,7 +1612,6 @@ export class StrikeOperation {
               : `${e.label} / SCATTERED`
             : `${e.label} / ${Math.ceil(e.status?.next ?? e.at)}s`,
           hot: Boolean(e.status?.active && e.present),
-        })),
-    };
+        }));
   }
 }

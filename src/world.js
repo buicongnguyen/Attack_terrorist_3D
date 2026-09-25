@@ -465,7 +465,8 @@ export class WorldView {
     const layout = this.strikeLayout;
     const south = (layout.rows * CITY.pitch) / 2 + 7;
     // Moored boats along the quay and islands on the horizon give the district a place in the world.
-    for (let i = 0; i < 4; i++) {
+    // (Not in a harbour mission, where a boat past the quay could be mistaken for a target.)
+    for (let i = 0; i < (layout.harbour ? 0 : 4); i++) {
       const boat = this.model("boat", V(-22 + i * 14, 0.05, south + 4 + (i % 2) * 2), 0.8);
       boat.rotation.y = Math.PI / 2 + (i % 2 ? 0.2 : -0.15);
     }
@@ -565,8 +566,11 @@ export class WorldView {
     };
     for (const x of [-w, w]) for (const z of [-d, d]) include(x, CITY.ground, z);
     // Keep the formation in view once it is over the district (portrait: from its first third).
-    const entry = this.strikePortrait ? -w * 0.3 : -w;
-    for (const x of [entry, w]) for (const z of [-d + 3, d - 3]) include(x, FLIGHT.altitude, z);
+    // Landscape frames the whole sweep, turns included, so the wingover at either edge stays in
+    // view. Portrait looks along the flight path and keeps the district large instead.
+    const sweep = (layout.cols * CITY.pitch) / 2 + FLIGHT.turnMargin + FLIGHT.turnReach * 0.5;
+    const band = this.strikePortrait ? [-w * 0.3, w] : [-sweep, sweep];
+    for (const x of band) for (const z of [-d + 3, d - 3]) include(x, FLIGHT.altitude, z);
     // HUD bands the district must avoid: top bar, flight panel, and (landscape phones) the side panel.
     const tall = this.canvas.clientHeight || innerHeight;
     const landscapePhone = aspect > 1 && tall < 520;

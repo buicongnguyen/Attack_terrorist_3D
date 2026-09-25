@@ -47,7 +47,7 @@ Story data lives in [`src/story.js`](../src/story.js). Each mission has a place,
 This is the chapter the brief asked about directly: *a grid of high buildings, several aircraft together, many bomb types, enemies hiding, and enemies whose patterns bring them together.*
 
 - **City grid.** 3×2 and 3×3 districts of 2–7-storey towers. Every roof and floor slab tile and every wall panel is destructible, drawn with instanced meshes. South faces are glass curtain walls, so you can see into the floors where enemies hide.
-- **Kestrel Flight.** Up to three aircraft fly passes over the district. The left stick or WASD steers the lane and sets the throttle, which is how you time a pass. Formation spacing toggles between tight and wide. **Salvo** releases one bomb from every aircraft at once, so three pippers, three bomb types, one pass.
+- **Kestrel Flight.** Up to three aircraft sweep back and forth over the district at an unhurried 3.4 m/s. At each edge they turn round with a wingover and come back along the same lane, and **Reverse** turns them round at any moment. The left stick or WASD steers the lane and sets the speed; speed is screen-relative, so pushing toward the direction of flight speeds up. Formation spacing toggles between tight and wide. **Salvo** releases one bomb from every aircraft at once, so three pippers, three bomb types, one pass. A mouse click on the map releases, like Space.
 - **Four bombs.**
 
   | Bomb | Role | Behaviour |
@@ -57,14 +57,12 @@ This is the chapter the brief asked about directly: *a grid of high buildings, s
   | Shockwave (red) | Roofs, flak, jammer masts | Huge blast on first contact that tears roof tiles open. |
   | Lance (cyan) | Moving trucks | Guided. Locks the nearest target it can actually reach, marked by a cyan ring. |
 
-- **Patterns and gatherings.** Enemies follow deterministic schedules through doors, stairs and streets. Rally groups (shift changes, musters, the lieutenants' meeting) arrive at a point together on a countdown, shown in the intel strip and as in-world labels. While a gathering is on, its label counts who is actually there; if an alert sends them running, it reads SCATTERED. Each gathering lasts 12 s, longer than a full pass cycle, so any pass at normal speed can reach it. Unit tests prove every member is within 1.5 m of the rally point in every cycle and spread out between cycles.
+- **Patterns and gatherings.** Enemies follow deterministic schedules through doors, stairs and streets. Rally groups (shift changes, musters, the lieutenants' meeting) arrive at a point together on a countdown, shown in the intel strip and as in-world labels. While a gathering is on, its label counts who is actually there; if an alert sends them running, it reads SCATTERED. Each gathering lasts 20 s: at worst a Reverse, a short run back and a second Reverse bring the pipper over any point in about 10 s. Unit tests prove every member is within 1.5 m of the rally point in every cycle and spread out between cycles.
 - **Hiding.** In the late missions a blast alerts the cell. Survivors run for ground floors, and Echo tags their hiding spots so a Drill can follow them down. They then rejoin their schedules. The lesson: make the first strike count.
-- **Threats and consequences.** Flak nests telegraph a red lock line for 1.5 s before firing, and one volley can hit an aircraft at most once. The fire solution freezes 0.6 s before the shot: the line stops flickering and the HUD shows BREAK. A lane or throttle change from then on throws the volley off. A civilian shelter is a no-strike zone: the pipper turns blue and a strike aborts the mission. The Lance has an interlock that releases its lock rather than follow a truck into the shelter's zone.
+- **Threats and consequences.** Flak nests telegraph a red lock line for 2 s before firing. A volley can hurt only the aircraft its lock line names, and only once. The fire solution freezes 0.8 s before the shot: the line stops flickering and the HUD shows BREAK. A lane change from then on throws the volley off; at the slow flight's speeds the throttle alone cannot. Nests reload for 7 s, because the slow flight stays in range longer. A civilian shelter is a no-strike zone: the pipper turns blue and a strike aborts the mission. The Lance has an interlock that releases its lock rather than follow a truck into the shelter's zone.
 - **Scoring.** Multi-kill combos pay `n² × 40`. Stars reward clearing every target, staying at or under par, and bringing the flight home undamaged.
 
-The six missions teach one idea each: Shockwave → Drill floors → Scatter + gathering → flak + salvo → hiding + shelter → Lance + convoy + the meeting. In the teaching missions, a coach line above the flight panel explains the idea, worded for keyboard or touch. The flight panel only shows the controls that mission's flight can use.
-
-Once every pipper has left the district, the flight speeds up to the turn (egress), so less of each cycle is spent over open water.
+The city missions teach one idea each: Shockwave → Drill floors → Scatter + gathering → flak + salvo → hiding + shelter → Lance + convoy + the meeting. Three harbour missions follow (§10). In the teaching missions, a coach line above the flight panel explains the idea, worded for keyboard or touch. The flight panel only shows the controls that mission's flight can use.
 
 ## 5. Chapter 2: Relief Run (the convoy)
 
@@ -82,10 +80,10 @@ The sortie design was kept. Survivors now have names, and Echo team members spea
 
 ## 7. Art direction and the Blender pipeline
 
-![All 41 assets](asset-sheet.jpg)
+![The Blender assets](asset-sheet.jpg)
 
 - **Kit.** [`tools/blender/style.py`](../tools/blender/style.py) holds the palette, a shared painted-light ramp, soft-bevel builders, weighted normals, and per-pivot mesh batching. [`tools/blender/catalog.py`](../tools/blender/catalog.py) lists each asset's builder, budget and runtime contract.
-- **Build.** `blender --background --factory-startup --python tools/blender/build_assets.py -- --output public/models` rebuilds all 41 GLBs (3.13 MiB) and fails if any contract node or material is missing. `tools/blender/render_sheet.py` renders the contact sheets.
+- **Build.** `blender --background --factory-startup --python tools/blender/build_assets.py -- --output public/models` rebuilds all 49 GLBs (3.64 MiB, including the eight harbour models) and fails if any contract node or material is missing. `tools/blender/render_sheet.py` renders the contact sheets.
 - **Palette.** Friendly units are sky blue and sunflower, hostile ones charcoal and ember, relief mint. Environment colours are vivid and warm; beige is avoided.
 - **Runtime.** Renderer: Neutral tone mapping, a sky gradient and lighting mood per chapter, and a brighter water shader. VFX: layered sprite explosions (flash, fireball, sparks, smoke), light flashes, and debris rigid bodies. [`src/consolidate.js`](../src/consolidate.js) merges static parts into vertex-coloured meshes at load time. `WorldView.instances` draws scenery props instanced. Together these cut the Glass Tower scene from about 1,250 to about 500 draw calls.
 
@@ -182,13 +180,95 @@ A second pass first evaluated the game by playing it. Three independent reviews 
 | The in-game Reduced motion setting only stilled the camera. Dialogs, sticks and star ratings had no accessible names. | The setting stills the HUD too. Dialogs are labelled, the decorative sticks are hidden from assistive technology, and mission buttons announce their stars. |
 | HUD refreshes rebuilt identical markup and re-read the canvas position for every label. | Markup is replaced only when it changes, and the canvas position is cached on resize. |
 
-## 10. Controls
+## 10. Tidelock 2.2: the slow flight and the harbour strikes
+
+### The brief
+
+Make the aircraft about three times slower so decisions can be calm and the game easier; let the flight fly left-to-right and right-to-left; release with a mouse click or Space; make sure phones work. Then extend the bombing with harbour stages: bombs that fall in a line ("stride") or in shapes such as a square, rectangle, U, O or L, whose angle changes, fitted onto battleships that move slowly away from the danger and sometimes gather in shapes.
+
+### Evaluation of the idea, and what changed
+
+| The idea | Kept | Changed, and why |
+| --- | --- | --- |
+| A slower flight | Speed 10 → 3.4 m/s | The old fixed loop (fly off the east edge, reappear in the west) would have left three times as much dead time. The flight now sweeps back and forth and turns round just past each edge, so every pass crosses the targets. |
+| Both directions | Yes | Direction is a decision, not a menu choice: **Reverse** (F, or the button) turns the flight round at any moment with a wingover along the same lane. A player who just missed turns back instead of waiting a whole loop. |
+| Click or Space to release | Yes | Touch keeps the Release button. A stray tap on the map would waste a bomb, and on a phone the map is where your thumb rests. |
+| A line of bombs at a different angle each time | The Stick: five bombs in a line | **The player turns the pattern** in 45° steps (E / C, the mouse wheel, or the dial). A random angle per bomb would make the puzzle luck. The variety comes from the targets instead: the column waits on a diagonal, then wheels south, and a destroyer's hull lies along its own heading. |
+| Square, rectangle, U, O and L shapes | Box (3 × 2), U, O-Ring, L | Each shape has **a reason in the harbour**: the L fits boats moored round a pier corner, the U fits a dry dock with its open end toward the civilian launch in the entrance, the Box fits boats rafted side by side, and the O-Ring fits escorts circling a ferry. The ring spares whatever sits inside it, which is the whole point. |
+| Ships move away from the danger | Yes, gently, and honestly | Ships sidestep only once bombs are **falling**: after a 0.8 s reaction they move straight away from the nearest bomblet at up to half a metre a second, a few tenths of a metre in all. Moored boats and civilians can't. Ships that fled the aiming ring itself would make aiming a chase. **The pipper's count already includes the sidestep**, so what it says is what sinks. A well-centred pattern still lands; a hull at the edge of a sloppy one slips out. |
+| Ships gather in shapes | Yes, on a timetable | Formations follow schedules shown in the intel strip, like the city's gatherings: the column holds at the buoys, then wheels for the mouth; the frigate anchors in the roads; the destroyer runs for the mouth. |
+
+Added on top:
+
+- **A civilian in every harbour.** The *Island Belle* ferry and a pilot launch are no-strike, like the city shelter. The pattern turns blue when it would touch one, a strike that does aborts the mission, and the forecast keeps a 0.4 m safety margin.
+- **The pipper counts.** Pattern cells are drawn on the water where the bomblets will land, predicted for where the ships will be when they land. A label reads "3 ON TARGET / 2 SINK", ships under the pattern turn their markers yellow, and the side panel shows the shape and its angle.
+- **Hull hits.** Ships are hull segments with a beam. Patrol boats take 1 hit, missile boats 2, the flak frigate 3 and the destroyer *Cinder* 5, so lining a Stick up along a long hull is what sinks it.
+
+### The harbour missions
+
+| Mission | Lesson | Targets |
+| --- | --- | --- |
+| 1.7 Harbour Mouth | The Stick and its angle | A patrol column waiting on the diagonal channel, then wheeling south for the mouth; two missile boats against the north quay. |
+| 1.8 Dry Dock | The L and U shapes, civilians | Missile boats round the corner of the L pier; boats against three walls of the dry dock with the pilot launch in the entrance; a flak frigate at anchor; the Island Belle crossing. |
+| 1.9 The Ring | The O-Ring and the Box | Five escorts circling the seized Island Belle (sink them and she steams clear); missile boats rafted at the fuel pier; the destroyer Cinder and a flak frigate. |
+
+Harbourmaster Ines Duarte joins the cast. The flotilla stands between the city and the river mouth, so Chapter 1 now ends by opening the way for Okafor's convoy in Chapter 2.
+
+### Design checks (Node tests)
+
+- For every group, the intended pattern at the intended angle sinks the whole group in one release, sidesteps included, without touching a civilian.
+- For the angle lessons (the column, the frigate, the L pier, the destroyer), no aim point sinks the whole group with the pattern turned a quarter the wrong way.
+- On the L pier the L has at least four times the sweet spot (aim points that sink all four boats) of any other shape.
+- The O-Ring centred on the ferry sinks the escorts and spares her; two metres off-centre it would hit her, which is what the warning is for.
+- No hull ever overlaps another or a quay over four minutes of every timetable, including its turns and the freed ferry's run to safety.
+
+### Found in review and fixed while building
+
+- **Release on the first frame.** Before the first update the aircraft sat at the world origin, so a release on frame 0 dropped a bomb from ground level straight onto the nearest ships. The flight is now positioned when the mission is built.
+- **Forecast at the edge of reach.** Bomblet drag moved a ring cell 6 cm, from just outside the ferry's reach to just inside it. Civilian checks now keep a margin.
+- **The freed ferry sailed into the destroyer's anchorage.** It now steams to the west roads. A test flies its route against every other timetable.
+- **Pattern reach too generous.** At a 1.7 m bomblet radius any shape fitted a compact group, so the shapes didn't matter. Pattern bomblets are now 1.3 m, with the hit counter guiding the player.
+- **Flak hit wingmen.** Breaking away moved the whole formation into the predicted spot of the aircraft that was locked, so its wingman took the volley. A volley now threatens only its target.
+- **Double releases.** With the slower flight the pipper lingers on a target, and the scripted pilot released a second bomb before the first had landed. The same thing would waste a player's bomb: only the aircraft whose pipper is bright releases, and the next one ripples in only once it is ready.
+
+### Independent review of the harbour update
+
+A separate reviewer read the whole change and reproduced each defect in the browser before reporting it. All of them are fixed and covered by the checks listed in VERIFICATION.md.
+
+| # | Defect | Fix |
+| --- | --- | --- |
+| 1 | Evasion made the pipper's count wrong. It said "4 SINK" over the column where at most 3 could sink, so 1.7's par was impossible and the 1.9 ring often came up short. | Sidesteps are predictable (a fixed direction and distance) and the forecast applies them. Evasion is gentler. A browser check flies a Stick onto the column and an O-Ring onto the ferry, reads the count, releases, and counts what sinks: they match. |
+| 2 | Forecast and live hulls disagreed about heading while ships sailed, by up to 86°, and hulls snapped by up to 179° at the ends of legs. | One heading model for both: turn onto the course early in each leg and onto the next station's heading late, continuously. Sidesteps move a hull without turning it. The 1.9 ring, ferry and frigate were moved so that no turn sweeps across another hull. |
+| 3 | The throttle could no longer dodge flak at the slow speeds, but the briefing and radio still said it could. | The text now says "change lane when it says break". |
+| 4 | Payload keys followed an internal order, not the chips on screen: in 1.9 key 1 chose the last chip. | Keys and tooltips number the chips in the order they appear, card by card. |
+| 5 | A dimmed wingman's pipper over the ferry raised the alarm while the selected pattern was clear. | Every pipper over a civilian turns blue; only the next release raises the alarm. |
+| 6 | The mouse wheel turned the dial once per event: a trackpad spun it round, and sideways scrolls turned it too. | Wheel movement accumulates into one step per notch; sideways scrolling is ignored. |
+| 7 | With a single bomb selected in a harbour, the dial still showed "DRILL F1" and E / C changed an unused floor. | The dial controls a pattern's angle or the Drill floor, and is disabled and labelled accordingly when it has nothing to control. |
+| 8 | On the tick a turn ended, release was allowed but the aircraft had no speed, so the bomb landed short of the pipper. | The aircraft carry their new speed on that tick. |
+| 9 | Reverse just after an edge turn turned the flight straight back out, and the edge turned it round again. | Reverse (and its button) is refused where it would point the flight back past the edge. |
+| 10 | The wingover at the west edge happened under the mission panel. | The landscape camera frames the whole sweep, turns included. |
+| 11 | Hitting the pilot launch was reported as hitting the Island Belle. | Warnings say "civilian", and the debrief names the boat that was hit. |
+| 12 | Freeing the ferry with the last kill played its radio line after the victory line. | Nothing is freed once the mission is decided. |
+
+Smaller notes from the same review were fixed too:
+- turrets turn the short way round;
+- the destroyer's aft turret has one owner;
+- the panel shows the count the instant a bomb drops, and TURNING during turns;
+- the portrait speed arrow points down the screen;
+- decorative gunboats no longer sit past the harbour's south quay, where they could be mistaken for targets;
+- flight panel key hints hide in narrow windows;
+- duplicated CSS is gone;
+- the save migration has a test;
+- a pen tap no longer releases a bomb.
+
+## 11. Controls
 
 | Action | Desktop | Touch |
 | --- | --- | --- |
-| Steer formation (lane / throttle) | W S / A D | Left stick (portrait: the camera looks along the flight path) |
-| Payload, release, salvo | 1–4, Space, X | Payload chips, Release, Salvo |
-| Drill floor, formation spacing | E / C, Q | Floor ladder or ± buttons, spacing button |
+| Steer formation (lane / speed) | W S / A D | Left stick (portrait: the camera looks along the flight path) |
+| Turn the flight round | F | Reverse |
+| Payload, release, salvo | 1–9, Space or a mouse click, X | Payload chips, Release, Salvo |
+| Drill floor or pattern angle, formation spacing | E / C or the mouse wheel, Q | Floor ladder or the dial's arrows, spacing button |
 | Gunboat and helicopter | WASD, pointer aim and fire, 1/2/3 weapons, F flares, hold E winch | Two sticks, weapon and flare buttons, hold Winch |
 | Pause, retry | Esc, R | Top bar |
 

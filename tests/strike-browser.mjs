@@ -14,19 +14,20 @@ export function autopilot() {
     let waitBombs = false;
     let jink = 0,
       jinkDir = 1;
-    for (let step = 0; step < 120 * 300 && g.status === "playing"; step++) {
+    for (let step = 0; step < 120 * 420 && g.status === "playing"; step++) {
       if (step % 6 === 0 && !waitBombs) task = choose();
       steer(task);
-      // Flak counter: when a lock is about to fire, break sideways for a second.
-      const lockIn = Math.min(9, ...op.aa.filter((n) => !n.dead && n.state === "lock").map((n) => n.lock));
-      if (lockIn < 0.35 && jink <= 0) {
+      // Flak counter, as the HUD teaches: break sideways as soon as a lock's solution freezes.
+      const lockIn = Math.min(9, ...op.aa.filter((n) => !n.dead && n.state === "lock").map((n) => (n.solution ? 0 : n.lock)));
+      if (lockIn < 0.05 && jink <= 0) {
         jink = 1;
         jinkDir = op.flight.lateral > 0.5 ? -1 : 1;
       }
       if (jink > 0) {
         jink -= 1 / 120;
         g.input.z = jinkDir;
-      } else if (task && tryRelease(task)) waitBombs = true;
+        // One bomb per task: wait for it to land before judging the next release.
+      } else if (task && !waitBombs && tryRelease(task)) waitBombs = true;
       if (waitBombs && op.bombs.length === 0 && op.combo.timer <= 0) waitBombs = false;
       g.update(1 / 120);
     }
@@ -96,7 +97,8 @@ export function autopilot() {
         if (e.dead || e.state === "fall") continue;
         const member = op.events.find((ev) => ev.group === e.plan.group);
         if (member && !e.hidden && (member.status?.next ?? 0) < 30 && e.state === "route") continue;
-        const key = `${e.cur.b || "street"}:${e.cur.b ? e.cur.f : Math.round(e.position.x / 6)}`;
+        // Walkers in the street are bombed one by one; two passing each other are not a group.
+        const key = e.cur.b ? `${e.cur.b}:${e.cur.f}` : `street:${op.enemies.indexOf(e)}`;
         if (!groups.has(key)) groups.set(key, []);
         groups.get(key).push(e);
       }
@@ -214,7 +216,7 @@ export async function checkStrike(page, check) {
     g.input.x = 1;
     for (let i = 0; i < 120; i++) g.update(1 / 120);
     g.input.x = 0;
-    out.throttle = op.flight.speed > 12;
+    out.throttle = op.flight.speed > window.__TIDELOCK_STRIKE__.FLIGHT.speed + 0.5;
     const used = op.used;
     out.release = op.release("drill") && op.used === used + 1 && op.aircraft[0].payload.drill === 2;
     out.cooldown = !op.release("drill");

@@ -2,7 +2,7 @@ export async function checkRescue(page, browser, url, check, errors) {
   const result = await page.evaluate(() => {
     const { game: g, ui, view } = __TIDELOCK__,
       out = {};
-    ui.start(9);
+    ui.start(12);
     g.time = 180;
     g.update(1 / 120);
     out.noTimerVictory = g.status === "playing" && g.rescue.rescued === 0;
@@ -34,7 +34,7 @@ export async function checkRescue(page, browser, url, check, errors) {
     g.rescue.updateWinch(3);
     out.rescueOnce = g.rescue.rescued === 1 && g.score === score;
     out.requiresReturn = g.status === "playing";
-    ui.start(9);
+    ui.start(12);
     g.weapon = "rocket";
     const point = g.player.position.clone().add({ x: 12, y: -5, z: -12 });
     const ammo = g.rescue.gear.rockets;
@@ -79,7 +79,7 @@ export async function checkRescue(page, browser, url, check, errors) {
     g.collect(rockets);
     out.resupply =
       g.shields.every((v) => v === 3) && g.rescue.gear.rockets === 10;
-    ui.start(11);
+    ui.start(14);
     out.variedEnemies = ["enemy", "cannon", "cave", "aa-truck", "drone"].every(
       (type) => g.entities.some((e) => e.type === type),
     );
@@ -104,7 +104,7 @@ export async function checkRescue(page, browser, url, check, errors) {
   const launchers = await page.evaluate(() => {
     const { game: g, ui } = __TIDELOCK__,
       out = {};
-    ui.start(9);
+    ui.start(12);
     const cave = g.entities.find((e) => e.type === "cave");
     g.entities = [cave];
     cave.phase = "launcher";
@@ -137,7 +137,7 @@ export async function checkRescue(page, browser, url, check, errors) {
     g.damage(cave, 5, true);
     out.caveRewardOnce = g.score === score && g.kills === kills;
 
-    ui.start(9);
+    ui.start(12);
     const truck = g.entities.find((e) => e.type === "aa-truck");
     g.entities = [truck];
     g.player.position.set(truck.position.x, 7.5, truck.position.z + 15);
@@ -155,7 +155,7 @@ export async function checkRescue(page, browser, url, check, errors) {
       g.rescue.update(1 / 120);
     }
     out.truckNeverFiresAgain = !g.projectiles.some((p) => p.hostile);
-    ui.start(9);
+    ui.start(12);
     out.retryRestoresLaunchers =
       g.entities.some((e) => e.type === "cave" && e.phase === "hidden") &&
       g.entities.some(
@@ -170,7 +170,7 @@ export async function checkRescue(page, browser, url, check, errors) {
   for (const [name, value] of Object.entries(launchers))
     check(`launcher ${name}`, value);
 
-  for (const index of [9, 10, 11]) {
+  for (const index of [12, 13, 14]) {
     const sortie = await page.evaluate((index) => {
       const { game: g, ui } = __TIDELOCK__;
       ui.start(index);
@@ -233,13 +233,13 @@ export async function checkRescue(page, browser, url, check, errors) {
       };
     }, index);
     check(
-      `full rescue sortie ${index - 8}: ${sortie.rescued}/${sortie.total}`,
+      `full rescue sortie ${index - 11}: ${sortie.rescued}/${sortie.total}`,
       sortie.status === "success" && sortie.rescued === sortie.total,
     );
   }
 
   await page.evaluate(() => {
-    __TIDELOCK__.ui.start(9);
+    __TIDELOCK__.ui.start(12);
   });
   const followsAim = await page.evaluate(() => {
     const { game: g, ui, view } = __TIDELOCK__;
@@ -250,7 +250,7 @@ export async function checkRescue(page, browser, url, check, errors) {
     view.followPlayer(g.player.position, 0, true);
     ui.updateInput();
     const follows = g.input.aim.z < before.z - 50;
-    ui.start(9);
+    ui.start(12);
     return follows;
   });
   check("held mouse aim follows the moving camera", followsAim);
@@ -284,7 +284,7 @@ export async function checkRescue(page, browser, url, check, errors) {
 
   const visuals = await page.evaluate(() => {
     const { game: g, ui, view } = __TIDELOCK__;
-    ui.start(11);
+    ui.start(14);
     g.paused = true;
     const sample = (x, z, t) => {
       g.player.position.set(x, 7.5, z);
@@ -343,7 +343,7 @@ export async function checkRescue(page, browser, url, check, errors) {
   );
   const fixture = await touch.evaluate(() => {
     const { game: g, ui, view } = __TIDELOCK__;
-    ui.start(9);
+    ui.start(12);
     g.player.position.set(0, 7.5, -26);
     view.followPlayer(g.player.position, 0, true);
     for (const e of g.entities) {
@@ -411,7 +411,7 @@ export async function checkRescue(page, browser, url, check, errors) {
   );
   await touch.evaluate(() => {
     const { game: g, ui } = __TIDELOCK__;
-    ui.start(9);
+    ui.start(12);
     const s = g.rescue.soldiers[0];
     for (const e of g.entities)
       if (!e.friendly && e.type !== "pickup") e.dead = true;
@@ -449,7 +449,7 @@ export async function checkRescue(page, browser, url, check, errors) {
     await touch.setViewportSize(size);
     await touch.evaluate(() => {
       const { ui, game: g, view } = __TIDELOCK__;
-      ui.start(9);
+      ui.start(12);
       g.paused = true;
       ui.updateHUD(true);
       view.render(0);

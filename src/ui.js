@@ -38,9 +38,15 @@ import {
   Check,
   Circle,
   Users,
+  Ellipsis,
+  CornerDownRight,
+  Magnet,
+  CircleDashed,
+  Grid2x2,
+  ArrowLeftRight,
 } from "lucide";
-import { CHAPTERS, MISSIONS, missionNumber, chapterSize, saveResult } from "./data.js";
-import { BOMBS, BOMB_ORDER } from "./strike-data.js";
+import { CHAPTERS, MISSIONS, missionNumber, chapterSize, saveResult, migrateSave } from "./data.js";
+import { BOMBS, BOMB_ORDER, FLIGHT, isPattern } from "./strike-data.js";
 import { CAST, PROLOGUE, CHAPTER_STORY, MISSION_STORY, FINALE, speaker } from "./story.js";
 import { activeBonuses } from "./pickups.js";
 import { RescueHUD } from "./rescue-hud.js";
@@ -85,15 +91,35 @@ const iconSet = {
   Check,
   Circle,
   Users,
+  Ellipsis,
+  CornerDownRight,
+  Magnet,
+  CircleDashed,
+  Grid2x2,
+  ArrowLeftRight,
 };
-const BOMB_ICON = { drill: "drill", scatter: "sparkles", shockwave: "bomb", lance: "locate-fixed" };
+const BOMB_ICON = {
+  drill: "drill",
+  scatter: "sparkles",
+  shockwave: "bomb",
+  lance: "locate-fixed",
+  stick: "ellipsis",
+  ell: "corner-down-right",
+  yoke: "magnet",
+  ring: "circle-dashed",
+  box: "grid-2x2",
+};
 const $ = (id) => document.getElementById(id);
-const SAVE_KEY = "tidelock-v2";
+const SAVE_KEY = "tidelock-v3";
+// v2 saves predate the three harbour missions inserted after mission 1.6 (see migrateSave).
+const LEGACY_KEY = "tidelock-v2";
 export const refreshIcons = () => createIcons({ icons: iconSet, attrs: { "aria-hidden": "true" } });
 
 export function readSave() {
   try {
-    const saved = JSON.parse(localStorage.getItem(SAVE_KEY) || "{}");
+    const current = localStorage.getItem(SAVE_KEY),
+      legacy = localStorage.getItem(LEGACY_KEY);
+    const saved = current ? JSON.parse(current) : legacy ? migrateSave(JSON.parse(legacy)) : {};
     const records = {};
     for (const [key, value] of Object.entries(saved.records || {})) {
       if (
@@ -138,6 +164,21 @@ const COACH = {
   shelter: ["The blue roof is the civilian shelter. Keep every ring off it", "The blue roof is the civilian shelter. Keep every ring off it"],
   lance: ["Lance locked on the cyan ring. Release", "Lance locked on the cyan ring. Release"],
   lanceNone: ["No Lance lock yet. Bring the ring near a truck or a crowd", "No Lance lock yet. Bring the ring near a truck or a crowd"],
+  reverse: ["Missed it? F turns the flight round for another pass", "Missed it? Tap Reverse to turn the flight round"],
+  rotate: [
+    "Turn the Stick with E / C or the mouse wheel until it lies along the column",
+    "Turn the Stick with the arrows until it lies along the column",
+  ],
+  shapes: [
+    "Fit the L to the pier corner and the U to the dry dock. E / C turns the pattern",
+    "Fit the L to the pier corner and the U to the dry dock. The arrows turn the pattern",
+  ],
+  ring: [
+    "Centre the O-Ring on the ferry: the escorts sit on the ring",
+    "Centre the O-Ring on the ferry: the escorts sit on the ring",
+  ],
+  ferry: ["A civilian boat is inside the pattern. Hold your release", "A civilian boat is inside the pattern. Hold your release"],
+  fits: ["That fits. Release with SPACE or a click", "That fits. Tap Release"],
 };
 
 // Assigns markup only when it changed, so HUD refreshes don't rebuild identical DOM.
@@ -274,8 +315,9 @@ export class UI {
       this.strike?.salvo();
     };
     $("formation").onclick = () => this.strike?.toggleFormation();
-    $("floor-up").onclick = () => this.strike?.setFloor(this.strike.floor + 1);
-    $("floor-down").onclick = () => this.strike?.setFloor(this.strike.floor - 1);
+    $("reverse").onclick = () => this.strike?.reverse();
+    $("floor-up").onclick = () => this.dial(1);
+    $("floor-down").onclick = () => this.dial(-1);
     $("settings").onclick = () => this.menu();
     $("pause").onclick = () => this.menu();
     $("resume").onclick = $("menu-close").onclick = () => this.resume();
@@ -352,12 +394,35 @@ export class UI {
       if (e.pointerType !== "touch") this.aim(e.clientX, e.clientY);
     });
     this.view.canvas.addEventListener("pointerdown", (e) => {
-      if (e.button !== 0 || this.game.paused || this.game.chapter === 0) return;
+      if (e.button !== 0 || this.game.paused) return;
+      if (this.game.chapter === 0) {
+        // A mouse click releases. Touch and pen drop with the Release button, so a stray tap on
+        // the map never wastes a bomb.
+        if (e.pointerType !== "mouse" || this.game.status !== "playing") return;
+        this.game.audio.unlock();
+        this.strike?.release();
+        return;
+      }
       this.game.audio.unlock();
       this.aim(e.clientX, e.clientY);
       this.pointerFire = true;
       this.view.canvas.setPointerCapture(e.pointerId);
     });
+    this.view.canvas.addEventListener(
+      "wheel",
+      (e) => {
+        if (!this.strike || this.game.paused || this.game.status !== "playing") return;
+        e.preventDefault();
+        // One step per notch: trackpads send many small deltas, and sideways scrolls none.
+        this.wheel = (this.wheel || 0) + (e.deltaMode === 1 ? e.deltaY * 33 : e.deltaY);
+        while (Math.abs(this.wheel) >= 100) {
+          // Scrolling up raises the floor or turns the pattern clockwise.
+          this.dial(this.wheel < 0 ? 1 : -1);
+          this.wheel -= Math.sign(this.wheel) * 100;
+        }
+      },
+      { passive: false },
+    );
     const release = () => (this.pointerFire = false);
     this.view.canvas.addEventListener("pointerup", release);
     this.view.canvas.addEventListener("pointercancel", release);
@@ -369,6 +434,34 @@ export class UI {
     document.addEventListener("visibilitychange", () => {
       if (document.hidden && this.game.status === "playing" && !this.anyDialog()) this.menu();
     });
+  }
+
+  // The flight panel's dial: the pattern angle while a pattern bomb is selected, else the Drill floor.
+  dial(step) {
+    const strike = this.strike;
+    if (!strike) return;
+    const mode = this.dialMode();
+    if (mode === "angle") strike.rotate(step);
+    else if (mode === "floor") strike.setFloor(strike.floor + step);
+  }
+
+  // What the dial controls: a selected pattern's angle, the Drill floor if the flight carries
+  // Drills, or nothing.
+  dialMode() {
+    const strike = this.strike;
+    if (!strike) return null;
+    if (isPattern(strike.selected)) return "angle";
+    return strike.aircraft.some((a) => a.payload.drill !== undefined) ? "floor" : null;
+  }
+
+  // Payload keys number the bombs in the order their chips appear, card by card.
+  flightKinds() {
+    const strike = this.strike;
+    if (!strike) return [];
+    const kinds = [];
+    for (const a of strike.aircraft)
+      for (const kind of BOMB_ORDER) if (a.payload[kind] !== undefined && !kinds.includes(kind)) kinds.push(kind);
+    return kinds;
   }
 
   anyDialog() {
@@ -400,16 +493,17 @@ export class UI {
     this.keys.add(code);
     if (e.repeat) return;
     if (code === "KeyR") return this.start(this.game.index);
-    const digit = +(/^(?:Digit|Numpad)([1-4])$/.exec(code)?.[1] || 0);
+    const digit = +(/^(?:Digit|Numpad)([1-9])$/.exec(code)?.[1] || 0);
     const strike = this.strike;
     if (strike) {
-      const pick = BOMB_ORDER[digit - 1];
+      const pick = this.flightKinds()[digit - 1];
       if (pick) strike.select(pick);
       if (code === "Space") strike.release();
       if (code === "KeyX") strike.salvo();
       if (code === "KeyQ") strike.toggleFormation();
-      if (code === "KeyE") strike.setFloor(strike.floor + 1);
-      if (code === "KeyC") strike.setFloor(strike.floor - 1);
+      if (code === "KeyF") strike.reverse();
+      if (code === "KeyE") this.dial(1);
+      if (code === "KeyC") this.dial(-1);
       return;
     }
     if (digit) this.weapon(["gun", "rocket", "guided"][digit - 1] || this.game.weapon);
@@ -575,15 +669,18 @@ export class UI {
     const drill = Boolean(op?.aircraft.some((a) => a.payload.drill !== undefined));
     const flight = (op?.aircraft.length || 0) > 1;
     const kinds = new Set(op ? op.aircraft.flatMap((a) => Object.keys(a.payload)) : []);
+    const pattern = [...kinds].some(isPattern);
     const keys = [
       [
         ["W / S", "Steer the formation"],
-        ["A / D", "Throttle"],
-        kinds.size > 1 && ["1-4", "Payload"],
-        ["SPACE", "Release"],
+        ["A / D", "Speed"],
+        ["F", "Reverse"],
+        kinds.size > 1 && [`1-${kinds.size}`, "Payload"],
+        ["SPACE / CLICK", "Release"],
         flight && ["X", "Salvo"],
         flight && ["Q", "Formation spacing"],
         drill && ["E / C", "Drill floor"],
+        pattern && ["E / C / WHEEL", "Turn the pattern"],
       ],
       [
         ["WASD", "Steer Marlin"],
@@ -600,11 +697,13 @@ export class UI {
     ];
     const touch = [
       [
-        ["STICK", "Steer and throttle"],
+        ["STICK", "Steer and speed"],
+        ["REVERSE", "Turn the flight round"],
         kinds.size > 1 && ["CARDS", "Tap a payload"],
         ["RELEASE", "Drop the payload"],
         flight && ["SALVO", "Every aircraft at once"],
         drill && ["LADDER", "Tap a floor for the Drill"],
+        pattern && ["ARROWS", "Turn the pattern"],
       ],
       [
         ["LEFT STICK", "Steer Marlin"],
@@ -730,8 +829,11 @@ export class UI {
     // Progressive HUD: Drill floor, salvo and formation controls only appear when this flight can use them.
     const flight = c === 0 ? this.game.op.aircraft : [];
     const drill = flight.some((a) => a.payload.drill !== undefined);
-    $("floor-control").hidden = !drill;
+    const pattern = flight.some((a) => Object.keys(a.payload).some(isPattern));
+    $("floor-control").hidden = !drill && !pattern;
     $("ladder").classList.toggle("no-drill", !drill);
+    $("ladder").classList.toggle("pattern-mode", c === 0 && Boolean(this.game.op.fleet));
+    this.patternKey = null;
     $("salvo").hidden = $("formation").hidden = flight.length < 2;
     $("coach").hidden = true;
     this.coachKey = null;
@@ -766,13 +868,14 @@ export class UI {
 
   buildFlightCards() {
     const op = this.game.op;
+    const keys = this.flightKinds();
     $("flight-cards").innerHTML = op.aircraft
       .map((a) => {
         const cast = CAST[a.crew] || CAST.iona;
         const chips = BOMB_ORDER.filter((kind) => a.payload[kind] !== undefined)
           .map(
             (kind) =>
-              `<button class="bomb-chip" data-bomb="${kind}" style="--bomb:${BOMBS[kind].css}" title="${BOMBS[kind].name}: ${BOMBS[kind].summary} (${BOMB_ORDER.indexOf(kind) + 1})"><i data-lucide="${BOMB_ICON[kind]}"></i><span>${BOMBS[kind].name}</span><strong>0</strong></button>`,
+              `<button class="bomb-chip" data-bomb="${kind}" style="--bomb:${BOMBS[kind].css}" title="${BOMBS[kind].name}: ${BOMBS[kind].summary} (${keys.indexOf(kind) + 1})"><i data-lucide="${BOMB_ICON[kind]}"></i><span>${BOMBS[kind].name}</span><strong>0</strong></button>`,
           )
           .join("");
         return `<div class="flight-card" data-aircraft="${a.index}" style="--tone:${["#ffc62b", "#ff8a6b", "#33d69f"][a.index]}"><div class="card-head"><i data-lucide="plane"></i><b>${escape(a.callsign)}</b><span class="hp"></span></div><div class="chips">${chips}</div><small>${escape(cast.name)}</small></div>`;
@@ -821,6 +924,7 @@ export class UI {
     return (
       {
         shelter: "A bomb struck the civilian shelter and the strike was aborted. Keep every pipper off the blue roof.",
+        ferry: `A bomb struck the ${this.game.op?.abortedBy || "Island Belle"} and the strike was aborted. When the pattern turns blue, a civilian boat is inside it: hold your release.`,
         flight: "Kestrel Flight was shot down. Silence the flak first and change lane when a red lock line appears.",
         barges: "Both barges sank before reaching the lock. Shield them with Marlin and steer them clear of mines.",
       }[result.reason] || story.failure
@@ -898,10 +1002,11 @@ export class UI {
   }
 
   updateStrike(op) {
-    const left = op.left.enemies + op.left.aa + op.left.masts + op.left.trucks;
+    const left = op.left.enemies + op.left.aa + op.left.masts + op.left.trucks + (op.left.ships || 0);
     $("objective-count").textContent = String(left).padStart(2, "0");
     const parts = [
       op.left.enemies && `${op.left.enemies} HOSTILES`,
+      op.left.ships && `${op.left.ships} SHIPS`,
       op.left.aa && `${op.left.aa} FLAK`,
       op.left.masts && `${op.left.masts} JAMMER`,
       op.left.trucks && `${op.left.trucks} TRUCKS`,
@@ -922,20 +1027,34 @@ export class UI {
         chip.classList.toggle("selected", kind === op.selected && a.payload[kind] > 0);
       });
     });
-    $("floor-value").textContent = `F${op.floor}`;
+    // The dial reads the pattern angle while a pattern bomb is selected, else the Drill floor.
+    const pattern = op.pattern;
+    const mode = this.dialMode();
+    $("floor-kind").textContent = mode === "angle" ? "ANGLE" : "DRILL";
+    $("floor-value").textContent = mode === "angle" ? `${pattern?.angle ?? 0}°` : mode === "floor" ? `F${op.floor}` : "–";
+    $("floor-control").classList.toggle("angle", mode === "angle");
+    $("floor-control").setAttribute("aria-label", mode === "angle" ? "Pattern angle" : "Drill detonation floor");
+    $("floor-up").disabled = $("floor-down").disabled = !mode;
     $("formation-label").textContent = op.wide ? "WIDE" : "TIGHT";
-    $("speed-value").textContent = `${Math.round((op.speed / 10) * 100)}%`;
+    // In the portrait camera the flight runs down the screen flying east.
+    const arrow = this.view.strikePortrait ? (op.dir > 0 ? "↓" : "↑") : op.dir > 0 ? "→" : "←";
+    $("speed-value").textContent = `${arrow} ${Math.round((op.speed / FLIGHT.speed) * 100)}%`;
+    $("reverse").disabled = !op.reversible;
     const ready = op.phase === "pass" && this.game.status === "playing";
     const any = op.aircraft.some((a) => a.alive && Object.values(a.payload).some((n) => n > 0));
     $("drop").disabled = !ready || !any;
     $("salvo").disabled = !ready || !any;
     $("drop-label").textContent = ready ? `Release ${BOMBS[op.selected]?.name || ""}` : `Turning ${Math.max(0, op.turn).toFixed(1)}s`;
-    const events = op.events.filter((e) => e.alive > 0);
+    // The most urgent first: gatherings on now, then the soonest. CSS shows as many as fit.
+    const events = op.events.filter((e) => e.alive > 0).sort((a, b) => b.active - a.active || a.next - b.next);
     const intelKey = events.map((e) => e.label).join("|");
     if (intelKey !== this.intelKey) {
       this.intelKey = intelKey;
       $("intel").innerHTML = events
-        .map((e) => `<div class="intel-chip"><i data-lucide="users"></i><b>${escape(e.label)}</b><span>${escape(e.place)}</span><strong></strong></div>`)
+        .map(
+          (e) =>
+            `<div class="intel-chip"><i data-lucide="${e.id ? "ship" : "users"}"></i><b>${escape(e.label)}</b><span>${escape(e.place)}</span><strong></strong></div>`,
+        )
         .join("");
       refreshIcons();
     }
@@ -967,6 +1086,7 @@ export class UI {
       $("coach").hidden = !coach;
       $("coach").classList.toggle("go", op.hint === "release" || op.hint === "lance");
     }
+    if (op.harbour) return this.updatePattern(op);
     const ladder = op.ladder;
     $("ladder").classList.toggle("empty", !ladder);
     $("ladder-name").textContent = ladder ? `${ladder.name}${ladder.kind === "shelter" ? " / NO STRIKE" : ""}` : "PIPPER ON OPEN GROUND";
@@ -989,6 +1109,35 @@ export class UI {
         const em = row.querySelector("em");
         if (em.textContent !== marks) em.textContent = marks;
       });
+  }
+
+  // Harbour missions: the ladder panel shows the selected pattern, its angle and what it would hit.
+  updatePattern(op) {
+    const p = op.pattern;
+    const panel = $("ladder");
+    panel.classList.remove("empty");
+    panel.classList.toggle("shelter", Boolean(p?.civilian || op.shelter));
+    $("ladder-name").textContent = p ? `${p.name.toUpperCase()} / ${p.angle}°` : `${(BOMBS[op.selected]?.name || "").toUpperCase()}`;
+    const key = p ? `${p.kind}|${p.angle}` : op.selected;
+    if (key !== this.patternKey) {
+      this.patternKey = key;
+      const color = BOMBS[op.selected]?.css || "#fff";
+      const cells = p?.diagram || [{ x: 0, z: 0 }];
+      const span = Math.max(3, ...cells.map((c) => Math.max(Math.abs(c.x), Math.abs(c.z)))) + 0.9;
+      const dots = cells
+        .map((c) => `<circle cx="${c.x.toFixed(2)}" cy="${c.z.toFixed(2)}" r="0.55" fill="${color}"/>`)
+        .join("");
+      $("ladder-floors").innerHTML = `<svg class="pattern-diagram" viewBox="${-span} ${-span} ${span * 2} ${span * 2}" role="img" aria-label="${escape(p ? `${p.name} at ${p.angle} degrees` : BOMBS[op.selected]?.name || "")}"><circle cx="0" cy="0" r="0.22" fill="#ffffff" opacity="0.8"/>${dots}</svg><p class="pattern-count"></p>`;
+    }
+    const count = $("ladder-floors").querySelector(".pattern-count");
+    let text;
+    if (op.phase !== "pass") text = "TURNING";
+    else if (!p) text = "Single bomb";
+    else if (p.civilian) text = "CIVILIAN IN THE PATTERN";
+    else if (p.hits) text = `${p.hits} ON TARGET${p.sinks ? ` / ${p.sinks} SINK` : ""}`;
+    else text = "NO SHIPS UNDER IT";
+    if (count && count.textContent !== text) count.textContent = text;
+    count?.classList.toggle("hot", Boolean(p && p.sinks && !p.civilian));
   }
 
   updateRiver(state, op) {

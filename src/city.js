@@ -139,10 +139,12 @@ export class CityView {
     view.level.add(this.group);
     this.decor = new Map();
     this.props = new Map();
-    this.buildGround();
+    // Harbour missions stand quays, piers and a dry dock in open water instead of a paved district.
+    if (layout.harbour) this.buildHarbour(layout.harbour);
+    else this.buildGround();
     this.buildBlocks();
     this.buildDecor();
-    this.buildStreetLife();
+    if (!layout.harbour) this.buildStreetLife();
     this.flushDecor();
     this.flushProps();
     this.band = new THREE.Mesh(
@@ -219,6 +221,59 @@ export class CityView {
     for (const plaza of this.layout.plazas || []) this.buildPlaza(plaza);
   }
 
+  buildHarbour(harbour) {
+    const top = CITY.ground;
+    for (const [x0, z0, x1, z1] of harbour.land) {
+      const w = x1 - x0,
+        d = z1 - z0,
+        cx = (x0 + x1) / 2,
+        cz = (z0 + z1) / 2;
+      // Stone sea wall, warm paving and a bright kerb so every quay edge reads against the water.
+      this.box(V(cx, top - 1.4, cz), V(w, 2.8, d), 0xb5794f);
+      this.box(V(cx, top - 0.04, cz), V(w - 0.2, 0.1, d - 0.2), 0xf0d7aa);
+      for (const [ex, ez, ew, ed] of [
+        [cx, z0 + 0.25, w, 0.5],
+        [cx, z1 - 0.25, w, 0.5],
+        [x0 + 0.25, cz, 0.5, d],
+        [x1 - 0.25, cz, 0.5, d],
+      ])
+        this.box(V(ex, top + 0.06, ez), V(ew, 0.14, ed), 0xffd166);
+      // Bollards along the long sides.
+      const long = w >= d;
+      const span = long ? w : d;
+      for (let t = 1.5; t < span - 1; t += 4) {
+        const bx = long ? x0 + t : x0 + 0.6,
+          bz = long ? z1 - 0.6 : z0 + t;
+        this.box(V(bx, top + 0.28, bz), V(0.36, 0.5, 0.36), 0x3a4048);
+      }
+    }
+    const dock = harbour.dock;
+    if (dock) {
+      // The dry dock's floor shows through shallow water; a gate sill marks its open end.
+      const cx = (dock.x0 + dock.x1) / 2,
+        cz = (dock.z0 + dock.z1) / 2;
+      this.box(V(cx, -1.3, cz), V(dock.x1 - dock.x0, 0.2, dock.z1 - dock.z0), 0x8fd0c8);
+      for (let x = dock.x0 + 1; x < dock.x1; x += 2)
+        this.box(V(x, -0.2, dock.z1 + 0.3), V(1.2, 0.3, 0.5), x % 4 < 2 ? 0xffcc1f : 0x2f2c35);
+    }
+    for (const b of harbour.buoys || []) this.prop("buoy", V(b.x, 0, b.z), 1, 0);
+    for (const c of harbour.cranes || []) this.prop("harbour-crane", V(c.x, top, c.z), 1, ((c.heading || 0) * Math.PI) / 180);
+    for (const c of harbour.containers || []) this.prop("container-stack", V(c.x, top, c.z), 1, (c.x * 0.37) % 0.4);
+    const mouth = harbour.mouth;
+    if (mouth)
+      // Harbour-mouth lights: red to port, green to starboard.
+      for (const [dx, color] of [
+        [-3.2, 0xff4b2b],
+        [3.2, 0x33d69f],
+      ]) {
+        this.box(V(mouth.x + dx, 1.1, mouth.z), V(0.9, 2.2, 0.9), 0xf7f1e1);
+        this.box(V(mouth.x + dx, 2.4, mouth.z), V(0.7, 0.5, 0.7), color);
+      }
+    for (const [x0, z0, x1, z1] of harbour.land)
+      for (let x = x0 + 2.5; x < x1 - 2; x += 9 + this.random() * 5)
+        if (z1 - z0 > 5 && this.random() < 0.6) this.prop("streetlight", V(x, top, z1 - 1.2), 0.85, 0);
+  }
+
   lines() {
     const avenues = [],
       streets = [];
@@ -267,7 +322,8 @@ export class CityView {
 
   flushProps() {
     for (const [name, placements] of this.props)
-      this.view.instances(name, placements, this.group, name === "car" ? { paint: "Car paint" } : {});
+      if (this.view.assets.has(name))
+        this.view.instances(name, placements, this.group, name === "car" ? { paint: "Car paint" } : {});
     this.props.clear();
   }
 

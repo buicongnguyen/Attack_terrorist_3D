@@ -584,8 +584,70 @@ html[data-touch="true"] .touch-only {
 html[data-touch="true"] .keys-only {
   display: none !important;
 }
-#ladder.no-drill .ladder-hint {
+/* Intel chips beyond the most urgent ones would crowd the top of the screen. */
+.intel-chip:nth-child(n + 3) {
   display: none;
+}
+@media (max-width: 700px), (orientation: landscape) and (max-height: 520px) {
+  .intel-chip:nth-child(n + 2) {
+    display: none;
+  }
+}
+#reverse {
+  height: 46px;
+}
+@media (max-width: 900px), (orientation: landscape) and (max-height: 520px) {
+  #reverse span {
+    display: none;
+  }
+  #reverse {
+    height: auto;
+    align-self: stretch;
+  }
+}
+#ladder.no-drill .ladder-hint,
+#ladder.pattern-mode .ladder-hint {
+  display: none;
+}
+/* Harbour missions: the ladder panel becomes the pattern panel. */
+.pattern-diagram {
+  display: block;
+  width: 100%;
+  max-width: 112px;
+  /* Icons share a fixed 19 px svg size; the diagram is square instead. */
+  height: auto;
+  aspect-ratio: 1;
+  margin: 2px auto 0;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 12px;
+}
+.pattern-count {
+  margin: 6px 0 0;
+  font-size: 11px;
+  font-weight: 700;
+  text-align: center;
+  color: #cfe0ff;
+}
+.pattern-count.hot {
+  color: var(--gold);
+}
+#ladder.pattern-mode.shelter .pattern-count {
+  color: #7fd8ff;
+}
+.floor-control.angle {
+  background: rgba(111, 155, 255, 0.16);
+  border-color: rgba(111, 155, 255, 0.7);
+}
+.floor-control.angle small {
+  color: #bcd0ff;
+}
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
 }
 #loading-retry {
   margin-top: 18px;
@@ -2290,6 +2352,73 @@ html[data-touch="true"] kbd {
   }
 }
 
+/* Portrait phones: the stick and ladder ride just above the flight panel, whatever its height. */
+@media (max-width: 700px) and (orientation: portrait) {
+  .pattern-diagram {
+    max-width: 58px;
+  }
+  .pattern-count {
+    margin-top: 3px;
+    font-size: 10px;
+  }
+  html[data-touch="true"] body[data-chapter="0"] #move-stick,
+  #ladder,
+  body[data-chapter="0"] #ladder {
+    bottom: calc(var(--panel-clear, 130px) + 8px);
+  }
+  #intel {
+    max-width: calc(100vw - 196px);
+  }
+  .intel-chip {
+    max-width: 100%;
+    min-width: 0;
+  }
+  .intel-chip b {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+}
+/* Short portrait phones (320 x 568): smaller callouts, and the coach steps aside while the radio talks. */
+@media (max-width: 380px) and (max-height: 600px) and (orientation: portrait) {
+  #coach,
+  #flak-warning {
+    font-size: 10.5px;
+    padding: 4px 8px;
+    line-height: 1.25;
+  }
+  body:has(#comms > .radio-line) #coach {
+    display: none !important;
+  }
+}
+/* Phones up to 430 px wide: the two control rows stack, so Reverse, Salvo and Release fit. */
+@media (max-width: 430px) {
+  .flight-controls {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .flight-controls .flight-row {
+    width: 100%;
+  }
+  .flight-controls .flight-row:last-child #drop {
+    flex: 1;
+  }
+}
+@media (orientation: landscape) and (max-height: 520px) {
+  .pattern-diagram {
+    max-width: 44px;
+  }
+  .pattern-count {
+    margin-top: 2px;
+    font-size: 9px;
+  }
+}
+/* Narrow windows without touch still show key hints; inside the flight panel they don't fit. */
+@media (max-width: 700px) {
+  #flight-panel kbd {
+    display: none;
+  }
+}
 /* Coach and flak callouts. Narrow windows and touch tablets: above the flight panel and the sticks. */
 @media (max-width: 900px) {
   #coach,
@@ -2302,10 +2431,13 @@ html[data-touch="true"] kbd {
 }
 @media (min-width: 701px) and (max-width: 900px) {
   #drop {
-    min-width: 150px;
+    min-width: 120px;
   }
   #salvo {
     min-width: 0;
+  }
+  #salvo span {
+    display: none;
   }
   .speed-readout {
     display: none;

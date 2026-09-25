@@ -27,6 +27,7 @@ import {
   strikeStars,
   formationSlots,
   FLIGHT,
+  turnPoint,
 } from "../src/strike-data.js";
 
 const distance3 = (a, b) => Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z);
@@ -36,8 +37,8 @@ const setup = (i) => {
   return { layout, buildings, blocks: buildBlocks(buildings) };
 };
 
-test("six strike missions, each winnable within its ordnance and teaching one new idea", () => {
-  assert.equal(STRIKE_MISSIONS.length, 6);
+test("nine strike missions, each winnable within its ordnance and teaching one new idea", () => {
+  assert.equal(STRIKE_MISSIONS.length, 9);
   for (const layout of STRIKE_MISSIONS) {
     const total = payloadTotal(layout.aircraft);
     assert.ok(layout.par <= total, "par must not exceed the payload");
@@ -51,6 +52,10 @@ test("six strike missions, each winnable within its ordnance and teaching one ne
   assert.ok(STRIKE_MISSIONS[3].aa.length === 2 && STRIKE_MISSIONS[3].aircraft.length === 3);
   assert.ok(STRIKE_MISSIONS[4].alert > 0 && STRIKE_MISSIONS[4].buildings.some((b) => b.kind === "shelter"));
   assert.ok(STRIKE_MISSIONS[5].convoy && STRIKE_MISSIONS[5].aircraft[0].payload.lance);
+  // Then the harbour: the Stick, the L and U shapes, the O-Ring and Box.
+  assert.ok(STRIKE_MISSIONS[6].aircraft.every((a) => a.payload.stick));
+  assert.ok(STRIKE_MISSIONS[7].aircraft.some((a) => a.payload.ell) && STRIKE_MISSIONS[7].aircraft.some((a) => a.payload.yoke));
+  assert.ok(STRIKE_MISSIONS[8].aircraft.some((a) => a.payload.ring) && STRIKE_MISSIONS[8].aircraft.some((a) => a.payload.box));
 });
 
 test("scheduled patrols converge on every rally point, cycle after cycle", () => {
@@ -259,16 +264,18 @@ test("someone standing on a slab can still be seen from the room above it", () =
   assert.ok(lineBlocked(blocks, buildings, blast, { ...feet, y: slab.min[1] - 0.3 }));
 });
 
-test("gatherings outlast a pass: any pass at normal speed can reach an open rally window", () => {
-  for (const layout of STRIKE_MISSIONS) {
-    // One full cycle: approach, cross the district, egress at the boosted speed, turn back.
-    const edge = (layout.cols * CITY.pitch) / 2 + 2;
-    const cycle =
-      (-edge - FLIGHT.entryX) / FLIGHT.speed +
-      (2 * edge) / FLIGHT.speed +
-      (FLIGHT.exitX - edge) / (FLIGHT.speed + FLIGHT.egress) +
-      FLIGHT.turnTime;
+test("gatherings outlast the worst wait: with Reverse the pipper reaches any point well inside the window", () => {
+  // The pipper leads the aircraft by the distance a bomb carries forward as it falls. A point the pipper
+  // has just passed takes, at worst, a Reverse, a short run back and a second Reverse to cover again.
+  const fall = Math.sqrt((2 * FLIGHT.altitude) / 9.81);
+  const lead = FLIGHT.speed * fall;
+  const worst = 2 * FLIGHT.turnTime + (2 * lead) / FLIGHT.speed;
+  // Steering across half the district to the right lane happens in parallel and takes about as long.
+  const crossing = (1.5 * CITY.pitch) / FLIGHT.lateral + 1;
+  for (const layout of STRIKE_MISSIONS)
     for (const group of layout.groups.filter((g) => g.kind === "rally"))
-      assert.ok(group.stay >= cycle, `${group.label} stays ${group.stay}s, a pass cycle takes ${cycle.toFixed(1)}s`);
-  }
+      assert.ok(group.stay >= Math.max(worst, crossing) + 6, `${group.label} stays ${group.stay}s, the worst wait is ${worst.toFixed(1)}s`);
+  // The flight turns round a margin past the district edge, so every pass sweeps the whole district.
+  const layout = STRIKE_MISSIONS[5];
+  assert.ok(turnPoint(layout) - lead > (layout.cols * CITY.pitch) / 2, "the pipper clears the far edge before the turn");
 });
