@@ -42,6 +42,7 @@ export class RiverOperation {
     this.boss = null;
     this.bargeDamage = 0;
     this.blocked = 0;
+    this.combo = { count: 0, timer: 0 };
   }
 
   say(key) {
@@ -81,6 +82,13 @@ export class RiverOperation {
     this.game.view.level.add(line);
     this.lines.push(line);
     return line;
+  }
+
+  dropLine(e) {
+    if (!e.line) return;
+    this.lines = this.lines.filter((line) => line !== e.line);
+    this.game.view.disposeObject(e.line);
+    e.line = null;
   }
 
   pointLine(line, from, to) {
@@ -220,6 +228,8 @@ export class RiverOperation {
         scrolling: true,
         cooldown: 2 + (s > 0 ? cfg.shellEvery / 2 : 0),
         lift: 5.6,
+        hitLifts: [1.8, 4, 5.6],
+        hitRadius: 2.2,
       });
       tower.turret = turretNode(tower.mesh);
       tower.warning = view.ring(V(0, 0.1, 0), 2.6, 0xff3b3b, 0.18, tower.mesh);
@@ -240,7 +250,6 @@ export class RiverOperation {
     generator.bubble.userData.disposable = true;
     generator.mesh.add(generator.bubble);
     this.boss = { gate, towers, generator, phase: "approach", open: 0, wave: cfg.waveEvery * 0.6 };
-    g.notify("checkpoint", "HIGHWATER LOCK");
   }
 
   // ------------------------------------------------------------------ update
@@ -281,6 +290,10 @@ export class RiverOperation {
         g.supportCooldown = 0.7;
       }
     }
+    if (this.combo.timer > 0) {
+      this.combo.timer -= dt;
+      if (this.combo.timer <= 0) this.closeCombo();
+    }
     this.updateBarges(dt);
     this.updateEntities(dt, flow);
     this.updateSkiffs(dt);
@@ -289,9 +302,21 @@ export class RiverOperation {
     if (g.status !== "playing") return;
     if (!this.barges.some((b) => b.alive)) g.finish(false, "barges");
     else if (this.distance >= this.data.length && (!this.boss || this.boss.phase === "open")) {
+      this.closeCombo();
       this.say("success");
       g.finish(true);
     }
+  }
+
+  // Kills that land within a second of each other chain into one combo worth n² x 30.
+  closeCombo() {
+    const n = this.combo.count;
+    this.combo.count = 0;
+    this.combo.timer = 0;
+    if (n < 2) return;
+    const bonus = n * n * 30;
+    this.game.score += bonus;
+    this.game.notify("combo", { count: n, bonus });
   }
 
   updateBarges(dt) {
@@ -377,6 +402,7 @@ export class RiverOperation {
       e.age += dt;
       if (e.position.z > RIVER.despawnZ && e.type !== "skiff") {
         e.dead = true;
+        this.dropLine(e);
         g.view.disposeObject(e.mesh);
         continue;
       }
@@ -479,6 +505,7 @@ export class RiverOperation {
       const p = skiffPath({ ...e.order, index: e.slot }, t);
       if (p.done || (e.order.pattern !== "column" && p.z > RIVER.despawnZ + 6)) {
         e.dead = true;
+        this.dropLine(e);
         g.view.disposeObject(e.mesh);
         continue;
       }
@@ -490,6 +517,12 @@ export class RiverOperation {
         const ring = g.view.ring(V(p.x, 0.11, p.z), 0.4, 0xffffff, 0.08);
         g.effects.push({ mesh: ring, life: 0.9, maxLife: 0.9, ring: true, growth: 2 });
       }
+      const ram = this.barges.find((b) => b.alive && Math.hypot(b.position.x - p.x, b.position.z - p.z) < 2.2);
+      if (ram) {
+        this.hurtBarge(ram, 3, e.position.clone());
+        g.kill(e, false);
+        continue;
+      }
       e.cooldown -= dt;
       const origin = e.position.clone().add(V(0, 0.9, 0));
       if (this.aimAt(e, origin, SKIFF.aim, (from, to) => g.spawnShot(from, to, false, true, null, e.target))) continue;
@@ -499,11 +532,6 @@ export class RiverOperation {
         e.aim = SKIFF.aim;
         e.cooldown = SKIFF.fireEvery;
       }
-      for (const barge of this.barges)
-        if (barge.alive && Math.hypot(barge.position.x - p.x, barge.position.z - p.z) < 2.2) {
-          this.hurtBarge(barge, 3, e.position.clone());
-          g.damage(e, 5);
-        }
     }
     this.orders = this.orders.filter((o) => {
       const alive = g.entities.some((e) => e.type === "skiff" && !e.dead && e.order === o);
@@ -519,7 +547,7 @@ export class RiverOperation {
     if (boss.phase === "approach" && boss.gate.position.z >= -24) {
       boss.phase = "towers";
       this.holding = true;
-      this.say("start");
+      this.say("hold");
     }
     if (boss.phase === "towers" || boss.phase === "generator") {
       boss.wave -= dt;
@@ -527,7 +555,8 @@ export class RiverOperation {
         boss.wave = cfg.waveEvery;
         // Boss waves alternate banks, so the fight is learnable rather than random.
         boss.waves = (boss.waves || 0) + 1;
-        this.spawn({ type: "skiffs", pattern: "column", count: 2, x: boss.waves % 2 ? -7 : 7 });
+        // They slip out of the bank channels beside the towers and pincer in front of the barges.
+        this.spawn({ type: "skiffs", pattern: "pincer", count: 4, meet: { x: boss.waves % 2 ? -3 : 3, z: -4 }, delay: 5 });
       }
       for (const tower of boss.towers) {
         if (tower.dead) continue;
@@ -567,6 +596,8 @@ export class RiverOperation {
       if (boss.open >= 1) {
         boss.phase = "open";
         this.holding = false;
+        // Highwater's medal floats out through the open gate for Marlin to pick up.
+        this.game.spawnPickup(boss.gate.position.z + 3, "medal", 0);
       }
     }
     if (!boss.generator.dead) boss.generator.mesh.rotation.y += dt * 1.5;
@@ -584,6 +615,7 @@ export class RiverOperation {
   }
 
   onBlocked(shot) {
+    if (this.game.status !== "playing") return;
     if (shot.aimedAt?.kind === "barge") {
       this.blocked++;
       this.game.score += 20;
@@ -591,8 +623,13 @@ export class RiverOperation {
     }
   }
 
-  onKill(e) {
+  onKill(e, reward = true) {
     const g = this.game;
+    this.dropLine(e);
+    if (reward && g.status === "playing") {
+      this.combo.count++;
+      this.combo.timer = 1;
+    }
     if (e.type === "drums" || e.type === "crate") {
       const radius = e.type === "crate" ? 8 : 5.6;
       g.blast(e.position.clone().add(V(0, 0.6, 0)), radius, 0xff8a2b);
@@ -610,8 +647,6 @@ export class RiverOperation {
         g.notify("toast", "BRIDGE AMBUSH BROKEN");
       }
       if (chain) this.say("drums");
-      if (chain >= 2) g.notify("combo", { count: chain, bonus: chain * chain * 30 });
-      g.score += chain >= 2 ? chain * chain * 30 : 0;
     }
     if (e.type === "skiff") {
       g.blast(e.position.clone().add(V(0, 0.4, 0)), SKIFF.chain, 0xff8a2b, { quiet: true });

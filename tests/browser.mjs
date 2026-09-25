@@ -84,6 +84,17 @@ try {
   await page.keyboard.press("e");
   await page.keyboard.press("e");
   check("E raises the drill floor", await page.evaluate(() => __TIDELOCK__.game.op.floor === 3));
+  // Gameplay keys follow the physical layout: AZERTY's Z sits where QWERTY's W is.
+  const azerty = await page.evaluate(() => {
+    const { ui, game: g } = __TIDELOCK__;
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "z", code: "KeyW" }));
+    ui.updateInput();
+    const held = g.input.z;
+    window.dispatchEvent(new KeyboardEvent("keyup", { key: "z", code: "KeyW" }));
+    ui.updateInput();
+    return held === -1 && g.input.z === 0;
+  });
+  check("keys follow the physical layout (AZERTY Z steers like W)", azerty);
 
   // ---------------------------------------------------------------- results and debrief
   const debrief = await page.evaluate(() => {
@@ -114,8 +125,16 @@ try {
       criteria: document.querySelectorAll("#result-criteria li").length,
       met: document.querySelectorAll("#result-criteria li.met").length,
       next: document.getElementById("result-next").textContent.includes("Next mission"),
+      focus: document.activeElement?.id === "result-next",
+      heldSpace: (() => {
+        const held = new KeyboardEvent("keydown", { key: " ", code: "Space", repeat: true, cancelable: true });
+        window.dispatchEvent(held);
+        return held.defaultPrevented && document.getElementById("result-dialog").open;
+      })(),
     };
   });
+  check("the result dialog focuses its main action", victory.focus);
+  check("a held Space from the last release cannot click through the result", victory.heldSpace);
   check("clearing every target wins with three star criteria", victory.status === "success" && victory.criteria === 3 && victory.met >= 2 && victory.next);
   await page.evaluate(() => {
     __TIDELOCK__.ui.start(0);
@@ -132,6 +151,16 @@ try {
     return g.time === t;
   });
   check("mission control pauses the simulation", pause);
+  check(
+    "the Reduced motion setting stills the HUD",
+    await page.evaluate(() => {
+      const box = document.getElementById("reduced-motion");
+      box.click();
+      const on = document.documentElement.dataset.reducedMotion === "true";
+      box.click();
+      return on && document.documentElement.dataset.reducedMotion === "false";
+    }),
+  );
   await page.evaluate(() => __TIDELOCK__.ui.resume());
 
   // A long press on a ladder floor still selects it (the HUD refreshes every 80 ms).

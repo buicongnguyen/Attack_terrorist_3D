@@ -22,6 +22,9 @@ import {
   blocksNear,
   lineBlocked,
   surfaceBelow,
+  burstGround,
+  DRILL_SLOWDOWN,
+  STEP,
   scatterPattern,
   scatterCentre,
   shelterStruck,
@@ -36,7 +39,7 @@ import {
   lerp3,
 } from "./strike-data.js";
 import { CityView } from "./city.js";
-import { MISSION_STORY } from "./story.js";
+import { MISSION_STORY, STRIKE_RADIO } from "./story.js";
 import { clamp } from "./physics.js";
 
 const V = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
@@ -44,7 +47,9 @@ const forward = V(0, 0, -1);
 const LIVERY = ["#ffc62b", "#ff8a6b", "#33d69f"];
 const HIDE_SECONDS = 12;
 // Flak telegraphs for 1.5 s; one volley can hurt an aircraft at most once.
-const FLAK = { range: 13, lock: 1.5, speed: 34, burst: 2.1, cooldown: 3.8, grace: 3.5 };
+// The fire solution freezes `solution` seconds before the shot: a lane or throttle change after
+// that moment (the HUD shows BREAK) throws the volley off.
+const FLAK = { range: 13, lock: 1.5, solution: 0.6, speed: 34, burst: 2.1, cooldown: 3.8, grace: 3.5 };
 
 const markerCache = new Map();
 function markerMaterial(kind) {
@@ -77,6 +82,18 @@ function markerMaterial(kind) {
   });
   markerCache.set(kind, material);
   return material;
+}
+
+// Steer a guided bomb toward `aim`: match the horizontal speed needed to arrive as it falls.
+function guide(s, aim, dt) {
+  const dy = s.y - (aim.y + 0.5);
+  const a = -GRAVITY / 2,
+    disc = s.vy * s.vy + 4 * a * Math.max(0.1, dy);
+  const t = Math.max(0.25, (s.vy + Math.sqrt(disc)) / (2 * a));
+  const want = { x: (aim.x - s.x) / t, z: (aim.z - s.z) / t };
+  const max = BOMBS.lance.steer * dt;
+  s.vx += clamp(want.x - s.vx, -max, max);
+  s.vz += clamp(want.z - s.vz, -max, max);
 }
 
 export class StrikeOperation {
@@ -112,8 +129,9 @@ export class StrikeOperation {
     this.used = 0;
     this.damaged = false;
     this.combo = { count: 0, timer: 0 };
-    this.said = new Set();
+    this.said = new Map();
     this.forecastTimer = 0;
+    this.hints = new Set();
     this.emptyTimer = 0;
     const slots = formationSlots(this.layout.aircraft.length, FLIGHT.tight);
     this.aircraft = this.layout.aircraft.map((a, i) => this.createAircraft(a, i, slots[i]));
@@ -128,7 +146,10 @@ export class StrikeOperation {
       event.ring = view.ring(V(event.centre.x, event.centre.y + 0.08, event.centre.z), 2.6, 0xffc62b, 0.22);
       event.ring.renderOrder = 6;
     }
-    this.lockBeam = this.beam(0xff3b3b);
+    this.lockMarker = view.ring(V(), 1.6, 0x18d5ff, 0.22);
+    this.lockMarker.material.depthTest = false;
+    this.lockMarker.renderOrder = 11;
+    this.lockMarker.visible = false;
   }
 
   // ------------------------------------------------------------------ setup
@@ -153,23 +174,31 @@ export class StrikeOperation {
     arc.renderOrder = 8;
     arc.userData.disposable = true;
     view.level.add(arc);
+    // The pipper is drawn twice: solid where the impact point is visible, and faint through any
+    // building in front of it, so a ring behind a tower never looks as if it sits on the roof.
     const pipper = new THREE.Group();
-    const inner = view.ring(V(), 0.95, 0xffffff, 0.2, pipper);
-    const outer = view.ring(V(), 1, 0xffffff, 0.08, pipper);
-    for (const r of [inner, outer]) {
-      r.material.depthTest = false;
-      r.renderOrder = 9;
-    }
-    for (const angle of [0, Math.PI / 2]) {
-      const tick = new THREE.Mesh(
-        new THREE.PlaneGeometry(2.6, 0.12),
-        new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, depthTest: false, depthWrite: false, side: THREE.DoubleSide }),
-      );
-      tick.rotation.set(-Math.PI / 2, 0, angle);
-      tick.renderOrder = 9;
-      tick.userData.disposable = true;
-      pipper.add(tick);
-    }
+    const layer = (solid) => {
+      const rings = [view.ring(V(), 0.95, 0xffffff, 0.2, pipper), view.ring(V(), 1, 0xffffff, 0.08, pipper)];
+      const parts = [...rings];
+      for (const angle of [0, Math.PI / 2]) {
+        const tick = new THREE.Mesh(
+          new THREE.PlaneGeometry(2.6, 0.12),
+          new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, depthWrite: false, side: THREE.DoubleSide }),
+        );
+        tick.rotation.set(-Math.PI / 2, 0, angle);
+        tick.userData.disposable = true;
+        pipper.add(tick);
+        parts.push(tick);
+      }
+      for (const part of parts) {
+        part.material.depthTest = solid;
+        part.renderOrder = solid ? 9 : 8;
+        part.userData.solid = solid;
+      }
+      return rings;
+    };
+    const [inner, outer] = layer(true);
+    const [ghostInner, ghostOuter] = layer(false);
     view.level.add(pipper);
     return {
       ...data,
@@ -181,15 +210,13 @@ export class StrikeOperation {
       alive: true,
       exit: 0,
       cooldown: 0,
-      pylon: 0,
       smoke: 0,
       mesh,
       props: ["PropellerL", "PropellerR"].map((n) => mesh.getObjectByName(n)).filter(Boolean),
-      pylons: ["PylonL", "PylonR", "PylonC"].map((n) => mesh.getObjectByName(n)).filter(Boolean),
+      centrePylon: mesh.getObjectByName("PylonC"),
       arc,
       pipper,
-      pipperInner: inner,
-      pipperOuter: outer,
+      pipperRings: { inner: [inner, ghostInner], outer: [outer, ghostOuter] },
       forecast: null,
       velocity: V(),
     };
@@ -232,6 +259,7 @@ export class StrikeOperation {
     nest.turret = nest.mesh.getObjectByName("Turret");
     nest.warning = g.view.ring(V(0, 0.08, 0), 2.1, 0xff3b3b, 0.16, nest.mesh);
     nest.warning.material.opacity = 0.15;
+    nest.beam = this.beam(0xff3b3b);
     return nest;
   }
 
@@ -289,11 +317,12 @@ export class StrikeOperation {
     return line;
   }
 
-  say(key) {
-    if (this.said.has(key)) return;
-    const line = this.story?.radio?.[key];
+  say(key, again = 0) {
+    const last = this.said.get(key);
+    if (last !== undefined && (!again || this.game.time - last < again)) return;
+    const line = this.story?.radio?.[key] || STRIKE_RADIO[key];
     if (!line) return;
-    this.said.add(key);
+    this.said.set(key, this.game.time);
     this.game.radio(line);
   }
 
@@ -307,6 +336,7 @@ export class StrikeOperation {
   }
 
   setFloor(value) {
+    this.floorTouched = true;
     this.floor = clamp(Math.round(value), 1, this.maxFloor);
     this.forecastTimer = 0;
   }
@@ -336,6 +366,7 @@ export class StrikeOperation {
 
   salvo() {
     if (!this.canRelease()) return false;
+    this.salvoUsed = true;
     let dropped = 0;
     for (const aircraft of this.aircraft) {
       if (!aircraft.alive || aircraft.cooldown > 0) continue;
@@ -357,7 +388,7 @@ export class StrikeOperation {
   }
 
   releaseState(aircraft) {
-    const pylon = aircraft.pylons[aircraft.pylon % Math.max(1, aircraft.pylons.length)];
+    const pylon = aircraft.centrePylon;
     const origin = pylon
       ? pylon.getWorldPosition(V())
       : aircraft.mesh.position.clone().add(V(0, -0.6, 0));
@@ -377,7 +408,6 @@ export class StrikeOperation {
     aircraft.mesh.updateMatrixWorld(true);
     const state = this.releaseState(aircraft);
     aircraft.forecast = { ...forecastImpact(this.blocks, this.buildings, state, kind, this.floor), kind };
-    aircraft.pylon++;
     aircraft.payload[kind]--;
     aircraft.cooldown = FLIGHT.release;
     this.used++;
@@ -394,25 +424,22 @@ export class StrikeOperation {
       time: 0,
       trail: 0,
       owner: aircraft,
-      target: kind === "lance" ? this.lockTarget(aircraft.forecast?.impact) : null,
+      target: kind === "lance" ? this.lockTarget(aircraft.forecast?.impact, state) : null,
       dead: false,
     };
     this.bombs.push(bomb);
     g.audio.play("release");
   }
 
-  lockTarget(point) {
-    if (!point) return null;
-    let best = null,
-      bestDistance = 7;
-    for (const t of this.targets()) {
-      const d = Math.hypot(t.position.x - point.x, t.position.z - point.z);
-      if (d < bestDistance) {
-        bestDistance = d;
-        best = t;
-      }
-    }
-    return best;
+  // The Lance locks the nearest target to its pipper (trucks first) that it can actually reach.
+  lockTarget(point, release) {
+    if (!point || !release) return null;
+    const candidates = this.targets()
+      .map((t) => ({ t, d: Math.hypot(t.position.x - point.x, t.position.z - point.z) - (t.type === "truck" ? 3 : 0) }))
+      .filter((c) => c.d < 8)
+      .sort((x, y) => x.d - y.d)
+      .slice(0, 4);
+    return candidates.find((c) => this.lanceReaches(release, c.t))?.t || null;
   }
 
   targets() {
@@ -459,8 +486,9 @@ export class StrikeOperation {
     f.lane = clamp(f.lane + f.lateral * dt, FLIGHT.laneMin, FLIGHT.laneMax);
     f.spacing = THREE.MathUtils.damp(f.spacing, f.wide ? FLIGHT.wide : FLIGHT.tight, 4, dt);
     if (f.phase === "pass") {
-      f.x += f.speed * dt;
+      f.x += (f.speed + (this.egress ? FLIGHT.egress : 0)) * dt;
       if (f.x > FLIGHT.exitX) {
+        this.egress = false;
         f.phase = "turn";
         f.turn = FLIGHT.turnTime;
         f.pass++;
@@ -483,7 +511,7 @@ export class StrikeOperation {
       const slot = slots[a.index];
       const bob = Math.sin(g.time * 1.6 + a.index * 1.3) * 0.18;
       const x = f.x + slot.x;
-      a.velocity.set(f.phase === "pass" ? f.speed : 0, 0, f.lateral);
+      a.velocity.set(f.phase === "pass" ? f.speed + (this.egress ? FLIGHT.egress : 0) : 0, 0, f.lateral);
       a.mesh.position.set(x, FLIGHT.altitude + bob - a.index * 0.4, f.lane + slot.z);
       a.mesh.visible = f.phase === "pass";
       a.mesh.rotation.set(0, -Math.PI / 2, THREE.MathUtils.damp(a.mesh.rotation.z, f.lateral * 0.06, 6, dt));
@@ -506,6 +534,7 @@ export class StrikeOperation {
 
   // After the result is decided, ordnance already in the air still lands and aircraft still fly.
   settle(dt) {
+    this.updateFlight(dt);
     this.updateBombs(dt);
     this.updateFlak(dt);
     for (const a of this.aircraft) if (!a.alive) this.updateDowned(a, dt);
@@ -551,6 +580,8 @@ export class StrikeOperation {
               continue;
             }
             e.state = "route";
+            e.blendFrom = { x: p.x, y: p.y, z: p.z };
+            e.blendUntil = t + 0.35;
             e.hidden = false;
             e.marker.material = markerMaterial(e.officer ? "officer" : "enemy");
           }
@@ -572,6 +603,10 @@ export class StrikeOperation {
         continue;
       }
       if (!p) continue;
+      if (e.state === "route" && e.blendUntil > t) {
+        const k = 1 - (e.blendUntil - t) / 0.35;
+        p = { ...p, x: e.blendFrom.x + (p.x - e.blendFrom.x) * k, y: e.blendFrom.y + (p.y - e.blendFrom.y) * k, z: e.blendFrom.z + (p.z - e.blendFrom.z) * k };
+      }
       const moved = Math.hypot(p.x - e.position.x, p.z - e.position.z);
       e.position.set(p.x, p.y, p.z);
       e.cur = { b: p.b, f: p.f };
@@ -658,16 +693,28 @@ export class StrikeOperation {
 
   updateFlak(dt) {
     const g = this.game;
-    this.lockBeam.visible = false;
-    this.flakLock = null;
-    for (const nest of this.aa) {
+    this.flakLocks = [];
+    const reach = (a, extra) =>
+      a.alive &&
+      this.flight.phase === "pass" &&
+      Math.hypot(a.mesh.position.x - nest.position.x, a.mesh.position.z - nest.position.z) < FLAK.range + extra;
+    let nest;
+    for (nest of this.aa) {
+      nest.beam.visible = false;
       if (nest.dead) continue;
       nest.cooldown -= dt;
-      const target = this.aircraft
-        .filter((a) => a.alive && this.flight.phase === "pass")
-        .map((a) => ({ a, d: Math.hypot(a.mesh.position.x - nest.position.x, a.mesh.position.z - nest.position.z) }))
-        .filter((x) => x.d < FLAK.range + (nest.state === "lock" ? 4 : 0))
-        .sort((x, y) => x.d - y.d)[0]?.a;
+      const target =
+        nest.state === "lock"
+          ? reach(nest.target, 4)
+            ? nest.target
+            : null
+          : this.aircraft
+              .filter((a) => reach(a, 0))
+              .sort(
+                (x, y) =>
+                  Math.hypot(x.mesh.position.x - nest.position.x, x.mesh.position.z - nest.position.z) -
+                  Math.hypot(y.mesh.position.x - nest.position.x, y.mesh.position.z - nest.position.z),
+              )[0];
       if (nest.turret && target) {
         const d = target.mesh.position.clone().sub(nest.position);
         nest.turret.rotation.y = THREE.MathUtils.damp(nest.turret.rotation.y, Math.atan2(-d.x, -d.z), 6, dt);
@@ -676,20 +723,25 @@ export class StrikeOperation {
         nest.state = "lock";
         nest.lock = FLAK.lock;
         nest.target = target;
+        nest.solution = null;
         this.say("flak");
       }
       if (nest.state === "lock") {
-        if (!target || !nest.target.alive || nest.target !== target) {
+        if (!target) {
           nest.state = "idle";
+          nest.solution = null;
           nest.cooldown = 0.6;
         } else {
           nest.lock -= dt;
-          this.flakLock = nest.target;
-          const positions = this.lockBeam.geometry.attributes.position;
+          if (!nest.solution && nest.lock <= FLAK.solution)
+            nest.solution = { position: target.mesh.position.clone(), velocity: target.velocity.clone(), ahead: Math.max(0, nest.lock) };
+          this.flakLocks.push({ callsign: nest.target.callsign, in: nest.lock, solved: Boolean(nest.solution) });
+          const positions = nest.beam.geometry.attributes.position;
           positions.setXYZ(0, nest.position.x, nest.position.y + 1.2, nest.position.z);
           positions.setXYZ(1, nest.target.mesh.position.x, nest.target.mesh.position.y, nest.target.mesh.position.z);
           positions.needsUpdate = true;
-          this.lockBeam.visible = Math.sin(g.time * 30) > -0.3;
+          // The beam flickers while the nest is tracking and holds steady once it has a solution.
+          nest.beam.visible = Boolean(nest.solution) || Math.sin(g.time * 30) > -0.3;
           nest.warning.material.opacity = 0.4 + Math.sin(g.time * 18) * 0.35;
           if (nest.lock <= 0) this.fireFlak(nest);
         }
@@ -718,9 +770,12 @@ export class StrikeOperation {
     nest.state = "idle";
     nest.cooldown = FLAK.cooldown;
     const origin = nest.position.clone().add(V(0, 1.4, 0));
-    const target = nest.target.mesh.position.clone();
+    // Aim where the target would be had it held the course it flew when the solution froze.
+    const s = nest.solution || { position: nest.target.mesh.position.clone(), velocity: nest.target.velocity.clone(), ahead: 0 };
+    nest.solution = null;
+    const target = s.position.clone().addScaledVector(s.velocity, s.ahead);
     const tof = origin.distanceTo(target) / FLAK.speed;
-    const lead = target.addScaledVector(nest.target.velocity, tof);
+    const lead = target.addScaledVector(s.velocity, tof);
     const volley = { hit: new Set() };
     for (let i = 0; i < 3; i++) {
       const aim = lead.clone().add(V((i - 1) * 1.8, (i % 2) * 0.8, (i - 1) * 0.9));
@@ -738,7 +793,7 @@ export class StrikeOperation {
   }
 
   hitAircraft(a) {
-    if (!a.alive) return;
+    if (!a.alive || this.game.status !== "playing") return;
     const g = this.game;
     a.hp--;
     this.damaged = true;
@@ -802,15 +857,38 @@ export class StrikeOperation {
       this.game.notify("toast", "LANCE INTERLOCK / NO-STRIKE ZONE");
       return;
     }
-    const dy = s.y - (aim.y + 0.5);
-    // Time left to fall to the target's height under gravity, then match the horizontal need.
-    const a = -GRAVITY / 2,
-      disc = s.vy * s.vy + 4 * a * Math.max(0.1, dy);
-    const t = Math.max(0.25, (s.vy + Math.sqrt(disc)) / (2 * a));
-    const want = { x: (aim.x - s.x) / t, z: (aim.z - s.z) / t };
-    const max = BOMBS.lance.steer * dt;
-    s.vx += clamp(want.x - s.vx, -max, max);
-    s.vz += clamp(want.z - s.vz, -max, max);
+    guide(s, aim, dt);
+  }
+
+  // Where a target will be `ahead` seconds from now: scheduled walkers and trucks are predictable.
+  predict(target, ahead) {
+    const route = target.route || (target.state === "route" ? target.plan?.route : null);
+    if (!route) return target.position;
+    const p = sampleRoute(route, this.game.time + ahead);
+    return { x: p.x, y: p.y, z: p.z };
+  }
+
+  // Fly a Lance from `release` at `target`; true when it would detonate within reach of it.
+  lanceReaches(release, target) {
+    const s = { ...release };
+    const lift = target.type === "truck" ? 0.9 : 0.8;
+    for (let i = 1; i < 900; i++) {
+      const t = i * STEP;
+      const aim = this.predict(target, t);
+      if (t > 0.3) guide(s, aim, STEP);
+      const a = { x: s.x, y: s.y, z: s.z };
+      stepBomb(s, STEP);
+      const b = { x: s.x, y: s.y, z: s.z };
+      const hit = blockHits(this.blocks, this.buildings, a, b)[0];
+      const end = hit ? lerp3(a, b, hit.t) : b.y <= CITY.ground ? lerp3(a, b, (a.y - CITY.ground) / (a.y - b.y)) : null;
+      if (!end) continue;
+      const chest = { x: aim.x, y: aim.y + lift, z: aim.z };
+      return (
+        Math.hypot(end.x - chest.x, end.y - chest.y, end.z - chest.z) < BOMBS.lance.radius - 0.4 &&
+        !lineBlocked(this.blocks, this.buildings, end, chest)
+      );
+    }
+    return false;
   }
 
   updateDrill(bomb, a, b) {
@@ -819,7 +897,7 @@ export class StrikeOperation {
       bomb.crossed.add(hit.block.id);
       this.breakBlock(hit.block, b);
       if (hit.block.kind === "slab" || hit.block.kind === "roof") {
-        bomb.state.vy *= 0.93;
+        bomb.state.vy *= DRILL_SLOWDOWN;
         this.game.puff(lerp3(a, b, hit.t), 0xf7e3c4, 0.5, 0.5);
         this.game.audio.play("crunch");
       }
@@ -838,8 +916,7 @@ export class StrikeOperation {
     bomb.dead = true;
     g.view.disposeObject(bomb.mesh);
     const s = bomb.state;
-    const below = surfaceBelow(this.buildings, this.blocks, point.x, point.z);
-    const centre = scatterCentre(point, s, below);
+    const centre = scatterCentre(point, s, burstGround(this.buildings, this.blocks, point, s));
     g.blast(point, 0.9, 0xc77dff, { quiet: true });
     g.audio.play("pop");
     const model = g.view.assets.has("bomblet") ? "bomblet" : "missile-friendly";
@@ -1005,15 +1082,21 @@ export class StrikeOperation {
   abort() {
     if (this.aborted) return;
     this.aborted = true;
-    this.say("shelter");
+    this.say("abort");
     this.game.finish(false, "shelter");
   }
 
   updateEvents() {
     const g = this.game;
     for (const event of this.events) {
-      const alive = this.enemies.filter((e) => !e.dead && e.plan.group === event.group).length;
+      const members = this.enemies.filter((e) => !e.dead && e.plan.group === event.group);
+      const alive = members.length;
       const status = rallyStatus(event, g.time);
+      event.present = members.filter(
+        (e) =>
+          e.state === "route" &&
+          Math.hypot(e.position.x - event.centre.x, e.position.y - event.centre.y, e.position.z - event.centre.z) < 2.2,
+      ).length;
       event.status = status;
       event.alive = alive;
       event.ring.visible = alive > 0;
@@ -1021,7 +1104,7 @@ export class StrikeOperation {
       event.ring.material.opacity = pulse;
       event.ring.material.color.set(status.active ? 0xff4b2b : 0xffc62b);
       event.ring.scale.setScalar(status.active ? 1 + Math.sin(g.time * 6) * 0.05 : 1);
-      if (status.active && alive > 0 && !event.fired) {
+      if (status.active && event.present >= Math.max(1, Math.ceil(alive / 2)) && !event.fired) {
         event.fired = true;
         this.say("rally");
       }
@@ -1062,11 +1145,11 @@ export class StrikeOperation {
       const impact = forecast.impact;
       a.pipper.position.set(impact.x, impact.y + 0.12, impact.z);
       const ringRadius = kind === "scatter" ? def.spread + def.radius * 0.6 : kind === "shockwave" ? def.radius : kind === "lance" ? 1.8 : 1.3;
-      a.pipperOuter.scale.setScalar(ringRadius);
-      a.pipperInner.scale.setScalar(primary ? 0.8 : 0.6);
+      for (const ring of a.pipperRings.outer) ring.scale.setScalar(ringRadius);
+      for (const ring of a.pipperRings.inner) ring.scale.setScalar(primary ? 0.8 : 0.6);
       for (const child of a.pipper.children) {
         child.material.color.set(def.color);
-        child.material.opacity = primary ? 0.95 : 0.45;
+        child.material.opacity = (primary ? 0.95 : 0.45) * (child.userData.solid ? 1 : 0.32);
       }
       const risk =
         forecast.crossesShelter ||
@@ -1076,13 +1159,50 @@ export class StrikeOperation {
         shelterWarning = true;
         for (const child of a.pipper.children) child.material.color.set(0x2f86e8);
       }
-      if (kind === "lance") forecast.lock = this.lockTarget(impact);
+      if (kind === "lance") forecast.lock = this.lockTarget(impact, state);
     }
     const lead = this.aircraft.find((a) => a.alive && a.forecast && a.forecast.kind === this.selected);
     const drill = lead?.forecast?.kind === "drill" ? lead.forecast : null;
     this.city.showBand(drill?.building || null, drill ? drill.floor : 0, BOMBS.drill.color);
-    if (shelterWarning) this.say("shelter");
+    if (shelterWarning) this.say("shelter", 25);
+    this.updateLockMarker();
     this.shelterWarning = shelterWarning;
+    // Egress once no aircraft with ordnance can still put its pipper on the district.
+    const edge = (this.layout.cols * CITY.pitch) / 2 + 2;
+    this.egress =
+      this.flight.phase === "pass" &&
+      this.aircraft.every((a) => !a.alive || !a.forecast || a.forecast.impact.x > edge) &&
+      this.aircraft.some((a) => a.alive && a.forecast);
+  }
+
+  updateLockMarker() {
+    const lead = this.aircraft.find((a) => a.alive && a.forecast?.kind === "lance" && this.selected === "lance");
+    const lock = lead?.forecast?.lock;
+    this.lockMarker.visible = Boolean(lock);
+    if (lock) {
+      this.lockMarker.position.set(lock.position.x, lock.position.y + 0.15, lock.position.z);
+      this.lockMarker.scale.setScalar(1 + Math.sin(this.game.time * 8) * 0.08);
+    }
+    this.lanceLock = Boolean(lock);
+  }
+
+  // Coach hints for the teaching missions; the UI words them for keyboard or touch.
+  hint() {
+    const g = this.game;
+    if (g.status !== "playing") return null;
+    const lead = this.aircraft.find((a) => a.alive && a.forecast?.kind === this.selected);
+    const over = lead?.forecast?.building?.id;
+    const index = g.index;
+    if (index === 0 && this.used === 0) {
+      const mast = this.masts[0];
+      return mast && over === mast.cur.b ? "release" : "steer";
+    }
+    if (index === 1 && !this.floorTouched) return "floor";
+    if (index === 2 && this.events.some((e) => e.alive && !e.status?.active && e.status?.next < 14)) return "rally";
+    if (index === 3 && !this.salvoUsed && this.flight.pass <= 2) return "salvo";
+    if (index === 4 && g.time < 14) return "shelter";
+    if (this.selected === "lance") return this.lanceLock ? "lance" : "lanceNone";
+    return null;
   }
 
   remaining() {
@@ -1104,6 +1224,7 @@ export class StrikeOperation {
     const left = this.remaining();
     const total = left.enemies + left.aa + left.masts + left.trucks;
     if (total === 0) {
+      if (this.bombs.length) return;
       this.closeCombo();
       this.say("success");
       g.finish(true);
@@ -1180,6 +1301,7 @@ export class StrikeOperation {
         place: e.place,
         alive: e.alive ?? e.members,
         members: e.members,
+        present: e.present ?? 0,
         ...(e.status || rallyStatus(e, g.time)),
       })),
       ladder: this.ladder(),
@@ -1187,8 +1309,8 @@ export class StrikeOperation {
       total,
       used: this.used,
       par: this.layout.par,
-      flak: this.flakLock ? this.flakLock.callsign : null,
-      flakIn: Math.min(...this.aa.filter((n) => !n.dead && n.state === "lock").map((n) => n.lock), 9),
+      flak: (this.flakLocks || []).sort((a, b) => a.in - b.in),
+      hint: this.hint(),
       shelter: this.shelterWarning,
       progress: total ? 1 - (left.enemies + left.aa + left.masts + left.trucks) / total : 1,
       labels: this.events
@@ -1199,9 +1321,11 @@ export class StrikeOperation {
           y: e.centre.y + 2.8,
           z: e.centre.z,
           text: e.status?.active
-            ? `${e.label} / NOW ${Math.ceil(e.status.remaining)}s`
+            ? e.present
+              ? `${e.label} / ${e.present} THERE / ${Math.ceil(e.status.remaining)}s`
+              : `${e.label} / SCATTERED`
             : `${e.label} / ${Math.ceil(e.status?.next ?? e.at)}s`,
-          hot: Boolean(e.status?.active),
+          hot: Boolean(e.status?.active && e.present),
         })),
     };
   }

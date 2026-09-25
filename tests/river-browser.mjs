@@ -107,6 +107,49 @@ export async function checkRiver(page, check) {
     g.op.spawn({ d: 0, type: "skiffs", pattern: "column", count: 4, x: 7 });
     g.update(1 / 120);
     out.columnKeepsTrailingBoats = g.entities.filter((e) => e.type === "skiff" && !e.dead).length === 4;
+    // Kills inside one second chain into a combo worth n² x 30.
+    ui.start(7);
+    g.paused = false;
+    g.op.spawn({ d: 0, type: "skiffs", pattern: "pincer", count: 4, meet: { x: 0, z: -2 }, delay: 6 });
+    let combo = null;
+    const notify = g.notify;
+    g.notify = (type, data) => {
+      if (type === "combo") combo = data;
+      return notify(type, data);
+    };
+    for (const s of g.entities.filter((e) => e.type === "skiff" && !e.dead).slice(0, 2)) g.damage(s, 5);
+    for (let i = 0; i < 150; i++) g.update(1 / 120);
+    g.notify = notify;
+    out.killsChainIntoACombo = Boolean(combo) && combo.count >= 2 && combo.bonus === combo.count ** 2 * 30;
+    // A skiff that rams a barge dies in the ram, even while it is aiming, and pays nothing.
+    ui.start(7);
+    g.paused = false;
+    const rammed = g.op.barges[1];
+    g.op.spawn({ d: 0, type: "skiffs", pattern: "column", count: 1, x: rammed.position.x });
+    const ram = g.entities.find((e) => e.type === "skiff");
+    ram.target = { kind: "player", position: g.player.position };
+    ram.aim = 99;
+    const before = { hp: rammed.hp, score: g.score, kills: g.kills };
+    for (let i = 0; i < 120 * 5 && !ram.dead; i++) g.update(1 / 120);
+    out.ramKillsTheSkiffWithoutReward =
+      ram.dead && rammed.hp === before.hp - 3 && g.score === before.score && g.kills === before.kills;
+    // The gate towers take hits from base to top, and the medal floats out once the gate opens.
+    ui.start(8);
+    g.paused = false;
+    g.op.spawnGate();
+    for (const e of g.entities) if (e.scrolling && e.type !== "pickup") e.position.z = -24;
+    const tower = g.op.boss.towers[0];
+    g.player.position.set(-6, 0.08, -10);
+    const towerHp = tower.hp;
+    g.cooldown = 0;
+    g.fire(tower.position.clone().setY(tower.position.y + 0.8));
+    for (let i = 0; i < 90; i++) g.updateProjectiles(1 / 120);
+    out.gateTowerBaseTakesHits = tower.hp < towerHp;
+    g.op.boss.phase = "opening";
+    g.op.boss.open = 0.999;
+    g.update(1 / 120);
+    out.medalFloatsOutWhenTheGateOpens =
+      g.op.boss.phase === "open" && g.entities.some((e) => e.type === "pickup" && e.kind === "medal" && !e.dead);
     return out;
   });
   for (const [name, value] of Object.entries(mechanics)) check(`river ${name}`, value);

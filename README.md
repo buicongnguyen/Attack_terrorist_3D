@@ -26,14 +26,15 @@ Solace Harbor lies three metres below the tide. Only the Tidelock, a storm barri
   - **Scatter** bursts into eight bomblets over crowds;
   - **Shockwave** tears open roofs and flak nests;
   - **Lance** is a guided bomb for moving trucks.
-- The pipper forecasts each aircraft's impact exactly, including the floor a Drill will reach. **Salvo** drops one bomb from every aircraft at once.
-- Enemies walk scheduled routes through doors, stairs and streets. The intel strip counts down to shift changes, musters and the lieutenants' meeting, when a whole cell stands together. Late missions add hiding after the first blast, flak locks you must dodge, a technical convoy, and a civilian shelter that must never be hit.
+- The pipper forecasts each aircraft's impact exactly, including the floor a Drill will reach. It stays solid where the impact is visible and turns faint behind buildings. **Salvo** drops one bomb from every aircraft at once.
+- Enemies walk scheduled routes through doors, stairs and streets. The intel strip counts down to shift changes, musters and the lieutenants' meeting, when a whole cell stands together. Labels count who is actually at a gathering. Late missions add hiding after the first blast, flak locks you break away from when the HUD says BREAK, a technical convoy, and a civilian shelter that must never be hit. Coach hints guide the teaching missions.
 
 ### Chapter 2: river convoy
 
 - The barges follow Marlin's wake. Guns and skiffs show a red aim line before they fire, and you can block shots with the gunboat.
 - Fuel drums and a bridge ammunition crate chain-detonate whole crews. Skiff pincers meet at a marked point, where one hit sets off the rest.
-- The Lock Gate boss: two gun towers, then the shielded generator, then the gates swing open.
+- The Lock Gate boss: two gun towers and skiff pincers, then the shielded generator. Then the gates swing open and the field medal floats out.
+- Kills within a second of each other chain into combos.
 
 ### Chapter 3: valley rescue
 
@@ -42,7 +43,7 @@ Solace Harbor lies three metres below the tide. Only the Tidelock, a storm barri
 
 ![Lantern over Cinder Valley](docs/chapter3.png)
 
-Every mission opens with a briefing and ends with a story debrief and star criteria. All twelve missions can be selected from Mission Control, and progress saves locally.
+Every mission opens with a briefing and ends with a story debrief and star criteria. All twelve missions can be selected from Mission Control. Progress saves locally, and the game resumes at your first unfinished mission.
 
 ## Controls
 
@@ -57,7 +58,7 @@ Every mission opens with a briefing and ends with a story debrief and star crite
 | Winch / land | Hold E over a clear zone | Hold Winch |
 | Pause, retry | Esc, R | Top bar |
 
-On portrait phones, Chapter 1's camera looks along the flight path so the district fills the width.
+On portrait phones, Chapter 1's camera looks along the flight path so the district fills the width. Keys are read by physical position, so AZERTY players steer with Z Q S D. The layout follows the input you last used: touch shows the sticks, and a mouse or keyboard shows key hints.
 
 ## Run locally
 
@@ -69,10 +70,10 @@ npm run dev
 ```
 
 ```sh
-npm test                                  # 39 Node tests: rules, schedules, ballistics, story, GLB contracts
+npm test                                  # 44 Node tests: rules, schedules, ballistics, story, GLB contracts
 npm run build
 npm run preview -- --port 5183
-npm run test:browser                      # Chrome suite: 155 checks incl. scripted pilots for all 12 missions
+npm run test:browser                      # Chrome suite: 174 checks incl. scripted pilots for all 12 missions
 ```
 
 The browser tests use system Chrome on Windows (`CHROME_PATH` overrides it) and SwiftShader by default. Set `GPU=1` to render on the real GPU, and `GAME_URL` to test another server. Screenshots go to `test-results/`. The QA handle `window.__TIDELOCK__` exists only with `?qa=1`. Add `&brief=1` or `&prologue=1` to keep the story dialogs in QA runs.
@@ -94,7 +95,7 @@ The build fails if a node or material the game animates or recolours is missing.
 
 ## Design and verification
 
-- [Redesign: evaluation, research, story, mechanics and review](docs/REDESIGN.md)
+- [Redesign: evaluation, research, story, mechanics and both review passes](docs/REDESIGN.md)
 - [Verification record and known limits](docs/VERIFICATION.md)
 - [Credits and licences](docs/CREDITS.md)
 - History: [first-release plan](PLAN.md), [rescue chapter notes](docs/CHAPTER3-RESCUE.md), [detail review](docs/REVIEW-DETAILS.md)

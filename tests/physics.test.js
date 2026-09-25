@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { FixedClock, movement, segmentSphere, createPhysics, addBox } from "../src/physics.js";
-import { STEP, saveResult, damageShields, MISSIONS } from "../src/data.js";
+import { STEP, saveResult, damageShields, MISSIONS, firstOpenMission } from "../src/data.js";
 
 test("120 Hz simulation is independent of render frequency", () => {
   const run = (rate) => {
@@ -67,4 +67,13 @@ test("mission records store bests instead of accumulating retry scores", () => {
     [0, 1, 2].map((c) => MISSIONS.filter((m) => m.chapter === c).length),
     [6, 3, 3],
   );
+});
+
+test("the campaign resumes at the first mission without a record", () => {
+  assert.equal(firstOpenMission({}), 0);
+  assert.equal(firstOpenMission({ 0: { score: 1, stars: 1 }, 1: { score: 1, stars: 3 } }), 2);
+  // A skipped mission is picked up again before later ones.
+  assert.equal(firstOpenMission({ 0: { score: 1, stars: 1 }, 2: { score: 1, stars: 1 } }), 1);
+  const all = Object.fromEntries(MISSIONS.map((_, i) => [i, { score: 1, stars: 1 }]));
+  assert.equal(firstOpenMission(all), 0);
 });

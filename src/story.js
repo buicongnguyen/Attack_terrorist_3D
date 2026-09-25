@@ -109,7 +109,7 @@ export const MISSION_STORY = [
       ),
       line(
         "iona",
-        "Watch the gold pipper ahead of your aircraft. It shows where the bomb will land. Release when it covers the mast.",
+        "The ring ahead of your aircraft, the pipper, shows where the bomb will land. Steer it over the mast, then release.",
       ),
     ],
     radio: {
@@ -135,17 +135,17 @@ export const MISSION_STORY = [
       ),
       line(
         "iona",
-        "The Drill punches through slabs and detonates on the floor you choose. Read the floor number beside the pipper.",
+        "The Drill punches through slabs and detonates on the floor you choose. The ladder on the right shows every floor under the pipper and who is on it.",
       ),
     ],
     radio: {
-      start: line("echo", "Tall tower, floor three. Short tower, floor two."),
+      start: line("echo", "Tall tower, floor three. Short tower, floor two. Check the ladder."),
       success: line("echo", "Both rooms are clear. They never saw it coming."),
     },
     success:
       "Echo confirms both rooms are empty. The Front now knows its concrete won't protect it.",
     failure:
-      "Some spotters survived. Set the Drill's floor before release; the pipper label shows where it will detonate.",
+      "Some spotters survived. Set the Drill's floor before release; the ladder highlights the floor it will reach.",
   },
   {
     place: "MARKET SQUARE",
@@ -268,6 +268,9 @@ export const MISSION_STORY = [
     radio: {
       start: line("echo", "The meeting starts on the countdown. Sixth floor."),
       rally: line("echo", "They're all in the room. Now or never."),
+      flak: line("bram", "Three flak nests up. Watch the red lines."),
+      alert: line("echo", "They heard that. Runners heading for the ground floors."),
+      shelter: line("echo", "Careful! The blue roof by the fish market is the shelter."),
       multi: line("bram", "Direct hit on the meeting."),
       success: line(
         "echo",
@@ -303,6 +306,7 @@ export const MISSION_STORY = [
     ],
     radio: {
       start: line("okafor", "Barges under way. We're right behind you."),
+      drumsHint: line("iona", "Red fuel drums on the left bank, Kestrel. One shot takes the whole gun crew."),
       drums: line("okafor", "The whole bank just went up! Good eye."),
       barge: line("okafor", "We're taking hits! Cover us!"),
       skiffs: line("iona", "Fast boats inbound. Watch their approach lines."),
@@ -364,7 +368,8 @@ export const MISSION_STORY = [
       ),
     ],
     radio: {
-      start: line("okafor", "Holding short. Open that gate for us, Kestrel."),
+      start: line("okafor", "Last stretch to Highwater. Keep the barges together, Kestrel."),
+      hold: line("okafor", "Holding short. Open that gate for us, Kestrel."),
       shield: line("iona", "Both towers down. The generator shield has dropped."),
       open: line("okafor", "The gates are opening! Bring us in!"),
       success: line(
@@ -415,7 +420,7 @@ export const MISSION_STORY = [
     brief: [
       line(
         "echo",
-        "Reyes. I sent my rear guard west of the crossings. Get them out, then come for me. I'm still moving.",
+        "Reyes. My rear guard is spread across the crossings. Get them out, then come for me. I'm still moving.",
       ),
       line(
         "iona",
@@ -467,6 +472,16 @@ export const MISSION_STORY = [
       "Lantern went down on the ridge. Pace your missiles, flare the drones' locks, and resupply before the climb.",
   },
 ];
+
+// Chapter 1 fallbacks for missions that don't script their own line.
+export const STRIKE_RADIO = {
+  flak: line("piper", "Flak lock! Change lane or throttle, now!"),
+  aa: line("bram", "Flak nest down."),
+  shelter: line("iona", "Pipper is over the shelter. Hold your release."),
+  abort: line("iona", "Abort, abort! That was the shelter. Pull out, Kestrel."),
+  alert: line("echo", "They're scattering for cover. I'm tagging where they hide."),
+  multi: line("piper", "Look at that. One pass, one crowd."),
+};
 
 export const FINALE = {
   eyebrow: "OPERATION BREAKWATER / COMPLETE",

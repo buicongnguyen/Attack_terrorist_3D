@@ -101,6 +101,12 @@ export function chapterSize(chapter) {
   return MISSIONS.filter((m) => m.chapter === chapter).length;
 }
 
+// The campaign resumes at the first mission without a record (the start once all are done).
+export function firstOpenMission(records) {
+  const index = MISSIONS.findIndex((_, i) => !records?.[i]);
+  return index < 0 ? 0 : index;
+}
+
 export function saveResult(records, index, score, stars) {
   const old = records[index] || { score: 0, stars: 0 };
   return {

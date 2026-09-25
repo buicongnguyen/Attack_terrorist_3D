@@ -4,6 +4,7 @@ import {
   RESCUE_HEIGHT,
   RESCUE_BOUNDS,
   RESCUE_GEAR,
+  rearm,
   WINCH_SECONDS,
   hoverReady,
   rescueProgress,
@@ -312,16 +313,20 @@ export class RescueOperation {
         if (dir.length() > 10)
           e.position.addScaledVector(dir.normalize(), dt * 3.3);
         e.position.y = 7.7 + Math.sin(g.time * 2 + e.position.z) * 0.4;
-        const rotor = e.mesh.getObjectByName("DroneRotor");
-        if (rotor) rotor.rotation.y += dt * 32;
+        if (e.rotor === undefined) e.rotor = e.mesh.getObjectByName("DroneRotor") || null;
+        if (e.rotor) e.rotor.rotation.y += dt * 32;
       }
       if (d > e.range || e.launcherDisabled) continue;
       e.cooldown -= dt;
-      let turret = e.mesh.getObjectByName("TruckTurret");
-      if (!turret)
-        e.mesh.traverse((node) => {
-          if (!node.isMesh && /^Turret[._\d]*$/.test(node.name)) turret = node;
-        });
+      if (e.turretNode === undefined) {
+        let node = e.mesh.getObjectByName("TruckTurret");
+        if (!node)
+          e.mesh.traverse((child) => {
+            if (!child.isMesh && /^Turret[._\d]*$/.test(child.name)) node = child;
+          });
+        e.turretNode = node || null;
+      }
+      const turret = e.turretNode;
       if (turret)
         turret.rotation.y = Math.atan2(
           e.position.x - g.player.position.x,
@@ -425,7 +430,7 @@ export class RescueOperation {
           }
           else if (this.baseCooldown <= 0) {
             g.shields = [3, 3, 3];
-            this.gear = { ...RESCUE_GEAR };
+            this.gear = rearm(this.gear);
             this.baseCooldown = 15;
             g.notify("toast", "BASE / REPAIRED AND REARMED");
           }

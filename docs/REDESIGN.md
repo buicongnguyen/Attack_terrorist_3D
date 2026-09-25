@@ -55,14 +55,16 @@ This is the chapter the brief asked about directly: *a grid of high buildings, s
   | Drill (orange) | Enemies inside floors | Punches through slabs and detonates on the floor you set. The pipper names the floor it will reach. |
   | Scatter (violet) | Crowds in the open or on rooftops | Bursts into eight bomblets: one at the centre and seven in a ring. |
   | Shockwave (red) | Roofs, flak, jammer masts | Huge blast on first contact that tears roof tiles open. |
-  | Lance (cyan) | Moving trucks | Guided. Locks onto the target nearest the pipper. |
+  | Lance (cyan) | Moving trucks | Guided. Locks the nearest target it can actually reach, marked by a cyan ring. |
 
-- **Patterns and gatherings.** Enemies follow deterministic schedules through doors, stairs and streets. Rally groups (shift changes, musters, the lieutenants' meeting) arrive at a point together on a countdown, shown in the intel strip and as in-world labels. Unit tests prove every member is within 1.5 m of the rally point in every cycle and spread out between cycles.
+- **Patterns and gatherings.** Enemies follow deterministic schedules through doors, stairs and streets. Rally groups (shift changes, musters, the lieutenants' meeting) arrive at a point together on a countdown, shown in the intel strip and as in-world labels. While a gathering is on, its label counts who is actually there; if an alert sends them running, it reads SCATTERED. Each gathering lasts 12 s, longer than a full pass cycle, so any pass at normal speed can reach it. Unit tests prove every member is within 1.5 m of the rally point in every cycle and spread out between cycles.
 - **Hiding.** In the late missions a blast alerts the cell. Survivors run for ground floors, and Echo tags their hiding spots so a Drill can follow them down. They then rejoin their schedules. The lesson: make the first strike count.
-- **Threats and consequences.** Flak nests telegraph a red lock line for 1.5 s before firing, and one volley can hit an aircraft at most once. A civilian shelter is a no-strike zone: the pipper turns blue and a strike aborts the mission. The Lance has an interlock that releases its lock rather than follow a truck into the shelter's zone.
+- **Threats and consequences.** Flak nests telegraph a red lock line for 1.5 s before firing, and one volley can hit an aircraft at most once. The fire solution freezes 0.6 s before the shot: the line stops flickering and the HUD shows BREAK. A lane or throttle change from then on throws the volley off. A civilian shelter is a no-strike zone: the pipper turns blue and a strike aborts the mission. The Lance has an interlock that releases its lock rather than follow a truck into the shelter's zone.
 - **Scoring.** Multi-kill combos pay `n² × 40`. Stars reward clearing every target, staying at or under par, and bringing the flight home undamaged.
 
-The six missions teach one idea each: Shockwave → Drill floors → Scatter + gathering → flak + salvo → hiding + shelter → Lance + convoy + the meeting.
+The six missions teach one idea each: Shockwave → Drill floors → Scatter + gathering → flak + salvo → hiding + shelter → Lance + convoy + the meeting. In the teaching missions, a coach line above the flight panel explains the idea, worded for keyboard or touch. The flight panel only shows the controls that mission's flight can use.
+
+Once every pipper has left the district, the flight speeds up to the turn (egress), so less of each cycle is spent over open water.
 
 ## 5. Chapter 2: Relief Run (the convoy)
 
@@ -71,7 +73,8 @@ The six missions teach one idea each: Shockwave → Drill floors → Scatter + g
 - Fuel drums beside gun crews, and the ammunition crate on the Narrows bridge, chain-detonate the whole crew.
 - Skiff formations: a **wedge** coming downriver, a **pincer** where two line-abreast groups from the banks meet at a marked point (hit one there and the chain takes the rest), and a **column** overtaking from behind.
 - The deck gun reaches about 36 m, so threats get a turn to shoot.
-- **Lock Gate boss.** The convoy holds while two gate towers fire telegraphed homing shells. Destroying both drops the generator's shield. Destroying the generator swings the gate leaves open.
+- **Lock Gate boss.** The convoy holds while two gate towers fire telegraphed homing shells, and skiff pincers slip out of the bank channels beside the towers. Destroying both towers drops the generator's shield. Destroying the generator swings the gate leaves open, and Highwater's field medal floats out through the gap.
+- Kills that land within a second of each other chain into one combo worth `n² × 30`.
 
 ## 6. Chapter 3: Last Light (the rescue)
 
@@ -122,7 +125,64 @@ An independent review of the finished source then reproduced 12 more defects. Al
 
 Balancing after these fixes: once column skiffs arrived at full strength, one stretch of The Narrows stacked into a 6-shield burst in one second. The extra wedge was removed and skiff first shots now ripple down the formation. Boss waves alternate banks instead of picking one at random.
 
-## 9. Controls
+## 9. Second review pass (Tidelock 2.1)
+
+A second pass first evaluated the game by playing it. Three independent reviews followed: Chapter 1; Chapters 2–3 with the shared core; and the UI across desktop, touch and phone layouts. Every finding below was reproduced before it was fixed, and each fix is pinned by a Node test or a browser check.
+
+**Evaluation (playing the game):**
+
+| Finding | Fix |
+| --- | --- |
+| The pipper ring drew on top of buildings in front of it, so a ring behind a tower looked as if it sat on the roof. | The ring is drawn twice: solid where the impact point is visible, faint through buildings. |
+| Bombs alternated between the wing pylons, so the pipper jumped sideways after every release. | Every release comes from the centreline pylon. |
+| Only 34% of each pass cycle had a pipper over the district. Gatherings (7–9 s) were shorter than a pass cycle, so some couldn't be reached at normal speed. | The flight speeds up once the pipper leaves the district, the turn is shorter, and gatherings last 12 s. |
+| Flak led the aircraft's velocity at the moment it fired, so a player who broke on the warning steered into the volley. | The fire solution freezes 0.6 s before the shot, and the HUD says BREAK. |
+| The strike camera applied its screen reserves upside down, so the district sat under the flight panel at every screen size. | Fixed. The UI reports how much height the flight panel and touch stick take, and the camera frames the district above them. |
+| Teaching missions didn't teach. Touch briefings listed keyboard keys. Mission 1.1 showed Drill, Salvo and formation controls it can't use. | Coach hints, touch control hints, and a flight panel that only shows usable controls. |
+| Text promised a "gold pipper" (the rings are bomb-coloured). The drum-chain congratulation played before the player had done anything. | Text and radio cues corrected. |
+
+**Chapter 1 review:**
+
+| Defect | Fix |
+| --- | --- |
+| The live Drill slowed through each slab but its forecast didn't, so it detonated short of the floor shown. | Both apply the same slowdown per slab. A browser check drops a Drill and compares the detonation with the forecast. |
+| The Lance locked targets it could never reach. | It simulates its own guidance against each candidate's predicted path and locks the first one it can reach. |
+| Someone standing on a slab counted as hidden by that same slab. | Sightline tests skip blocks that hold either end of the line. |
+| A flak lock hopped between aircraft, and all nests shared one lock line. | Each nest has its own line and keeps its target while that target stays in reach. |
+| A mission could succeed while bombs were still falling, cutting off their kills and combo. | Success waits for ordnance in flight. |
+| The gathering radio call fired even when the group had scattered. | It needs at least half the group present, and labels show who is there. |
+| When Scatter burst inside a roof, its bomblets spread from below the surface. | The burst centre is lifted to the surface along the approach. |
+| A radio line could play only once per mission, and missions without their own line stayed silent. | Each line has a cooldown, and shared fallback lines fill the gaps. |
+
+**Chapters 2–3 and the shared core:**
+
+| Defect | Fix |
+| --- | --- |
+| Gate towers are 7 m tall, but only their top half registered hits. | Three hit spheres cover each tower from base to top. |
+| The Lock Gate medal spawned so late that it could never reach Marlin. | It floats out through the gate once it opens, and the leg is 10 m longer. |
+| A skiff that was aiming skipped its ram check and sailed through the barges. Rams also paid the player for a kill. | The ram check runs first, and a ramming skiff dies without a reward. |
+| Rearming at the base took away rockets the crew had picked up. | The base tops racks up to the standard load and never lowers them. |
+| Losing the barges blew up Marlin, and the fail sound only played for missions without a player craft. | Only a hull breach destroys the player's craft, and every failure plays the fail sound. |
+| Shots blocked after the mission ended still scored. | Blocks score only while the mission is live. |
+| Boss waves were skiff columns sailing through the closed gate, and the lock checkpoint was announced twice. | Pincers from the bank channels, and one checkpoint. |
+| Aim lines outlived their shooters, and turret and rotor nodes were looked up every tick. | Lines are disposed with their shooter, and nodes are cached. |
+
+**UI review:**
+
+| Defect | Fix |
+| --- | --- |
+| Touchscreen laptops always got the touch layout. | The primary pointer decides first, then the last input used. |
+| A Space or Enter held from the last release clicked through the result dialog. | Repeated confirm keys are ignored while a dialog is open, and the result dialog focuses its main action. |
+| Keys were read by character, so AZERTY players couldn't steer. | Gameplay keys use physical key codes. |
+| A resize, such as a phone toolbar sliding away, dropped the stick under the player's thumb. | Resizes clear only held keys. |
+| The flak pill's pulse animation undid its centring. On phones it covered the radio or ran off-screen. | Each placement has its own animation, and on phones callouts sit above the flight panel or the stick. |
+| Space re-pressed the last HUD button clicked, and ladder floors ignored the keyboard. | Pointer clicks hand focus back to the game, and ladder floors respond to click and keyboard. |
+| A failed script or model load left the loading bar running forever. | Both show an error and a Reload button. |
+| The game always opened at mission 1.1. | It resumes at the first mission without a record. |
+| The in-game Reduced motion setting only stilled the camera. Dialogs, sticks and star ratings had no accessible names. | The setting stills the HUD too. Dialogs are labelled, the decorative sticks are hidden from assistive technology, and mission buttons announce their stars. |
+| HUD refreshes rebuilt identical markup and re-read the canvas position for every label. | Markup is replaced only when it changes, and the canvas position is cached on resize. |
+
+## 10. Controls
 
 | Action | Desktop | Touch |
 | --- | --- | --- |
@@ -131,3 +191,5 @@ Balancing after these fixes: once column skiffs arrived at full strength, one st
 | Drill floor, formation spacing | E / C, Q | Floor ladder or ± buttons, spacing button |
 | Gunboat and helicopter | WASD, pointer aim and fire, 1/2/3 weapons, F flares, hold E winch | Two sticks, weapon and flare buttons, hold Winch |
 | Pause, retry | Esc, R | Top bar |
+
+Keys are read by physical position, so on an AZERTY keyboard Z Q S D steer like W A S D.

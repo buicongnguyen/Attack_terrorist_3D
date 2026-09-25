@@ -453,8 +453,12 @@ export class Game {
     }
     for (const e of this.entities) {
       if (!isHostileEntity(e)) continue;
-      const t = segmentSphere(shot.last, shot.position, this.targetPosition(e), e.radius + shot.radius);
-      if (t !== null && (!hit || t < hit.t)) hit = { t, entity: e };
+      // Tall targets (the gate towers) carry a stack of hit spheres from base to top, not one at their aim point.
+      for (const lift of e.hitLifts || [null]) {
+        const centre = lift === null ? this.targetPosition(e) : e.position.clone().add(V(0, lift, 0));
+        const t = segmentSphere(shot.last, shot.position, centre, (e.hitRadius ?? e.radius) + shot.radius);
+        if (t !== null && (!hit || t < hit.t)) hit = { t, entity: e };
+      }
     }
     if (!hit) return;
     const endpoint = shot.position.clone();
@@ -536,7 +540,7 @@ export class Game {
             this.kill(nearby);
       }
     }
-    this.op.onKill?.(e);
+    this.op.onKill?.(e, reward);
   }
 
   hurtPlayer(position, amount) {
@@ -716,8 +720,10 @@ export class Game {
     if (success) {
       this.score += this.op.finishBonus?.() ?? 300;
       this.audio.play("win");
-    } else if (this.player) this.blast(this.player.position, 2.3, COLORS.hostile);
-    else this.audio.play("fail");
+    } else {
+      if (this.player && reason === "hull") this.blast(this.player.position, 2.3, COLORS.hostile);
+      this.audio.play("fail");
+    }
   }
 
   result() {

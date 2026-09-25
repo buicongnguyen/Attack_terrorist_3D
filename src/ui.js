@@ -116,6 +116,38 @@ export function readSave() {
   }
 }
 
+// Gameplay keys are read by physical position (e.code), so AZERTY and Dvorak keep the WASD shape.
+// Events without a code (some synthetic or IME events) fall back to the printed key.
+const keyCode = (e) => {
+  if (e.code) return e.code;
+  const key = e.key.length === 1 ? e.key.toUpperCase() : e.key;
+  if (key === " ") return "Space";
+  if (/^[A-Z]$/.test(key)) return `Key${key}`;
+  if (/^[0-9]$/.test(key)) return `Digit${key}`;
+  return key;
+};
+const GAME_KEYS = new Set(["Space", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"]);
+
+// Coach lines for the teaching missions: [keyboard, touch].
+const COACH = {
+  steer: ["Steer with W / S until the ring covers the jammer mast", "Drag the stick until the ring covers the jammer mast"],
+  release: ["The ring is on the mast. Release with SPACE", "The ring is on the mast. Tap Release"],
+  floor: ["Set the Drill floor: E / C, or click a floor on the ladder", "Tap a floor on the ladder to set the Drill"],
+  rally: ["A crowd gathers soon. Line up the ring before the countdown ends", "A crowd gathers soon. Line up the ring before the countdown ends"],
+  salvo: ["Salvo (X) drops from every aircraft at once", "Tap Salvo to drop from every aircraft at once"],
+  shelter: ["The blue roof is the civilian shelter. Keep every ring off it", "The blue roof is the civilian shelter. Keep every ring off it"],
+  lance: ["Lance locked on the cyan ring. Release", "Lance locked on the cyan ring. Release"],
+  lanceNone: ["No Lance lock yet. Bring the ring near a truck or a crowd", "No Lance lock yet. Bring the ring near a truck or a crowd"],
+};
+
+// Assigns markup only when it changed, so HUD refreshes don't rebuild identical DOM.
+const lastHTML = new WeakMap();
+const setHTML = (el, html) => {
+  if (lastHTML.get(el) === html) return;
+  lastHTML.set(el, html);
+  el.innerHTML = html;
+};
+
 const escape = (text) =>
   String(text).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
 
@@ -151,20 +183,27 @@ export class UI {
     this.brief = $("brief-dialog");
     this.game.reducedMotion = save.reducedMotion || matchMedia("(prefers-reduced-motion: reduce)").matches;
     $("reduced-motion").checked = this.game.reducedMotion;
+    document.documentElement.dataset.reducedMotion = String(this.game.reducedMotion);
     $("audio-enabled").checked = !save.muted;
     this.updateSound();
     this.bind();
     this.bindStick("move-stick", false);
     this.bindStick("fire-stick", true);
     this.rescueHUD = new RescueHUD(game);
-    const touchQuery = matchMedia("(any-pointer: coarse)");
-    const touchLayout = () => {
-      document.documentElement.dataset.touch = String(touchQuery.matches || navigator.maxTouchPoints > 0);
-      this.clearInput();
-    };
-    touchLayout();
-    touchQuery.addEventListener("change", touchLayout);
-    window.addEventListener("resize", () => this.clearInput());
+    // Touch layout follows the primary pointer, then whichever input was used last: a touchscreen
+    // laptop keeps keyboard hints until it is touched, and a tablet shows its sticks on first touch.
+    const coarse = matchMedia("(pointer: coarse)");
+    this.finePointer = matchMedia("(any-pointer: fine)");
+    this.setTouch(coarse.matches || (navigator.maxTouchPoints > 0 && !this.finePointer.matches));
+    coarse.addEventListener("change", () => this.setTouch(coarse.matches));
+    window.addEventListener("pointerdown", (e) => e.pointerType === "touch" && this.setTouch(true), true);
+    window.addEventListener(
+      "pointermove",
+      (e) => e.pointerType === "mouse" && this.finePointer.matches && (e.movementX || e.movementY) && this.setTouch(false),
+      true,
+    );
+    // A resize (phone toolbars, rotation) must not drop a stick the player is holding.
+    window.addEventListener("resize", () => this.keys.clear());
     refreshIcons();
     this.badgeOverlays = [
       ...document.querySelectorAll(
@@ -176,10 +215,40 @@ export class UI {
     window.addEventListener("resize", () => this.updateBadgeBounds());
   }
 
+  setTouch(on) {
+    const value = String(Boolean(on));
+    if (document.documentElement.dataset.touch === value) return;
+    document.documentElement.dataset.touch = value;
+    this.touch = Boolean(on);
+    this.clearInput();
+    this.coachKey = null;
+    if (this.brief?.open) $("brief-controls").innerHTML = this.controlHints(this.game.chapter);
+    if (this.badgeOverlays) requestAnimationFrame(() => this.updateBadgeBounds());
+  }
+
   updateBadgeBounds() {
-    this.view.badgeKeepouts = this.badgeOverlays
-      .map((node) => node.getBoundingClientRect())
-      .filter((rect) => rect.width > 0 && rect.height > 0);
+    const rects = this.badgeOverlays.map((node) => node.getBoundingClientRect());
+    this.view.badgeKeepouts = rects.filter((rect) => rect.width > 0 && rect.height > 0);
+    // Floating strike callouts (coach, flak) sit just above the flight panel or the stick.
+    const style = document.documentElement.style;
+    const clear = (id) => {
+      const r = $(id).getBoundingClientRect();
+      return r.height > 0 ? `${Math.round(innerHeight - r.top)}px` : "0px";
+    };
+    style.setProperty("--panel-clear", clear("flight-panel"));
+    style.setProperty("--stick-clear", clear("move-stick"));
+    // The strike camera frames the district above a full-width flight panel and the touch stick.
+    if (this.game.chapter === 0) {
+      const panel = $("flight-panel").getBoundingClientRect(),
+        stick = $("move-stick").getBoundingClientRect();
+      let top = panel.width > innerWidth * 0.6 ? panel.top : innerHeight;
+      if (stick.height > 0 && top < innerHeight) top = Math.min(top, stick.top);
+      const inset = Math.max(0, Math.round(innerHeight - top));
+      if (Math.abs(inset - (this.view.hudInset || 0)) > 2) {
+        this.view.hudInset = inset;
+        this.view.resize();
+      }
+    }
     this.view.needsRender = true;
   }
 
@@ -250,6 +319,7 @@ export class UI {
     $("reduced-motion").onchange = () => {
       this.game.reducedMotion = $("reduced-motion").checked;
       this.save.reducedMotion = this.game.reducedMotion;
+      document.documentElement.dataset.reducedMotion = String(this.game.reducedMotion);
       this.persist();
     };
     $("gun-weapon").onclick = () => this.weapon("gun");
@@ -268,12 +338,16 @@ export class UI {
       const chip = event.target.closest("[data-bomb]");
       if (chip) this.strike?.select(chip.dataset.bomb);
     });
-    $("ladder-floors").addEventListener("pointerdown", (event) => {
+    $("ladder-floors").addEventListener("click", (event) => {
       const row = event.target.closest("[data-floor]");
       if (row && this.strike) this.strike.setFloor(+row.dataset.floor + 1);
     });
+    // A HUD button clicked with a pointer hands focus back to the game, so Space never re-presses it.
+    $("app").addEventListener("click", (event) => {
+      if (event.detail > 0) event.target.closest("button")?.blur();
+    });
     window.addEventListener("keydown", (e) => this.keydown(e));
-    window.addEventListener("keyup", (e) => this.keys.delete(e.key.toLowerCase()));
+    window.addEventListener("keyup", (e) => this.keys.delete(keyCode(e)));
     this.view.canvas.addEventListener("pointermove", (e) => {
       if (e.pointerType !== "touch") this.aim(e.clientX, e.clientY);
     });
@@ -303,36 +377,43 @@ export class UI {
 
   keydown(e) {
     if (e.target instanceof HTMLInputElement || e.target instanceof HTMLSelectElement) return;
-    const key = e.key.toLowerCase();
-    if ([" ", "arrowup", "arrowdown", "arrowleft", "arrowright"].includes(key)) e.preventDefault();
-    if (this.brief.open) {
-      if ((key === "enter" || key === " ") && !e.repeat) this.launch();
+    const code = keyCode(e),
+      confirm = e.key === "Enter" || e.key === " ";
+    if (this.anyDialog()) {
+      // A Space or Enter still held from the last release must not click through the next dialog.
+      if (confirm && e.repeat) e.preventDefault();
+      if (this.brief.open && confirm && !e.repeat) {
+        e.preventDefault();
+        this.launch();
+      }
+      // Everything else (Escape, Tab, Space on a focused button) keeps its native dialog behaviour.
       return;
     }
-    if (key === "escape" && !e.repeat && !$("result-dialog").open && !$("prologue-dialog").open) {
-      this.dialog.open ? this.resume() : this.menu();
+    if (GAME_KEYS.has(code)) e.preventDefault();
+    if (e.key === "Escape") {
+      if (!e.repeat) this.menu();
       return;
     }
     if (this.game.paused || this.game.status !== "playing") return;
     this.game.audio.unlock();
-    this.keys.add(key);
+    if (this.finePointer.matches && !e.repeat) this.setTouch(false);
+    this.keys.add(code);
     if (e.repeat) return;
-    if (key === "r") return this.start(this.game.index);
+    if (code === "KeyR") return this.start(this.game.index);
+    const digit = +(/^(?:Digit|Numpad)([1-4])$/.exec(code)?.[1] || 0);
     const strike = this.strike;
     if (strike) {
-      const pick = BOMB_ORDER[+key - 1];
+      const pick = BOMB_ORDER[digit - 1];
       if (pick) strike.select(pick);
-      if (key === " ") strike.release();
-      if (key === "x") strike.salvo();
-      if (key === "q") strike.toggleFormation();
-      if (key === "e") strike.setFloor(strike.floor + 1);
-      if (key === "c") strike.setFloor(strike.floor - 1);
+      if (code === "Space") strike.release();
+      if (code === "KeyX") strike.salvo();
+      if (code === "KeyQ") strike.toggleFormation();
+      if (code === "KeyE") strike.setFloor(strike.floor + 1);
+      if (code === "KeyC") strike.setFloor(strike.floor - 1);
       return;
     }
-    if (key === "1") this.weapon("gun");
-    if (key === "2") this.weapon("rocket");
-    if (key === "3") this.weapon("guided");
-    if (key === "f") this.game.rescue?.flare();
+    if (digit) this.weapon(["gun", "rocket", "guided"][digit - 1] || this.game.weapon);
+    if (code === "KeyF") this.game.rescue?.flare();
   }
 
   aim(x, y) {
@@ -398,27 +479,24 @@ export class UI {
 
   updateInput() {
     if (this.game.paused) return;
-    const held = (key) => (this.keys.has(key) ? 1 : 0);
+    const held = (code) => (this.keys.has(code) ? 1 : 0);
     const input = this.game.input;
-    input.x = held("d") + held("arrowright") - held("a") - held("arrowleft") + this.moveStick.x;
-    input.z = held("s") + held("arrowdown") - held("w") - held("arrowup") + this.moveStick.z;
+    let { x: stickX, z: stickZ } = this.moveStick;
+    // The stick is screen-relative. In the portrait strike camera screen right runs north (-z) and
+    // screen down runs east (+x); keys keep their meaning there (W / S steer, A / D throttle).
+    if (this.game.chapter === 0 && this.view.strikePortrait) [stickX, stickZ] = [stickZ, -stickX];
+    input.x = held("KeyD") + held("ArrowRight") - held("KeyA") - held("ArrowLeft") + stickX;
+    input.z = held("KeyS") + held("ArrowDown") - held("KeyW") - held("ArrowUp") + stickZ;
     input.x = Math.max(-1, Math.min(1, input.x));
     input.z = Math.max(-1, Math.min(1, input.z));
     if (this.game.chapter === 0) {
       input.fire = false;
-      // In the portrait camera, screen right runs north (-z) and screen down runs east (+x).
-      if (this.view.strikePortrait) {
-        const right = input.x,
-          down = input.z;
-        input.x = down;
-        input.z = -right;
-      }
       return;
     }
-    input.fire = this.pointerFire || this.keys.has(" ") || Boolean(this.fireStick);
+    input.fire = this.pointerFire || this.keys.has("Space") || Boolean(this.fireStick);
     input.stickAim = this.fireStick;
     if (input.fire && !this.fireStick && this.pointerPosition) this.aim(this.pointerPosition.x, this.pointerPosition.y);
-    input.winch = this.game.chapter === 2 && (this.winchHeld || this.keys.has("e"));
+    input.winch = this.game.chapter === 2 && (this.winchHeld || this.keys.has("KeyE"));
     if (this.game.chapter === 2) {
       const length = Math.min(1, Math.hypot(input.x, input.z));
       if (length > 0) {
@@ -492,14 +570,20 @@ export class UI {
   }
 
   controlHints(chapter) {
-    const hints = [
+    // Chapter 1 only lists the controls this mission's flight can use.
+    const op = chapter === 0 ? this.game.op : null;
+    const drill = Boolean(op?.aircraft.some((a) => a.payload.drill !== undefined));
+    const flight = (op?.aircraft.length || 0) > 1;
+    const kinds = new Set(op ? op.aircraft.flatMap((a) => Object.keys(a.payload)) : []);
+    const keys = [
       [
         ["W / S", "Steer the formation"],
         ["A / D", "Throttle"],
-        ["1-4", "Payload"],
+        kinds.size > 1 && ["1-4", "Payload"],
         ["SPACE", "Release"],
-        ["X", "Salvo"],
-        ["E / C", "Drill floor"],
+        flight && ["X", "Salvo"],
+        flight && ["Q", "Formation spacing"],
+        drill && ["E / C", "Drill floor"],
       ],
       [
         ["WASD", "Steer Marlin"],
@@ -508,12 +592,37 @@ export class UI {
       ],
       [
         ["WASD", "Fly Lantern"],
+        ["POINTER", "Aim and fire"],
         ["1 / 2 / 3", "Gun / rockets / guided"],
         ["HOLD E", "Winch or land"],
         ["F", "Flares"],
       ],
-    ][chapter];
-    return hints.map(([key, text]) => `<span><kbd>${key}</kbd>${text}</span>`).join("");
+    ];
+    const touch = [
+      [
+        ["STICK", "Steer and throttle"],
+        kinds.size > 1 && ["CARDS", "Tap a payload"],
+        ["RELEASE", "Drop the payload"],
+        flight && ["SALVO", "Every aircraft at once"],
+        drill && ["LADDER", "Tap a floor for the Drill"],
+      ],
+      [
+        ["LEFT STICK", "Steer Marlin"],
+        ["RIGHT STICK", "Aim and fire"],
+        ["BLOCK", "Sit between guns and barges"],
+      ],
+      [
+        ["LEFT STICK", "Fly Lantern"],
+        ["RIGHT STICK", "Aim and fire"],
+        ["WINCH", "Hold to lift or land"],
+        ["FLARES", "Tap to break a lock"],
+      ],
+    ];
+    const tag = this.touch ? "b" : "kbd";
+    return (this.touch ? touch : keys)[chapter]
+      .filter(Boolean)
+      .map(([key, text]) => `<span><${tag} class="pad">${key}</${tag}>${text}</span>`)
+      .join("");
   }
 
   launch() {
@@ -562,7 +671,10 @@ export class UI {
         const button = document.createElement("button");
         button.className = `${index === this.game.index ? "active" : ""} ${record ? "completed" : ""}`;
         button.innerHTML = `<span>${c + 1}.${missionNumber(index)}</span>${escape(mission.name)}<em>${"★".repeat(record?.stars || 0)}${"☆".repeat(3 - (record?.stars || 0))}</em>`;
-        button.setAttribute("aria-label", `Mission ${c + 1}.${missionNumber(index)}: ${mission.name}`);
+        button.setAttribute(
+          "aria-label",
+          `Mission ${c + 1}.${missionNumber(index)}: ${mission.name}, ${record ? `${record.stars} of 3 stars` : "not completed"}`,
+        );
         button.onclick = () => this.start(index);
         group.append(button);
       });
@@ -615,6 +727,14 @@ export class UI {
     $("rescue-hud").hidden = $("rescue-actions").hidden = c !== 2;
     $("rocket-stock").hidden = c !== 2;
     $("rocket-weapon").disabled = false;
+    // Progressive HUD: Drill floor, salvo and formation controls only appear when this flight can use them.
+    const flight = c === 0 ? this.game.op.aircraft : [];
+    const drill = flight.some((a) => a.payload.drill !== undefined);
+    $("floor-control").hidden = !drill;
+    $("ladder").classList.toggle("no-drill", !drill);
+    $("salvo").hidden = $("formation").hidden = flight.length < 2;
+    $("coach").hidden = true;
+    this.coachKey = null;
     $("shield-title").textContent = c === 1 ? "MARLIN SHIELDS" : "LANTERN SHIELDS";
     $("comms").innerHTML = "";
     for (const el of this.labels.values()) el.remove();
@@ -694,6 +814,7 @@ export class UI {
     $("result-next").innerHTML = `${finale ? "Play again" : result.success ? "Next mission" : "Try again"}<i data-lucide="arrow-right"></i>`;
     refreshIcons();
     $("result-dialog").showModal();
+    $("result-next").focus();
   }
 
   failureText(result, story) {
@@ -749,9 +870,12 @@ export class UI {
     else {
       const total = state.shields.reduce((a, b) => a + b, 0);
       $("shield-count").textContent = `${total} / 9`;
-      $("shield-segments").innerHTML = state.shields
-        .map((value) => `<span>${Array.from({ length: 3 }, (_, i) => `<i class="${i >= value ? "lost" : ""}"></i>`).join("")}</span>`)
-        .join("");
+      setHTML(
+        $("shield-segments"),
+        state.shields
+          .map((value) => `<span>${Array.from({ length: 3 }, (_, i) => `<i class="${i >= value ? "lost" : ""}"></i>`).join("")}</span>`)
+          .join(""),
+      );
     }
     if (chapter === 1) this.updateRiver(state, op);
     if (chapter === 2) {
@@ -777,7 +901,7 @@ export class UI {
     const left = op.left.enemies + op.left.aa + op.left.masts + op.left.trucks;
     $("objective-count").textContent = String(left).padStart(2, "0");
     const parts = [
-      op.left.enemies && `${op.left.enemies} FIGHTERS`,
+      op.left.enemies && `${op.left.enemies} HOSTILES`,
       op.left.aa && `${op.left.aa} FLAK`,
       op.left.masts && `${op.left.masts} JAMMER`,
       op.left.trucks && `${op.left.trucks} TRUCKS`,
@@ -787,9 +911,10 @@ export class UI {
       const card = document.querySelector(`[data-aircraft="${i}"]`);
       if (!card) return;
       card.classList.toggle("down", !a.alive);
-      card.querySelector(".hp").innerHTML = a.alive
-        ? Array.from({ length: a.maxHp }, (_, k) => `<i class="${k < a.hp ? "" : "lost"}"></i>`).join("")
-        : "DOWN";
+      setHTML(
+        card.querySelector(".hp"),
+        a.alive ? Array.from({ length: a.maxHp }, (_, k) => `<i class="${k < a.hp ? "" : "lost"}"></i>`).join("") : "DOWN",
+      );
       card.querySelectorAll("[data-bomb]").forEach((chip) => {
         const kind = chip.dataset.bomb;
         chip.querySelector("strong").textContent = a.payload[kind] ?? 0;
@@ -816,12 +941,32 @@ export class UI {
     }
     [...$("intel").children].forEach((chip, i) => {
       const e = events[i];
-      chip.className = `intel-chip ${e.active ? "hot" : e.next < 8 ? "soon" : ""}`;
-      chip.querySelector("strong").textContent = e.active ? `NOW ${Math.ceil(e.remaining)}s` : `${Math.ceil(e.next)}s`;
+      // A gathering only counts while its members are actually there; runners scatter it.
+      const there = e.active && e.present > 0;
+      const className = `intel-chip ${there ? "hot" : e.active ? "scattered" : e.next < 8 ? "soon" : ""}`;
+      if (chip.className !== className) chip.className = className;
+      const text = e.active ? (there ? `${e.present}/${e.alive} ${Math.ceil(e.remaining)}s` : "SCATTERED") : `${Math.ceil(e.next)}s`;
+      const strong = chip.querySelector("strong");
+      if (strong.textContent !== text) strong.textContent = text;
     });
     $("intel").hidden = events.length === 0;
-    $("flak-warning").hidden = !op.flak;
-    if (op.flak) $("flak-text").textContent = `FLAK LOCK / ${op.flak.toUpperCase()}`;
+    const flak = op.flak || [];
+    $("flak-warning").hidden = flak.length === 0;
+    if (flak.length) {
+      // The most urgent lock leads; any others are counted.
+      const [first] = flak;
+      const text = `FLAK LOCK / ${first.callsign.toUpperCase()} / ${first.solved ? "BREAK!" : `${Math.max(0, first.in).toFixed(1)}s`}${flak.length > 1 ? ` +${flak.length - 1}` : ""}`;
+      $("flak-warning").classList.toggle("break", first.solved);
+      if ($("flak-text").textContent !== text) $("flak-text").textContent = text;
+    }
+    // Coach hints give way to a flak warning, which is the more urgent callout.
+    const coach = flak.length || !op.hint ? "" : COACH[op.hint]?.[this.touch ? 1 : 0] || "";
+    if (coach !== this.coachKey) {
+      this.coachKey = coach;
+      $("coach").textContent = coach;
+      $("coach").hidden = !coach;
+      $("coach").classList.toggle("go", op.hint === "release" || op.hint === "lance");
+    }
     const ladder = op.ladder;
     $("ladder").classList.toggle("empty", !ladder);
     $("ladder-name").textContent = ladder ? `${ladder.name}${ladder.kind === "shelter" ? " / NO STRIKE" : ""}` : "PIPPER ON OPEN GROUND";
@@ -830,7 +975,9 @@ export class UI {
     if (ladderKey !== this.ladderKey) {
       this.ladderKey = ladderKey;
       $("ladder-floors").innerHTML = ladder
-        ? ladder.floors.map((f) => `<button data-floor="${f.f}"><span>${f.label}</span><em></em></button>`).join("")
+        ? ladder.floors
+            .map((f) => `<button data-floor="${f.f}" aria-label="Floor ${f.label}"><span>${f.label}</span><em></em></button>`)
+            .join("")
         : "";
     }
     if (ladder)
@@ -847,18 +994,21 @@ export class UI {
   updateRiver(state, op) {
     $("objective-count").textContent = `${Math.max(0, Math.ceil(op.length - op.distance))}`;
     $("objective-unit").textContent = op.holding ? "CONVOY HOLDING" : "METRES TO GO";
-    $("barge-bars").innerHTML = op.barges
-      .map(
-        (b, i) =>
-          `<div class="bar ${b.alive ? "" : "lost"}"><span>${i ? "RELIEF TWO" : "HARBOR MERCY"}</span><div><i style="transform:scaleX(${b.hp / b.max})"></i></div></div>`,
-      )
-      .join("");
+    setHTML(
+      $("barge-bars"),
+      op.barges
+        .map(
+          (b, i) =>
+            `<div class="bar ${b.alive ? "" : "lost"}"><span>${i ? "RELIEF TWO" : "HARBOR MERCY"}</span><div><i style="transform:scaleX(${(b.hp / b.max).toFixed(3)})"></i></div></div>`,
+        )
+        .join(""),
+    );
     $("boss-bars").hidden = !op.boss || op.boss.phase === "approach";
     if (op.boss)
-      $("boss-bars").innerHTML = [
-        ...op.boss.towers.map((hp, i) => `<div class="bar hostile"><span>GATE TOWER ${i ? "EAST" : "WEST"}</span><div><i style="transform:scaleX(${hp})"></i></div></div>`),
-        `<div class="bar hostile ${op.boss.shielded ? "shielded" : ""}"><span>GENERATOR${op.boss.shielded ? " / SHIELDED" : ""}</span><div><i style="transform:scaleX(${op.boss.generator})"></i></div></div>`,
-      ].join("");
+      setHTML($("boss-bars"), [
+        ...op.boss.towers.map((hp, i) => `<div class="bar hostile"><span>GATE TOWER ${i ? "EAST" : "WEST"}</span><div><i style="transform:scaleX(${hp.toFixed(3)})"></i></div></div>`),
+        `<div class="bar hostile ${op.boss.shielded ? "shielded" : ""}"><span>GENERATOR${op.boss.shielded ? " / SHIELDED" : ""}</span><div><i style="transform:scaleX(${op.boss.generator.toFixed(3)})"></i></div></div>`,
+      ].join(""));
   }
 
   updateLabels(labels) {
@@ -874,7 +1024,7 @@ export class UI {
         this.labels.set(label.id, el);
       }
       const p = this.view.project(label);
-      el.textContent = label.text;
+      if (el.textContent !== label.text) el.textContent = label.text;
       el.classList.toggle("hot", Boolean(label.hot));
       el.style.transform = `translate(${p.x}px, ${p.y}px) translate(-50%, -100%)`;
     }

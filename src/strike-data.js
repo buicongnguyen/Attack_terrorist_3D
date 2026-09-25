@@ -21,7 +21,8 @@ export const FLIGHT = Object.freeze({
   lateral: 8,
   entryX: -54,
   exitX: 54,
-  turnTime: 2.6,
+  turnTime: 2,
+  egress: 16,
   laneMin: -24,
   laneMax: 24,
   tight: 3.4,
@@ -33,6 +34,8 @@ export const FLIGHT = Object.freeze({
 export const WALK = Object.freeze({ speed: 3, run: 4.4, stair: 1 });
 export const GRAVITY = -9.81;
 export const STEP = 1 / 120;
+// Speed kept by a Drill each time it punches through a slab.
+export const DRILL_SLOWDOWN = 0.93;
 
 export const BOMBS = Object.freeze({
   drill: {
@@ -83,11 +86,13 @@ const S = (x, z) => ({ x, z });
 
 // Palette for facades: warm, saturated, and never beige.
 const HUES = ["#e2704f", "#2fb3a6", "#f2b441", "#ff8a6b", "#6ec3f0", "#8fd64a"];
+const GENERIC = ["Harbour Offices", "Ferry Flats", "Chandlery", "Net Lofts", "Pilot House", "Salt Store"];
 const tower = (id, col, row, floors, opts = {}) => ({
   id,
   col,
   row,
   floors,
+  name: GENERIC[(col + row * 3) % GENERIC.length],
   kind: "tower",
   color: HUES[(col * 2 + row * 3 + floors) % HUES.length],
   roof: [],
@@ -174,8 +179,8 @@ export const STRIKE_MISSIONS = [
         ],
         rally: S(0, 6.75),
         at: 20,
-        every: 48,
-        stay: 8,
+        every: 54,
+        stay: 12,
       },
       { kind: "post", at: P("T2", 6, -2.2, 1.8) },
       { kind: "post", at: P("T2", 6, 2.4, 1.2) },
@@ -210,8 +215,8 @@ export const STRIKE_MISSIONS = [
         homes: [P("T2", 1, -1.4, 0.4), P("T2", 2, 1.2, 1), P("T2", 2, -0.8, -1.4)],
         rally: P("T2", 4, 0.2, 0.9),
         at: 12,
-        every: 26,
-        stay: 7,
+        every: 28,
+        stay: 12,
       },
       {
         kind: "patrol",
@@ -266,8 +271,8 @@ export const STRIKE_MISSIONS = [
         ],
         rally: S(-6.75, -2),
         at: 18,
-        every: 38,
-        stay: 7,
+        every: 44,
+        stay: 12,
       },
       {
         kind: "patrol",
@@ -328,8 +333,8 @@ export const STRIKE_MISSIONS = [
         officers: 4,
         rally: P("GT", 5, 0.4, 0.8),
         at: 30,
-        every: 64,
-        stay: 9,
+        every: 68,
+        stay: 12,
       },
       { kind: "post", at: P("T2", 5, -1.6, 1.4) },
       { kind: "post", at: P("T2", 5, 1.8, 1.2) },
@@ -513,13 +518,18 @@ export function blockHits(blocks, buildings, a, b) {
 }
 
 // Line of sight for blast damage: walls and slabs shelter people unless they are broken.
+const holds = (block, p, e = 1e-3) =>
+  p.x >= block.min[0] - e && p.x <= block.max[0] + e &&
+  p.y >= block.min[1] - e && p.y <= block.max[1] + e &&
+  p.z >= block.min[2] - e && p.z <= block.max[2] + e;
+
 export function lineBlocked(blocks, buildings, a, b) {
   for (const building of buildings) {
     if (segmentBox(a, b, building.min, building.max, 0.1) === null) continue;
     for (const block of blocks) {
-      if (block.b !== building.index || !block.alive) continue;
-      const t = segmentBox(a, b, block.min, block.max, -0.04);
-      if (t !== null && t > 0.001 && t < 0.97) return true;
+      if (block.b !== building.index || !block.alive || holds(block, a) || holds(block, b)) continue;
+      const t = segmentBox(a, b, block.min, block.max);
+      if (t !== null && t < 0.999) return true;
     }
   }
   return false;
@@ -807,6 +817,7 @@ export function forecastImpact(blocks, buildings, release, kind, floor = 1) {
   const state = { ...release };
   const points = [{ x: state.x, y: state.y, z: state.z }];
   let crossesShelter = false;
+  const crossed = new Set();
   // Same step as the live simulation, so the pipper is exact even at building edges.
   const dt = STEP;
   for (let step = 0; step < 1200; step++) {
@@ -819,8 +830,8 @@ export function forecastImpact(blocks, buildings, release, kind, floor = 1) {
       const hit = blockHits(blocks, buildings, a, b)[0];
       if (hit || b.y <= below + BOMBS.scatter.burst) {
         const burst = hit ? lerp3(a, b, hit.t) : b;
-        // Measure the ground under the burst itself, exactly as the live canister does.
-        const centre = scatterCentre(burst, state, surfaceBelow(buildings, blocks, burst.x, burst.z));
+        // Measure the ground under the burst exactly as the live canister does.
+        const centre = scatterCentre(burst, state, burstGround(buildings, blocks, burst, state));
         points.push(burst);
         return {
           points,
@@ -833,8 +844,12 @@ export function forecastImpact(blocks, buildings, release, kind, floor = 1) {
       continue;
     }
     if (kind === "drill") {
-      for (const hit of blockHits(blocks, buildings, a, b))
+      for (const hit of blockHits(blocks, buildings, a, b)) {
+        if (crossed.has(hit.block.id)) continue;
+        crossed.add(hit.block.id);
         if (buildings[hit.block.b].kind === "shelter") crossesShelter = true;
+        if (hit.block.kind === "slab" || hit.block.kind === "roof") state.vy *= DRILL_SLOWDOWN;
+      }
       const building = buildingAt(buildings, b.x, b.z);
       if (building) {
         const target = Math.min(floor - 1, building.floors);
@@ -877,6 +892,13 @@ export function forecastImpact(blocks, buildings, release, kind, floor = 1) {
     }
   }
   return { points, impact: points[points.length - 1], building: null, floor: 0, crossesShelter };
+}
+
+export function burstGround(buildings, blocks, point, velocity) {
+  const below = surfaceBelow(buildings, blocks, point.x, point.z);
+  if (point.y >= below - 0.05) return below;
+  const len = Math.hypot(velocity.vx, velocity.vz) || 1;
+  return surfaceBelow(buildings, blocks, point.x - (velocity.vx / len) * 0.6, point.z - (velocity.vz / len) * 0.6);
 }
 
 export function surfaceBelow(buildings, blocks, x, z) {

@@ -170,6 +170,8 @@ export class WorldView {
         progress(++count / MODELS.length);
       }),
     );
+    // A mission with invisible enemies is worse than a clear error, so a missing model stops the boot.
+    if (this.missing.size) throw new Error(`Missing models: ${[...this.missing].join(", ")}`);
   }
 
   model(name, position = new THREE.Vector3(), scale = 1, parent = this.level) {
@@ -506,6 +508,7 @@ export class WorldView {
     const width = this.canvas.clientWidth || innerWidth,
       height = this.canvas.clientHeight || innerHeight;
     this.renderer.setSize(width, height, false);
+    this.canvasRect = this.canvas.getBoundingClientRect();
     const aspect = width / height,
       mobile = width < 700;
     if (this.chapter === 0 && this.strikeLayout) this.frameCity(aspect, mobile);
@@ -568,15 +571,22 @@ export class WorldView {
     const tall = this.canvas.clientHeight || innerHeight;
     const landscapePhone = aspect > 1 && tall < 520;
     const smallLandscape = landscapePhone && tall <= 420;
-    const topShare = this.strikePortrait ? 0.1 : landscapePhone ? 0.15 : mobile ? 0.12 : 0.1;
-    const bottomShare = this.strikePortrait ? 0.36 : smallLandscape ? 0.2 : landscapePhone ? 0.04 : mobile ? 0.3 : 0.22;
+    const topShare = this.strikePortrait ? 0.14 : landscapePhone ? 0.15 : mobile ? 0.12 : 0.1;
+    // The UI reports how much of the screen bottom its flight panel and stick cover (hudInset).
+    const measured = this.hudInset ? this.hudInset / tall + 0.02 : 0;
+    const bottomShare = Math.max(
+      this.strikePortrait ? 0.3 : smallLandscape ? 0.2 : landscapePhone ? 0.04 : mobile ? 0.3 : 0.22,
+      measured,
+    );
     const rightShare = smallLandscape ? 0.18 : landscapePhone ? 0.4 : 0;
     let spanY = (max.y - min.y) / (1 - topShare - bottomShare);
     let spanX = ((max.x - min.x) * 1.04) / (1 - rightShare);
     if (spanX / spanY > aspect) spanY = spanX / aspect;
     else spanX = spanY * aspect;
     const cx = (min.x + max.x) / 2 + (spanX * rightShare) / 2;
-    const cy = (min.y + max.y) / 2 + (spanY * (bottomShare - topShare)) / 2;
+    // Camera-space y grows up the screen: a larger bottom reserve moves the view centre down,
+    // which lifts the district clear of the flight panel.
+    const cy = (min.y + max.y) / 2 + (spanY * (topShare - bottomShare)) / 2;
     this.camera.left = cx - spanX / 2;
     this.camera.right = cx + spanX / 2;
     this.camera.top = cy + spanY / 2;
@@ -625,8 +635,9 @@ export class WorldView {
   }
 
   project(point) {
+    // The canvas rect is cached on resize: reading it per label forced a layout after every HUD write.
     const p = new THREE.Vector3(point.x, point.y, point.z).project(this.camera),
-      r = this.canvas.getBoundingClientRect();
+      r = this.canvasRect || this.canvas.getBoundingClientRect();
     return { x: r.left + ((p.x + 1) / 2) * r.width, y: r.top + ((1 - p.y) / 2) * r.height, visible: p.z < 1 };
   }
 

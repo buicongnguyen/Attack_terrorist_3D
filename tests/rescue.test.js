@@ -5,6 +5,8 @@ import {
   hoverReady,
   rescueProgress,
   isHostileEntity,
+  rearm,
+  RESCUE_GEAR,
 } from "../src/rescue-data.js";
 
 test("rescue routes grow in length and soldiers remain within the valley", () => {
@@ -45,4 +47,12 @@ test("friendly soldiers, supplies, and hidden caves are not weapon targets", () 
 test("disabled caves stop being targets; disarmed trucks can still be destroyed", () => {
   assert.ok(!isHostileEntity({ type: "cave", phase: "disabled" }));
   assert.ok(isHostileEntity({ type: "aa-truck", launcherDisabled: true }));
+});
+
+test("the base rearms to the standard load without taking extra stock away", () => {
+  assert.deepEqual(rearm({ rockets: 0, guided: 2, flares: 1 }), { ...RESCUE_GEAR });
+  const stocked = rearm({ rockets: 20, guided: 1, flares: 9 });
+  assert.equal(stocked.rockets, 20);
+  assert.equal(stocked.guided, RESCUE_GEAR.guided);
+  assert.equal(stocked.flares, 9);
 });

@@ -258,6 +258,130 @@ export async function checkStrike(page, check) {
   });
   for (const [name, value] of Object.entries(mechanics)) check(`strike ${name}`, value);
 
+  const review = await page.evaluate(() => {
+    const { game: g, ui } = window.__TIDELOCK__;
+    const out = {};
+    // Step the game until done() is true (or the step budget runs out); each() runs before every step.
+    const until = (steps, done, each) => {
+      for (let i = 0; i < steps && g.status === "playing" && !done(); i++) {
+        each?.();
+        g.update(1 / 120);
+      }
+      return done();
+    };
+
+    // Flak: holding course once the fire solution has frozen gets the target hit; breaking away dodges.
+    const flakPass = (breakAway) => {
+      ui.start(3);
+      g.paused = false;
+      const op = g.op;
+      op.aa.slice(1).forEach((n) => (n.dead = true));
+      const nest = op.aa[0];
+      nest.cooldown = 0;
+      op.flight.lane = nest.position.z;
+      let target = null,
+        solved = false,
+        fired = false;
+      until(
+        120 * 20,
+        () => fired && op.shells.length === 0,
+        () => {
+          g.input.x = 0;
+          g.input.z = 0;
+          if (!target && nest.state === "lock") target = nest.target;
+          if (nest.solution) solved = true;
+          if (target && nest.state === "idle" && op.shells.length) fired = true;
+          if (breakAway && (nest.solution || op.shells.length)) g.input.z = op.flight.lane > 0 ? -1 : 1;
+        },
+      );
+      return { lost: target ? target.maxHp - target.hp : -1, solved, fired };
+    };
+    const held = flakPass(false);
+    const broke = flakPass(true);
+    out.flakHitsAHeldCourse = held.fired && held.lost > 0;
+    out.flakMissesABreakAfterTheSolution = broke.fired && broke.solved && broke.lost === 0;
+    out.flakLockKeepsItsTarget = (() => {
+      ui.start(3);
+      g.paused = false;
+      const nest = g.op.aa[0];
+      nest.cooldown = 0;
+      g.op.flight.lane = nest.position.z;
+      let first = null,
+        kept = true;
+      until(120 * 20, () => nest.state === "idle" && first !== null, () => {
+        if (nest.state === "lock") {
+          first ??= nest.target;
+          if (nest.target !== first) kept = false;
+        }
+      });
+      return first !== null && kept;
+    })();
+
+    // Success waits for bombs that are still falling.
+    ui.start(0);
+    g.paused = false;
+    until(30, () => false);
+    g.op.release("shockwave");
+    for (const t of g.op.targets()) {
+      t.dead = true;
+      if (t.marker) t.marker.visible = false;
+    }
+    g.update(1 / 120);
+    out.successWaitsForBombs = g.status === "playing" && g.op.bombs.length === 1;
+    until(1200, () => g.status !== "playing");
+    out.thenSucceeds = g.status === "success";
+
+    // A Drill detonates where its forecast said it would.
+    ui.start(1);
+    g.paused = false;
+    const op = g.op;
+    const tower = op.buildings.find((b) => b.id === "T1");
+    op.flight.lane = tower.z;
+    op.select("drill");
+    op.setFloor(3);
+    let predicted = null,
+      landed = null;
+    const detonate = op.detonate.bind(op);
+    op.detonate = (bomb, point) => {
+      landed ??= { x: point.x, y: point.y, z: point.z };
+      return detonate(bomb, point);
+    };
+    until(120 * 20, () => landed !== null, () => {
+      const f = op.aircraft[0].forecast;
+      if (!predicted && f?.building?.id === "T1" && Math.abs(f.impact.x - tower.x) < 0.8) {
+        predicted = { x: f.impact.x, y: f.impact.y, z: f.impact.z };
+        op.release("drill");
+      }
+    });
+    out.drillLandsOnItsForecast =
+      Boolean(predicted && landed) && Math.hypot(predicted.x - landed.x, predicted.y - landed.y, predicted.z - landed.z) < 0.6;
+
+    // A gathering only counts while its members are actually there.
+    ui.start(2);
+    g.paused = false;
+    const op2 = g.op;
+    const event = op2.events[0];
+    const label = () => op2.snapshot().labels.find((l) => l.id === `rally-${event.group}`)?.text || "";
+    out.rallyShowsWhoIsThere = until(120 * 40, () => event.status?.active && event.present > 0) && label().includes("THERE");
+    for (const e of op2.enemies) if (e.plan.group === event.group) op2.hide(e, true);
+    g.update(1 / 120);
+    out.scatteredRallyIsNotCounted = event.present === 0 && label().includes("SCATTERED");
+
+    // Coach hints and progressive controls.
+    ui.start(0);
+    ui.updateHUD(true);
+    const coach = document.getElementById("coach");
+    out.coachTeachesTheFirstPass = !coach.hidden && /ring/.test(coach.textContent);
+    out.singleAircraftHidesFlightControls =
+      document.getElementById("floor-control").hidden && document.getElementById("salvo").hidden && document.getElementById("formation").hidden;
+    ui.start(5);
+    ui.updateHUD(true);
+    out.fullFlightShowsFlightControls =
+      !document.getElementById("floor-control").hidden && !document.getElementById("salvo").hidden && !document.getElementById("formation").hidden;
+    return out;
+  });
+  for (const [name, value] of Object.entries(review)) check(`strike ${name}`, value === true);
+
   const runs = await page.evaluate(`(${autopilot.toString()})()`);
   for (const run of runs) {
     console.log(`  strike 1.${run.index + 1}: ${run.status} ${run.reason || ""} used ${run.used}/${run.par} in ${run.time}s stars ${run.stars} lost ${run.lost} left ${JSON.stringify(run.left)}`);

@@ -43,7 +43,7 @@ export const RIVER_MISSIONS = [
       guns(8, 1, { crew: 2 }),
       mines(22, [-3, 4]),
       guns(34, -1, { crew: 2, drums: true }),
-      radio(34, "drums"),
+      radio(32, "drumsHint"),
       pickup(46, "star", -4),
       guns(58, 1, { count: 2, crew: 2, drums: true }),
       guns(64, -1, { count: 1, crew: 1, launcher: true }),
@@ -93,8 +93,9 @@ export const RIVER_MISSIONS = [
   },
   {
     // 2.3 Lock Gate: the convoy holds while Marlin breaks two towers and the generator.
+    // The medal is not scripted: it floats out through the gate once it opens.
     speed: 3.6,
-    length: 190,
+    length: 200,
     fireRate: 2.2,
     gate: 128,
     script: [
@@ -110,8 +111,7 @@ export const RIVER_MISSIONS = [
       skiffs(100, "wedge", 5, { x: 2 }),
       pickup(104, "gun", -4),
       mark(118, "HIGHWATER LOCK"),
-      pickup(176, "medal", 0),
-      mark(186, "HIGHWATER STATION"),
+      mark(196, "HIGHWATER STATION"),
     ],
     boss: {
       towerHp: 24,

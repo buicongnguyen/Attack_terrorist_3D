@@ -5,8 +5,11 @@ import { Game } from "./game.js";
 import { AudioBus } from "./audio.js";
 import { FixedClock } from "./physics.js";
 import { UI, readSave } from "./ui.js";
+import { firstOpenMission } from "./data.js";
 import * as strikeData from "./strike-data.js";
 import * as rescueData from "./rescue-data.js";
+
+document.documentElement.dataset.boot = "started";
 
 async function boot() {
   const view = new WorldView(document.getElementById("world"));
@@ -20,7 +23,7 @@ async function boot() {
   let ui;
   const game = new Game(view, audio, (type, data) => ui?.onEvent(type, data));
   ui = new UI(game, view, save);
-  game.start(0);
+  game.start(firstOpenMission(save.records));
   document.getElementById("loading").hidden = true;
   document.getElementById("app").hidden = false;
   view.resize();
@@ -54,9 +57,5 @@ boot().catch((error) => {
   console.error("Tidelock startup failed:", error);
   document.getElementById("loading-label").textContent =
     "The mission could not load. Check your connection and WebGL support, then reload.";
-  const button = document.createElement("button");
-  button.textContent = "Reload mission";
-  button.className = "primary-button";
-  button.onclick = () => location.reload();
-  document.getElementById("loading").append(button);
+  document.getElementById("loading-retry").hidden = false;
 });

@@ -43,3 +43,12 @@ test("river stars reward protecting the barges", () => {
   assert.equal(riverStars({ success: true, bargesLost: 0, bargeHealth: 0.9, damage: 2 }), 3);
   assert.equal(riverStars({ success: true, bargesLost: 1, bargeHealth: 0.4, damage: 2 }), 1);
 });
+
+test("the Lock Gate medal floats out after the gate opens, with room to reach Marlin", () => {
+  const leg = RIVER_MISSIONS[2];
+  assert.ok(!leg.script.some((e) => e.type === "pickup" && e.kind === "medal"), "the medal is not scripted");
+  // The gate holds the convoy 48 m after it spawns; the medal then needs to drift past Marlin's reach.
+  const holdAt = leg.gate + (-24 - RIVER.spawnZ);
+  const drift = leg.length - holdAt;
+  assert.ok(-24 + 3 + drift > RIVER.far + 2.4, `medal ends at z=${-24 + 3 + drift}`);
+});

@@ -1,5 +1,46 @@
 # Release Verification
 
+## Tidelock 2.1 (second evaluation and review pass)
+
+The fixes in [REDESIGN.md §9](REDESIGN.md#9-second-review-pass-tidelock-21) were verified on 2026-09-25 against the production build (`vite preview`, GPU rendering).
+
+- **44 Node tests** (`npm test`). New since 2.0:
+  - someone standing on a slab can be seen from the room above it;
+  - every gathering outlasts a full pass cycle;
+  - the Lock Gate medal is not scripted and has room to reach Marlin;
+  - the base rearm never lowers stock;
+  - the campaign resumes at the first mission without a record.
+- **174 browser checks**, zero runtime or resource errors. New since 2.0:
+  - Chapter 1:
+    - flak hits a held course but misses a break after the solution freezes;
+    - a flak lock keeps its target;
+    - success waits for bombs in flight;
+    - a Drill detonates where its forecast said;
+    - rally labels count who is there and read SCATTERED after an alert;
+    - the coach teaches mission 1.1;
+    - flight controls appear only when the flight can use them.
+  - Chapter 2:
+    - kills chain into combos;
+    - a ramming skiff dies without a reward, even mid-aim;
+    - gate towers take hits at their base;
+    - the medal floats out when the gate opens.
+  - UI:
+    - AZERTY keys steer by position;
+    - the result dialog focuses its main action and ignores a held Space;
+    - the Reduced motion setting reaches the HUD.
+  - Scripted pilots still complete all twelve missions:
+
+    | Missions | Result |
+    | --- | --- |
+    | Strike 1.1–1.6 | bombs used against par: 1/1, 2/2, 3/3, 6/5, 5/6, 10/8 |
+    | River 2.1–2.3 | 3, 3 and 2 stars |
+    | Rescue 3.1–3.3 | full sorties home |
+- **Layout audit** at 320×568, 320×740, 390×844, 844×390, 568×320, 768×1024, 1024×768 and 1440×900:
+  - no HUD overlaps, including the coach and flak callouts;
+  - no control off-screen;
+  - the district framed above the flight panel and touch stick.
+- **Loading failures.** A blocked script bundle and a missing model each show an error and a Reload button.
+
 ## Tidelock 2.0 (Operation Breakwater redesign)
 
 The redesign ([REDESIGN.md](REDESIGN.md)) was verified on 2026-09-25 with the commands below against the production build (`vite preview`, SwiftShader WebGL, the same setup CI uses) and again against the dev server with GPU rendering.

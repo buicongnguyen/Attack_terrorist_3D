@@ -13,6 +13,20 @@
       href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%2310233f'/%3E%3Cpath d='M12 18h40v9H37v25H27V27H12z' fill='%23ffc62b'/%3E%3C/svg%3E"
     />
     <title>Tidelock / Operation Breakwater</title>
+    <script>
+      // If the game bundle cannot load at all, say so instead of showing the loading bar forever.
+      // Script load errors don't bubble, so they are caught on the way down (capture phase).
+      window.addEventListener(
+        "error",
+        function (event) {
+          if (!event.target || event.target.tagName !== "SCRIPT" || document.documentElement.dataset.boot) return;
+          document.getElementById("loading-label").textContent =
+            "The mission could not load. Check your connection, then reload.";
+          document.getElementById("loading-retry").hidden = false;
+        },
+        true,
+      );
+    </script>
   </head>
   <body>
     <canvas id="world" aria-label="Tidelock 3D battlefield"></canvas>
@@ -21,6 +35,7 @@
       <h1>TIDELOCK</h1>
       <p id="loading-label">Preparing Solace Harbor</p>
       <div class="load-track"><span id="loading-progress"></span></div>
+      <button id="loading-retry" class="primary-button" onclick="location.reload()" hidden>Reload mission</button>
     </div>
     <div id="app" hidden>
       <header class="topbar">
@@ -64,6 +79,7 @@
 
       <div id="intel" hidden aria-label="Intel timeline"></div>
       <div id="flak-warning" hidden role="alert"><i data-lucide="siren"></i><span id="flak-text">FLAK LOCK</span></div>
+      <div id="coach" hidden role="status" aria-live="polite"></div>
       <div id="world-labels" aria-hidden="true"></div>
       <div id="toast" role="status" aria-live="polite"></div>
       <div id="combo" aria-live="polite"><strong id="combo-count"></strong><span id="combo-bonus"></span></div>
@@ -71,7 +87,7 @@
       <aside id="ladder" hidden aria-label="Target building floors">
         <div class="ladder-head"><i data-lucide="building-2"></i><span id="ladder-name">NO TARGET</span></div>
         <div id="ladder-floors"></div>
-        <p class="ladder-hint">Tap a floor to aim the Drill</p>
+        <p class="ladder-hint">Click or tap a floor to aim the Drill</p>
       </aside>
 
       <section id="flight-panel" hidden aria-label="Kestrel Flight">
@@ -81,7 +97,7 @@
             <button id="formation" class="chip-button" title="Formation spacing (Q)">
               <i data-lucide="move-horizontal"></i><span id="formation-label">TIGHT</span>
             </button>
-            <div class="floor-control" aria-label="Drill detonation floor">
+            <div id="floor-control" class="floor-control" role="group" aria-label="Drill detonation floor">
               <button id="floor-down" class="icon-button small" aria-label="Lower drill floor" title="Lower floor (C)">
                 <i data-lucide="chevrons-down"></i>
               </button>
@@ -103,7 +119,7 @@
         </div>
       </section>
 
-      <div id="move-stick" class="joystick" role="button" tabindex="0" aria-label="Move">
+      <div id="move-stick" class="joystick" tabindex="-1" aria-hidden="true">
         <div class="stick-cross"></div>
         <div class="stick-knob"><i data-lucide="move"></i></div>
       </div>
@@ -118,7 +134,7 @@
             <i data-lucide="target"></i><small id="guided-stock">6</small>
           </button>
         </div>
-        <div id="fire-stick" class="joystick fire-stick" role="button" tabindex="0" aria-label="Aim and fire">
+        <div id="fire-stick" class="joystick fire-stick" tabindex="-1" aria-hidden="true">
           <div class="stick-cross"></div>
           <div class="stick-knob"><i data-lucide="crosshair"></i></div>
         </div>
@@ -200,11 +216,11 @@
       <button id="brief-launch" class="primary-button"><i data-lucide="play"></i>Launch<kbd>ENTER</kbd></button>
     </dialog>
 
-    <dialog id="menu-dialog">
+    <dialog id="menu-dialog" aria-labelledby="menu-title">
       <div class="dialog-heading">
         <div>
           <span class="eyebrow">KESTREL / OPERATIONS</span>
-          <h2>Mission control</h2>
+          <h2 id="menu-title">Mission control</h2>
         </div>
         <button id="menu-close" class="icon-button" aria-label="Resume mission" title="Resume"><i data-lucide="x"></i></button>
       </div>
@@ -223,7 +239,12 @@
       </div>
       <details>
         <summary>Controls</summary>
-        <div class="control-reference">
+        <div class="control-reference touch-only">
+          <span>Steer formation / vehicle</span><b class="pad">LEFT STICK</b><span>Aim and fire</span><b class="pad">RIGHT STICK</b>
+          <span>Payload / Drill floor</span><b class="pad">CARDS / LADDER</b><span>Winch / land</span><b class="pad">HOLD WINCH</b>
+          <span>Pause</span><b class="pad">PAUSE BUTTON</b>
+        </div>
+        <div class="control-reference keys-only">
           <span>Steer formation / vehicle</span><kbd>W A S D</kbd><span>Throttle (flight)</span><kbd>A / D</kbd>
           <span>Payload select</span><kbd>1 2 3 4</kbd><span>Release / Salvo</span><kbd>Space / X</kbd>
           <span>Drill floor</span><kbd>E / C</kbd><span>Formation spacing</span><kbd>Q</kbd>
@@ -234,12 +255,12 @@
       </details>
     </dialog>
 
-    <dialog id="result-dialog">
+    <dialog id="result-dialog" aria-labelledby="result-title" aria-describedby="result-story">
       <div class="result-emblem"><i id="result-icon" data-lucide="badge-check"></i></div>
       <p class="eyebrow" id="result-eyebrow">MISSION COMPLETE</p>
       <h2 id="result-title">Jammer down</h2>
       <p id="result-story"></p>
-      <div id="result-stars" aria-label="Mission rating"></div>
+      <div id="result-stars" role="img" aria-label="Mission rating"></div>
       <ul id="result-criteria"></ul>
       <div class="result-stats">
         <div><span>SCORE</span><strong id="result-score">0</strong></div>

@@ -242,3 +242,33 @@ test("combos, stars and formation slots", () => {
   const slots = formationSlots(3, FLIGHT.wide);
   assert.deepEqual(slots.map((s) => s.z), [0, -FLIGHT.wide, FLIGHT.wide]);
 });
+
+test("someone standing on a slab can still be seen from the room above it", () => {
+  const { buildings, blocks } = setup(1);
+  const tower = buildings.find((b) => b.id === "T1");
+  const slab = blocks.find(
+    (block) =>
+      block.b === tower.index && block.kind === "slab" && block.f === 2 &&
+      tower.x + 0.5 >= block.min[0] && tower.x + 0.5 <= block.max[0] && tower.z + 0.5 >= block.min[2] && tower.z + 0.5 <= block.max[2],
+  );
+  // Feet exactly on the slab's top face: the slab they stand on must not hide them.
+  const feet = { x: tower.x + 0.5, y: slab.max[1], z: tower.z + 0.5 };
+  const blast = { x: tower.x + 1.4, y: slab.max[1] + 1.6, z: tower.z - 0.6 };
+  assert.ok(!lineBlocked(blocks, buildings, blast, feet));
+  // A point just below the slab is still sheltered by it.
+  assert.ok(lineBlocked(blocks, buildings, blast, { ...feet, y: slab.min[1] - 0.3 }));
+});
+
+test("gatherings outlast a pass: any pass at normal speed can reach an open rally window", () => {
+  for (const layout of STRIKE_MISSIONS) {
+    // One full cycle: approach, cross the district, egress at the boosted speed, turn back.
+    const edge = (layout.cols * CITY.pitch) / 2 + 2;
+    const cycle =
+      (-edge - FLIGHT.entryX) / FLIGHT.speed +
+      (2 * edge) / FLIGHT.speed +
+      (FLIGHT.exitX - edge) / (FLIGHT.speed + FLIGHT.egress) +
+      FLIGHT.turnTime;
+    for (const group of layout.groups.filter((g) => g.kind === "rally"))
+      assert.ok(group.stay >= cycle, `${group.label} stays ${group.stay}s, a pass cycle takes ${cycle.toFixed(1)}s`);
+  }
+});

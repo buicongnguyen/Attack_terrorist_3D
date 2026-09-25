@@ -503,11 +503,30 @@ kbd {
     transform: scale(1.04);
   }
 }
+@keyframes flak-throb {
+  50% {
+    transform: translateX(-50%) scale(1.04);
+  }
+}
+/* Anchored (untransformed) placements pulse in brightness so the pill never grows past its edges. */
+@keyframes flak-pulse {
+  50% {
+    filter: brightness(1.3);
+  }
+}
+#flak-warning.break {
+  background: #ff2a1a;
+  box-shadow: 0 4px 0 #9b1b0c, 0 0 0 3px rgba(255, 255, 255, 0.85);
+}
 #flak-warning {
   position: absolute;
   top: 124px;
   left: 50%;
   transform: translateX(-50%);
+  white-space: nowrap;
+  max-width: calc(100vw - 24px);
+  overflow: hidden;
+  text-overflow: ellipsis;
   display: flex;
   gap: 8px;
   align-items: center;
@@ -518,7 +537,58 @@ kbd {
   font-size: 15px;
   border-radius: 99px;
   box-shadow: 0 4px 0 #9b1b0c;
-  animation: throb 0.3s infinite;
+  animation: flak-throb 0.3s infinite;
+}
+/* Coach hints for the teaching missions sit just above the flight panel. */
+#coach {
+  position: absolute;
+  left: 50%;
+  bottom: calc(var(--panel-clear, 150px) + 12px);
+  transform: translateX(-50%);
+  max-width: min(560px, calc(100vw - 24px));
+  padding: 8px 16px;
+  border-radius: 14px;
+  background: var(--panel);
+  border: 2px solid rgba(255, 198, 43, 0.6);
+  box-shadow: var(--lip);
+  color: #fff4d0;
+  font-size: 14px;
+  font-weight: 600;
+  text-align: center;
+  pointer-events: none;
+}
+#coach.go {
+  background: var(--gold);
+  border-color: #fff1b8;
+  color: var(--ink);
+}
+.intel-chip.scattered {
+  border-color: rgba(159, 196, 255, 0.6);
+  opacity: 0.75;
+}
+.pad {
+  font: 700 10px/1 "Fredoka Variable", system-ui;
+  padding: 3px 7px;
+  border-radius: 99px;
+  background: rgba(255, 198, 43, 0.16);
+  border: 1px solid rgba(255, 198, 43, 0.55);
+  color: var(--gold);
+  white-space: nowrap;
+}
+.touch-only {
+  display: none !important;
+}
+html[data-touch="true"] .touch-only {
+  display: grid !important;
+}
+html[data-touch="true"] .keys-only {
+  display: none !important;
+}
+#ladder.no-drill .ladder-hint {
+  display: none;
+}
+#loading-retry {
+  margin-top: 18px;
 }
 #world-labels {
   position: absolute;
@@ -2220,6 +2290,103 @@ html[data-touch="true"] kbd {
   }
 }
 
+/* Coach and flak callouts. Narrow windows and touch tablets: above the flight panel and the sticks. */
+@media (max-width: 900px) {
+  #coach,
+  #flak-warning {
+    top: auto;
+    bottom: calc(max(var(--panel-clear, 150px), var(--stick-clear, 0px)) + 10px);
+    max-width: calc(100vw - 420px);
+    white-space: normal;
+  }
+}
+@media (min-width: 701px) and (max-width: 900px) {
+  #drop {
+    min-width: 150px;
+  }
+  #salvo {
+    min-width: 0;
+  }
+  .speed-readout {
+    display: none;
+  }
+}
+/* Portrait phones: above the stick, clear of the ladder column on the right. */
+@media (max-width: 700px) and (orientation: portrait) {
+  #coach,
+  #flak-warning {
+    left: var(--edge, 8px);
+    right: calc(var(--edge, 8px) + 120px);
+    bottom: calc(var(--stick-clear, 240px) + 8px);
+    max-width: none;
+    transform: none;
+    padding: 6px 10px;
+    font-size: 12px;
+    text-align: left;
+    white-space: normal;
+  }
+  #flak-warning {
+    animation-name: flak-pulse;
+  }
+}
+/* Landscape phones: right-aligned above the flight panel, clear of the intel column on the left. */
+@media (orientation: landscape) and (max-height: 520px) {
+  #coach,
+  #flak-warning {
+    top: auto;
+    left: auto;
+    right: var(--edge, 8px);
+    bottom: calc(var(--panel-clear, 110px) + 8px);
+    max-width: min(420px, calc(100vw - 380px));
+    transform: none;
+    padding: 6px 10px;
+    font-size: 12px;
+    text-align: left;
+    white-space: normal;
+  }
+  #flak-warning {
+    animation-name: flak-pulse;
+  }
+}
+/* Small landscape phones: a single-line strip right above the flight panel. */
+@media (orientation: landscape) and (max-height: 420px) {
+  #coach,
+  #flak-warning {
+    left: calc(var(--stick) + 16px);
+    right: var(--edge, 8px);
+    bottom: calc(var(--panel-clear, 110px) + 4px);
+    max-width: none;
+    padding: 3px 10px;
+    border-radius: 10px;
+    font-size: 11px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  #flak-warning svg {
+    width: 14px;
+    height: 14px;
+  }
+}
+/* The narrowest phones: the Drill control and Release button give up their labels' spare width. */
+@media (max-width: 380px) {
+  .floor-control span {
+    min-width: 30px;
+  }
+  .floor-control small {
+    display: none;
+  }
+  #drop {
+    padding: 0 8px;
+    font-size: 13px;
+  }
+  #drop-label {
+    white-space: normal;
+    line-height: 1.05;
+    text-align: left;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
@@ -2227,4 +2394,11 @@ html[data-touch="true"] kbd {
     animation: none !important;
     transition: none !important;
   }
+}
+/* The in-game Reduced motion toggle stills the HUD as well as the camera. */
+html[data-reduced-motion="true"] *,
+html[data-reduced-motion="true"] *::before,
+html[data-reduced-motion="true"] *::after {
+  animation: none !important;
+  transition: none !important;
 }

@@ -5,6 +5,10 @@ export const RESCUE_RADIUS = 4.2;
 export const WINCH_SECONDS = 3;
 export const RESCUE_GEAR = Object.freeze({ rockets: 14, guided: 6, flares: 4 });
 
+// The base tops every rack up to the standard load and never takes away extra stock.
+export const rearm = (gear) =>
+  Object.fromEntries(Object.keys(RESCUE_GEAR).map((key) => [key, Math.max(gear?.[key] ?? 0, RESCUE_GEAR[key])]));
+
 const sites = [
   { x: -23, z: -30, name: "ECHO 01", sector: "LOWLAND OUTPOST" },
   { x: 25, z: -91, name: "ECHO 02", sector: "BROKEN CROSSING" },
