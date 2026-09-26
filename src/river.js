@@ -6,6 +6,8 @@ import {
   WEAPONS,
   AIR_STRIKE,
   SUPPORT,
+  SCENERY,
+  BARRACKS,
   skiffPath,
   riverStars,
   strikeLine,
@@ -31,6 +33,8 @@ const BEAM = {
 const UP = new THREE.Vector3(0, 1, 0);
 
 const V = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
+// Targets worth a rocket salvo when Marlin holds the deck gun on them (2.7).
+const HEAVY = new Set(["launcher", "barracks", "tower", "generator"]);
 const turretNode = (mesh) => {
   let node = null;
   mesh.traverse((child) => {
@@ -78,6 +82,16 @@ export class RiverOperation {
     this.support = { heli: null, ally: null };
     this.beam = this.createBeam();
     this.ripples = new Ripples(view, 90);
+    // Houses, trees and sheds on the banks (2.7): shot down, they come back intact when their
+    // stretch of bank scrolls round again.
+    this.scenery = view.scrollProps
+      .filter((prop) => prop.userData.scenery)
+      .map((prop) => {
+        const spec = SCENERY[prop.userData.scenery];
+        const record = { prop, kind: prop.userData.scenery, spec, hp: spec.hp, alive: true, hidden: false, model: prop.children[0], wreck: null, burn: 0 };
+        prop.userData.record = record;
+        return record;
+      });
   }
 
   // Ripple styles for the canal's enemy (see ripples.js): gun lines red, the dangerous launchers
@@ -87,6 +101,7 @@ export class RiverOperation {
       {
         cannon: { size: 2.4, color: 0xff4b2b, gain: 0.8 },
         launcher: { size: 3.2, color: 0xffc62b, gain: 1 },
+        barracks: { size: 3.6, color: 0xffc62b, gain: 1 },
         skiff: { size: 1.7, color: 0xff4b2b, gain: 0.7 },
         tower: { size: 3.8, color: 0xffc62b, gain: 1 },
         generator: { size: 3.2, color: 0xffc62b, gain: 1 },
@@ -98,8 +113,9 @@ export class RiverOperation {
   // Hits left with the deck gun, as a row of pips over guns, launchers and skiffs.
   addHealthBar(e) {
     const bar = new THREE.Sprite(this.healthFor(e));
-    bar.position.set(0, e.type === "launcher" ? 4.2 : 2.6, 0);
-    bar.scale.set(e.type === "launcher" ? 3.4 : 2.4, 0.9, 1);
+    const big = e.type === "launcher" || e.type === "barracks";
+    bar.position.set(0, big ? 4.2 : 2.6, 0);
+    bar.scale.set(big ? 3.4 : 2.4, 0.9, 1);
     bar.renderOrder = 12;
     e.mesh.add(bar);
     e.hpBar = bar;
@@ -183,6 +199,7 @@ export class RiverOperation {
           aim: 0,
         });
         gun.mesh.rotation.y = (s * Math.PI) / 2;
+        this.clearScenery(s, cz, 3);
         gun.turret = turretNode(gun.mesh);
         gun.line = this.aimLine();
         this.addHealthBar(gun);
@@ -206,6 +223,7 @@ export class RiverOperation {
           scrolling: true,
         });
         launcher.mesh.rotation.y = (-s * Math.PI) / 2;
+        this.clearScenery(s, launcher.position.z, 4.5);
         launcher.light = g.view.ring(V(0, 0.1, 0), 1.85, COLORS.hostile, 0.13, launcher.mesh);
         this.addHealthBar(launcher);
       }
@@ -242,9 +260,166 @@ export class RiverOperation {
         this.addHealthBar(skiff);
       }
       if (event.pattern !== "pincer") this.say("skiffs");
-    } else if (event.type === "bridge") this.spawnBridge(z);
+    } else if (event.type === "barracks") this.spawnBarracks(event, z);
+    else if (event.type === "bridge") this.spawnBridge(z);
     else if (event.type === "radio") this.say(event.key);
     else if (event.type === "checkpoint") g.notify("checkpoint", event.name);
+  }
+
+  // A barracks on the bank, its door to the water; once in sight it sends riflemen down to the
+  // water's edge one by one. Houses and trees where it stands make way until they scroll round.
+  spawnBarracks(event, z) {
+    const g = this.game,
+      view = g.view,
+      side = event.side;
+    const x = side * (RIVER.bank + BARRACKS.offset);
+    const b = g.entity("barracks", view.assets.has("barracks-hut") ? "barracks-hut" : null, V(x, 1.08, z), {
+      hp: BARRACKS.hp,
+      maxHp: BARRACKS.hp,
+      radius: 3,
+      hitRadius: 2.6,
+      scrolling: true,
+      side,
+      crew: event.crew,
+      crewTotal: event.crew,
+      timer: 0,
+    });
+    if (!view.assets.has("barracks-hut")) {
+      view.box(V(0, 1.2, 0), V(6, 2.4, 3.6), 0x8f9a5b, b.mesh);
+      view.box(V(0, 2.55, 0), V(6.4, 0.3, 4), 0x2f2c35, b.mesh);
+    }
+    b.mesh.rotation.y = side > 0 ? Math.PI / 2 : -Math.PI / 2;
+    this.addHealthBar(b);
+    this.clearScenery(side, z, 5.5);
+    this.say("barracks");
+  }
+
+  updateBarracks(b, dt) {
+    const g = this.game;
+    if (b.crew <= 0 || b.position.z < -40) return;
+    b.timer -= dt;
+    if (b.timer > 0) return;
+    b.timer = BARRACKS.every;
+    const n = b.crewTotal - b.crew--;
+    const side = b.side;
+    const e = g.opponent(V(side * (RIVER.bank + BARRACKS.offset - 2.2), 1.08, b.position.z + ((n % 3) - 1) * 1.6), {
+      scrolling: true,
+      scale: 0.9,
+      hp: 2,
+      cooldown: 1.2 + n * 0.4,
+      aim: 0,
+    });
+    e.run = { x: side * (RIVER.bank + 1.3 + (n % 2) * 0.8) };
+    e.mesh.rotation.y = side > 0 ? Math.PI / 2 : -Math.PI / 2;
+  }
+
+  // A rifleman running from the barracks to the water, who then fights like a bridge gunner.
+  updateRunner(e, dt) {
+    const dx = e.run.x - e.position.x;
+    e.running = true;
+    if (Math.abs(dx) > 0.05) {
+      e.position.x += Math.sign(dx) * Math.min(Math.abs(dx), 3.4 * dt);
+      return;
+    }
+    e.run = null;
+    e.running = false;
+    e.gunner = true;
+    e.line = this.aimLine();
+  }
+
+  // ------------------------------------------------------------------ scenery on the banks
+  // Houses and trees where the enemy sets up make way until their stretch scrolls round.
+  clearScenery(side, z, reach) {
+    for (const r of this.scenery)
+      if (Math.sign(r.prop.position.x) === side && Math.abs(r.prop.position.z - z) < reach) {
+        r.hidden = true;
+        r.model.visible = false;
+      }
+  }
+
+  // Where fragments land: the bank top, or sinking into the canal.
+  groundAt(x) {
+    return Math.abs(x) > RIVER.bank + 0.5 ? 1.12 : -0.6;
+  }
+
+  // The first house, tree or shed a round's path crosses (see Game.resolveFriendlyShot).
+  sceneryHit(shot, test) {
+    const reach = RIVER.bank - 3;
+    if (Math.abs(shot.last.x) < reach && Math.abs(shot.position.x) < reach) return null;
+    let best = null;
+    for (const r of this.scenery) {
+      if (!r.alive || r.hidden) continue;
+      const c = r.prop.position;
+      const t = test({ x: c.x, y: c.y + r.spec.lift, z: c.z }, r.spec.radius);
+      if (t !== null && (!best || t < best.t)) best = { t, scenery: r, apply: (amount) => this.hurtScenery(r, amount) };
+    }
+    return best;
+  }
+
+  hurtScenery(r, amount) {
+    if (!r.alive || r.hidden || amount <= 0) return;
+    r.hp -= amount;
+    this.game.puff(r.prop.position.clone().add(V(0, r.spec.lift, 0)), 0xdacba6, 0.4, 0.3);
+    if (r.hp <= 0) this.destroyScenery(r);
+  }
+
+  // Down it goes: a blast, pieces thrown into the sky, smoke from anything that burns, and
+  // what is left (a stump, a charred shell, scattered logs) scrolls on with the bank.
+  destroyScenery(r) {
+    const g = this.game,
+      view = g.view;
+    r.alive = false;
+    r.model.visible = false;
+    const at = r.prop.position.clone().add(V(0, r.spec.lift * 0.6, 0));
+    const wreck = new THREE.Group();
+    r.prop.add(wreck);
+    r.wreck = wreck;
+    const kind = r.spec.wreck;
+    if (kind === "tree") {
+      g.blast(at, 1.1, 0xffc62b, { quiet: true, small: true });
+      g.shatter(at.clone().add(V(0, 0.8, 0)), r.spec.colors, 12, 0.9);
+      view.box(V(0, 0.3, 0), V(0.45, 0.6, 0.45), 0x8b5a3c, wreck);
+      view.box(V(0, 0.62, 0), V(0.5, 0.06, 0.5), 0xe0a868, wreck);
+    } else if (kind === "reeds" || kind === "post") {
+      g.shatter(at, r.spec.colors, 5, 0.6);
+      g.flash(at, 0xfff1b8, 0.6);
+      if (kind === "post") view.box(V(0, 0.2, 0), V(0.25, 0.4, 0.25), 0x3a4048, wreck);
+    } else {
+      // Houses, sheds, containers and log piles go up in flames.
+      g.blast(at, kind === "logs" ? 1.8 : 2.6, 0xff8a2b);
+      g.shatter(at.clone().add(V(0, 0.6, 0)), r.spec.colors, kind === "logs" ? 12 : 16, kind === "logs" ? 1.1 : 1.35);
+      r.smoke = g.smokeColumn(r.prop.position, kind === "logs" ? 5 : 4, kind === "logs" ? 1 : 1.2, V(0, 1, 0));
+      const charred = kind === "logs" ? [0x5a3a24, 0x8b5a3c] : [0x2f2c35, 0x4a4652, 0x6b4a33];
+      for (let i = 0; i < 4; i++) {
+        const piece = view.box(V((i - 1.5) * 0.9, 0.18 + (i % 2) * 0.12, (i % 2 ? 0.5 : -0.5)), V(1 + (i % 2) * 0.4, 0.36, 0.7), charred[i % charred.length], wreck);
+        piece.rotation.y = i * 0.7;
+      }
+    }
+    g.score += r.spec.reward;
+  }
+
+  // A stretch of bank scrolling round comes back intact.
+  restoreScenery(prop) {
+    const r = prop.userData.record;
+    if (!r) return;
+    if (r.wreck) this.game.view.disposeObject(r.wreck);
+    r.wreck = null;
+    // No smoke rising from the house that stands there now.
+    if (r.smoke) r.smoke.t = 0;
+    r.smoke = null;
+    r.alive = true;
+    r.hidden = false;
+    r.hp = r.spec.hp;
+    r.burn = 0;
+    r.model.visible = true;
+  }
+
+  // Blasts on the bank (drums, crates, the air strike) knock scenery down too.
+  blastScenery(point, radius, amount) {
+    for (const r of this.scenery) {
+      if (!r.alive || r.hidden) continue;
+      if (Math.hypot(r.prop.position.x - point.x, r.prop.position.z - point.z) < radius + r.spec.radius) this.hurtScenery(r, amount);
+    }
   }
 
   spawnBridge(z) {
@@ -337,7 +512,10 @@ export class RiverOperation {
     if (this.data.gate && !this.boss && this.distance >= this.data.gate) this.spawnGate();
     for (const prop of g.view.scrollProps) {
       prop.position.z += flow * dt;
-      if (prop.position.z > 36) prop.position.z -= 132;
+      if (prop.position.z > 36) {
+        prop.position.z -= 132;
+        this.restoreScenery(prop);
+      }
     }
     for (const line of this.lines) line.visible = false;
     g.auto = Math.max(0, g.auto - dt);
@@ -347,7 +525,7 @@ export class RiverOperation {
     g.supportCooldown -= dt;
     if (g.twin > 0) {
       const target = g.nearestTarget();
-      if (target) g.fire(g.targetPosition(target));
+      if (target) g.fire(g.targetPosition(target), false, true);
     }
     if (g.auto > 0 && g.supportCooldown <= 0) {
       const target = g.nearestTarget();
@@ -495,6 +673,8 @@ export class RiverOperation {
         e.halo.material.opacity = 0.35 + Math.sin(g.time * 5) * 0.25;
       else if (e.type === "cannon" && near) this.updateGun(e, dt);
       else if (e.type === "launcher" && near) this.updateLauncher(e, dt);
+      else if (e.type === "barracks") this.updateBarracks(e, dt);
+      else if (e.type === "enemy" && e.run) this.updateRunner(e, dt);
       else if (e.type === "enemy" && e.gunner && near) this.updateGunner(e, dt);
     }
   }
@@ -721,11 +901,26 @@ export class RiverOperation {
           chain++;
         }
       }
+      this.blastScenery(e.position, radius, 8);
       if (e.type === "crate" && e.bridge) {
         e.bridge.mesh.children[0]?.children.slice(0, 3).forEach((part) => (part.visible = false));
         g.notify("toast", "BRIDGE AMBUSH BROKEN");
       }
       if (chain) this.say("drums");
+    }
+    if (e.type === "barracks") {
+      // Pieces into the sky, smoke, a charred shell left on the bank, and anyone still inside.
+      g.shatter(e.position.clone().add(V(0, 1.2, 0)), [0x8f9a5b, 0x2f2c35, 0xc47f45, 0xff4b2b], 18, 1.5);
+      const wreck = g.entity("wreck", null, e.position.clone(), { friendly: true, scrolling: true });
+      for (let i = 0; i < 5; i++)
+        g.view.box(V((i % 3 - 1) * 1.6, 0.25 + (i % 2) * 0.2, i < 3 ? -0.8 : 0.8), V(1.6, 0.5 + (i % 2) * 0.3, 1.2), i % 2 ? 0x2f2c35 : 0x5d6340, wreck.mesh).rotation.y = i * 0.4;
+      g.smokeColumn(wreck.position, 5, 1.4, V(0, 1, 0));
+      this.blastScenery(e.position, 4, 8);
+      if (e.crew > 0) {
+        g.score += 50 * e.crew;
+        g.notify("toast", `BARRACKS DOWN / ${e.crew} INSIDE`);
+        e.crew = 0;
+      }
     }
     if (e.type === "skiff") {
       g.blast(e.position.clone().add(V(0, 0.4, 0)), SKIFF.chain, 0xff8a2b, { quiet: true });
@@ -787,6 +982,24 @@ export class RiverOperation {
       }
     }
     return best;
+  }
+
+  // With the deck gun held on a heavy target (a bunker, a barracks, the gate's towers or its
+  // generator), a salvo follows on its own (2.7): one per target every few seconds, and never the
+  // last salvo in the rack, which stays for the player.
+  autoRockets(aim) {
+    const g = this.game;
+    if (this.rockets <= WEAPONS.rocket.salvo || g.rocketCooldown > 0 || g.status !== "playing") return false;
+    const target = g.aimTarget || this.hostileNear(aim, 5);
+    if (!target || !HEAVY.has(target.type) || target.shielded) return false;
+    if (g.time - (target.autoRocketAt ?? -Infinity) < 4) return false;
+    if (!this.fireRockets(aim)) return false;
+    target.autoRocketAt = g.time;
+    if (!this.said.has("autoRockets")) {
+      this.said.add("autoRockets");
+      g.notify("toast", "ROCKETS FOLLOW ON THE BIG TARGET");
+    }
+    return true;
   }
 
   // Rockets (key 2): a salvo of three from the rack, fanned a little, homing on what you aim at.
@@ -878,6 +1091,12 @@ export class RiverOperation {
         if (t !== null && (!hit || t < hit.t)) hit = { t, entity: e };
       }
     }
+    for (const r of this.scenery) {
+      if (!r.alive || r.hidden) continue;
+      const c = r.prop.position;
+      const t = segmentSphere(origin, far, V(c.x, c.y + r.spec.lift, c.z), r.spec.radius);
+      if (t !== null && (!hit || t < hit.t)) hit = { t, scenery: r };
+    }
     const end = hit ? origin.clone().lerp(far, hit.t) : far;
     if (hit?.missile) {
       hit.missile.dead = true;
@@ -885,6 +1104,15 @@ export class RiverOperation {
       g.notify("toast", "INTERCEPT +90");
       g.blast(hit.missile.position, 1.2, COLORS.gold);
     } else if (hit?.entity) this.burn(hit.entity, spec.dps * dt);
+    else if (hit?.scenery) {
+      const r = hit.scenery;
+      r.burn += spec.dps * dt;
+      const whole = Math.floor(r.burn);
+      if (whole > 0) {
+        r.burn -= whole;
+        this.hurtScenery(r, whole);
+      }
+    }
     // Stretch the beam from the muzzle to the hit.
     const length = origin.distanceTo(end);
     beam.group.position.copy(origin).lerp(end, 0.5);
@@ -1021,6 +1249,7 @@ export class RiverOperation {
     }
     for (const shot of g.projectiles)
       if (shot.hostile && !shot.dead && Math.hypot(shot.position.x - p.x, shot.position.z - p.z) < AIR_STRIKE.radius) shot.dead = true;
+    this.blastScenery(p, AIR_STRIKE.radius, AIR_STRIKE.damage);
   }
 
   // ------------------------------------------------------------------ help from crates

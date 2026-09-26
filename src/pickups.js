@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import { SUPPORT } from "./river-data.js";
+import { ROUNDS } from "./armoury.js";
 
 export const PICKUPS = Object.freeze({
   health: {
@@ -69,6 +70,31 @@ export const PICKUPS = Object.freeze({
     label: "SUPPORT",
     reward: 60,
     toast: "GUIDED +4 / FLARES +2",
+  },
+  // Rounds for the main gun (2.7): the gun switches to the strongest it holds.
+  ap: {
+    model: "pickup-gun",
+    color: ROUNDS.ap.color,
+    label: "AP",
+    reward: 60,
+    rounds: "ap",
+    toast: `AP ROUNDS +${ROUNDS.ap.magazine}`,
+  },
+  he: {
+    model: "pickup-gun",
+    color: ROUNDS.he.color,
+    label: "HE",
+    reward: 60,
+    rounds: "he",
+    toast: `HE ROUNDS +${ROUNDS.he.magazine}`,
+  },
+  plasma: {
+    model: "pickup-star",
+    color: ROUNDS.plasma.color,
+    label: "PLASMA",
+    reward: 80,
+    rounds: "plasma",
+    toast: `PLASMA +${ROUNDS.plasma.magazine}`,
   },
 });
 
@@ -175,6 +201,26 @@ export function createPickupBadgeMaterial(kind) {
       ctx.beginPath();
       ctx.ellipse(x, y, 6, 10, 0, 0, Math.PI * 2);
       ctx.fill();
+    }
+  } else if (info.rounds) {
+    // A belt of three rounds, the tips in the round's colour.
+    for (const [i, x] of [58, 96, 134].entries()) {
+      ctx.fillStyle = "#f6fff4";
+      ctx.fillRect(x - 11, 58, 22, 52);
+      ctx.fillStyle = accent;
+      ctx.beginPath();
+      ctx.moveTo(x - 11, 58);
+      ctx.quadraticCurveTo(x, 20 + (i % 2) * 6, x + 11, 58);
+      ctx.fill();
+      ctx.fillStyle = "#123b46";
+      ctx.fillRect(x - 11, 92, 22, 5);
+    }
+    if (kind === "plasma") {
+      ctx.strokeStyle = accent;
+      ctx.lineWidth = 5;
+      ctx.beginPath();
+      ctx.arc(96, 78, 52, -0.4, 0.4);
+      ctx.stroke();
     }
   } else if (["gun", "ammo", "support"].includes(kind)) {
     ctx.save();

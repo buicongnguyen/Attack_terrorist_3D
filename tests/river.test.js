@@ -11,6 +11,9 @@ import {
   strikeLine,
   laserHeat,
   DECK_GUN_RANGE,
+  SCENERY,
+  RIVER_THEMES,
+  BARRACKS,
 } from "../src/river-data.js";
 import { PICKUPS } from "../src/pickups.js";
 
@@ -124,4 +127,40 @@ test("the Lock Gate medal floats out after the gate opens, with room to reach Ma
   const holdAt = leg.gate + (-24 - RIVER.spawnZ);
   const drift = leg.length - holdAt;
   assert.ok(-24 + 3 + drift > RIVER.far + 2.4, `medal ends at z=${-24 + 3 + drift}`);
+});
+
+test("every canal mission has its own banks, and what stands on them can be shot down", () => {
+  assert.equal(RIVER_THEMES.length, RIVER_MISSIONS.length);
+  const sets = RIVER_THEMES.map((theme) => [...new Set(Array.from({ length: 22 }, (_, i) => theme.props(i)))].sort().join());
+  assert.equal(new Set(sets).size, RIVER_THEMES.length, "no two missions dress their banks alike");
+  assert.equal(new Set(RIVER_THEMES.map((t) => t.bank)).size >= 4, true);
+  for (const theme of RIVER_THEMES)
+    for (let i = 0; i < 22; i++) {
+      const kind = theme.props(i);
+      // Rocks stay; everything else has hit points, a size and a wreck.
+      if (kind !== "rock") assert.ok(SCENERY[kind], kind);
+    }
+  // A tree falls to a couple of deck-gun rounds (two points each); a house or a shed takes a burst.
+  const rounds = (kind) => Math.ceil(SCENERY[kind].hp / WEAPONS.gun.damage);
+  assert.ok(rounds("palm") <= 2 && rounds("jungle-tree") <= 2 && rounds("pine") <= 2);
+  assert.ok(rounds("stilt-house") >= 4 && rounds("shed") >= 4);
+  for (const spec of Object.values(SCENERY)) assert.ok(spec.colors.length >= 2 && spec.radius > 0 && spec.reward > 0);
+});
+
+test("barracks stand on the banks in every canal mission and take a burst to knock down", () => {
+  for (const [i, m] of RIVER_MISSIONS.entries()) {
+    const huts = m.script.filter((e) => e.type === "barracks");
+    assert.ok(huts.length >= 1, `2.${i + 1} has a barracks`);
+    for (const hut of huts) {
+      assert.ok(hut.side === 1 || hut.side === -1);
+      assert.ok(hut.crew >= 3 && hut.crew <= BARRACKS.crew);
+      // Before the Lock Gate holds the convoy, well inside the mission.
+      assert.ok(hut.d < (m.gate ?? m.length) - 20, `2.${i + 1}: barracks at ${hut.d}`);
+    }
+  }
+  // Eight standard rounds, or a rocket salvo and a few rounds; its riflemen come out one by one.
+  assert.equal(Math.ceil(BARRACKS.hp / WEAPONS.gun.damage), 8);
+  assert.ok(BARRACKS.every * BARRACKS.crew > 6);
+  // It stands on the bank, clear of the guns at the water's edge.
+  assert.ok(BARRACKS.offset > 3.4 + 1.9);
 });

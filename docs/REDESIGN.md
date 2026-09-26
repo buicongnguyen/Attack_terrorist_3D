@@ -460,7 +460,91 @@ Smaller ones, also fixed:
 
 The review also noted that each fighter costs about ten draw calls. The crews are under a roof, so they skip the shadow pass: 1.6 draws 627 calls, not 706.
 
-## 15. Controls
+## 15. Tidelock 2.7: banks that burn, and a helicopter that is easy to fly
+
+### The brief
+
+On the gunboat missions, make the houses and trees along the banks destructible, with an explosion, pieces thrown into the sky and smoke; add barracks on the banks; switch to a better weapon when you have one. On the helicopter missions:
+
+- pick people and crates up just by flying through them;
+- fire like a 2D game, along a direction rather than at an exact point;
+- make an enemy launcher explode when hit and leave the ground full of holes;
+- land at another base rather than back at the start;
+- add more crates and kinds of round, switching to the stronger one automatically.
+
+More enemy soldiers too: some stand around the missile launchers until they spot you, then run to them and prepare a launch, and killing them in time stops it. More trucks that carry launchers: they patrol, stop and take about five seconds to raise the launcher, and can be killed at any time. Drone stations whose drones take about five seconds to lift off and stay down if hit early. And different maps for Last Light and for Relief Run.
+
+### Evaluation
+
+The ideas fit the game, and most make it easier to play without making it empty. Two needed care:
+
+- **Flying through removes the reason to stop.** With the winch gone, a scripted pilot finished a sortie in 20 s without a fight. So a signal is **pinned** while the squad beside it lives: clear them, then fly over. Lantern also flies a little slower (11 m/s, was 14), so the ground fight has time to happen.
+- **"Just the right direction" from a helicopter 7.5 m up.** The camera looks down at an angle, so Lantern is drawn above her spot on the ground, and a stick direction read on screen was off by up to 26°. The stick now points from where she appears, and a target within about 12° of the line takes the burst dead on.
+
+"Switch to the better weapon" is done two ways: rounds that the gun always takes from the top of the stock, and rockets that follow on their own when the deck gun is held on a heavy target. "Different maps" is taken for every mission in both chapters: each has its own ground and its own hour.
+
+### The canal
+
+| Idea | Kept | How |
+| --- | --- | --- |
+| Destructible banks | Yes | Houses, trees, palms, pines, sheds, log piles, container stacks, lamps and reeds all have hit points: a tree takes two deck-gun rounds, a house four. Rounds, rockets, the laser, exploding drums and the air strike knock them down: a blast, pieces thrown into the sky, smoke from anything that burns, and a stump, a charred shell or scattered logs that scroll on with the bank. A stretch of bank comes back intact when it scrolls round. They pay a little score and count as no kill. |
+| Barracks on the banks | Yes | Eleven across the six missions: a khaki hut with its door to the water. Once in sight it sends riflemen down to the water one by one, and they fight like the bridge gunners. Eight deck-gun rounds (or a rocket salvo and a few) knock it flat with anyone still inside. |
+| Switch to the better weapon | Yes, two ways | **Rounds**: AP (twice the damage), HE (twice, and a burst on anyone standing close) and plasma (three times, through up to three targets in a line), in crates on the water. The gun fires the strongest rounds you hold and drops back when a magazine runs dry; the gun button shows what is loaded. **Rockets**: with the deck gun held on a bunker, a barracks, a gate tower or the generator, a rocket salvo follows on its own. |
+| A different map for each mission | Yes | Mangrove Mile: mangroves and stilt villages, in the morning. The Narrows: a stepped rock gorge and pines, under cloud. Floodplain: paddies and half-drowned houses at noon. Sawmill Reach: log yards and sheds on a smoky afternoon. The Cut: concrete walls and lamps in the haze. Lock Gate: containers and sheds at sunset. |
+
+![A stilt house shot down on Mangrove Mile: pieces in the air, smoke, the charred shell](chapter2-banks.png)
+
+### The helicopter
+
+| Idea | Kept | How |
+| --- | --- | --- |
+| Fly through to pick up | Yes, with a reason to fight | Fly over a signal and the soldier rides a line up: no hovering, no winch key. A signal stays pinned while the squad beside it lives ("PINNED / 3", a red ring); clear them, then fly over ("FLY OVER"). Crates are taken by flying through them. |
+| Fire like a 2D game | Yes | Rounds fly flat along a direction, just above the ground, and hit whatever they cross on the map. Holding the mouse button fires towards the pointer, the right stick sets the direction on touch, and Space fires the way you fly. Lantern turns to face her fire. Rockets lock on along the line; guided missiles search a wider cone. |
+| Launchers explode and leave holes | Yes | Launch sites, missile trucks, drone stations, barracks and guns go up in a large blast, throw pieces into the sky, smoke, and leave a scorched crater with holes. So do the cave launchers. |
+| Land at another base | Yes | 3.1 starts at Highwater's pad and lands at the Verde aid station; 3.2 starts there and lands at the East Crossing camp; 3.3 starts there and lands at Highwater Station. Flying over any friendly base repairs and rearms Lantern (at most every 15 s). With everyone aboard, the landing base's gold pad takes her in. |
+| More crates and rounds, auto switch | Yes | Six to eight crates on every map: repair, rockets, guided missiles and flares, and AP, HE and plasma rounds, which the gun switches to as on the canal. |
+| Soldiers who man the launchers | Yes | A launch site's crew of three idles until they see Lantern (26 m), then runs to its posts. With someone at the posts the rack rises for four seconds and a missile goes, then another every reload (five seconds on Normal, longer on Easy) while the posts are manned. Kill the crew first and the site never fires ("LAUNCH CREW DOWN / +100"). The four- and five-second windows are the same on every difficulty; only the time between launches follows it. |
+| Missile trucks | Yes | They patrol the road. When they see Lantern (30 m) they stop and raise the rack for five seconds ("LAUNCH / 5s" over them), fire, lower it and drive on. Kill one before it fires for +150. Flak trucks patrol the crossings with bursts of fire. |
+| Drone stations | Yes | Two drones parked on the pad. When they see Lantern they spin up for five seconds ("DRONES / 5s"), then lift and climb before they hunt. Destroy the station first and they never fly. |
+| More soldiers | Yes | A squad pinning every signal, guard posts, and barracks that send soldiers out once the alarm is up. The alarm spreads to every unit close to one that has been shot at. Only people and emplacements pin a signal: a truck driving past does not. |
+| Different maps | Yes | Lowland Outpost: jungle lowlands and a meandering river in the afternoon. Broken Crossing: a red-rock canyon, a braided river with sandbars, three broken bridges and the storm's grey light. North Ridge: pine slopes and a mountain stream the road crosses six times, at last light. |
+
+![Broken Crossing: the canyon, the braided river and a launch site's crew](chapter3-canyon.png)
+
+### Found while building
+
+- **A sortie took 20 seconds.** Flying through, with no reason to stop, the scripted pilot never fought. Pinned signals and a slower top speed restore the fight; the pilot now takes 25–33 s and must clear every squad.
+- **The touch stick aimed 26° off**, because Lantern is drawn above her ground spot. It now points from where she appears.
+- **A barracks would never have been seen.** Scripted at 230 m of a 250 m leg, it would have come into view after the mission ended; a design test caught it and it stands at 200 m.
+- **The Narrows' rock walls read as stripes** (the camera sees only the tops of long boxes). The Narrows now has a stone step at the water and boulders and pines crowding the banks.
+- **Canyon rocks would not turn red.** Models are merged into vertex colours when they load, so a named material can't be repainted; instanced rocks now take a colour multiplier.
+
+### Independent review of 2.7
+
+A separate reviewer probed the change in the browser and found no way to get stuck: every pinned signal can be cleared, landing works, drones lift at exactly five seconds, and four restarts left GPU memory flat. Its findings, all fixed:
+
+| # | Finding | Fix |
+| --- | --- | --- |
+| 1 | The aim assist ignored enemy missiles: a missile under the pointer lost the burst to a soldier near the same line. | The assist takes an incoming missile first. A check puts a missile and a soldier on nearly the same line. |
+| 2 | Marlin's twin guns, firing on their own, spent the best rounds: ten seconds used up all 40 plasma rounds. | Fire the guns put out on their own uses standard rounds. A check covers it. |
+| 3 | On the Lock Gate approach a launcher stood inside a shed that soaked up its first five rounds. | Guns, launchers and drums clear the houses and trees where they set up, as barracks do. A check covers it. |
+| 4 | Lantern could fly into the valley walls at the edge of the map. | She stays within ±41 m, inside walls that start climbing at ±43 m. |
+| 5 | A house that scrolled round came back still smoking. | The wreck's smoke stops when the house is restored. A check covers it. |
+| 6 | The difficulty's enemy reload didn't slow the new launchers. | The time between launches (a site's reload, a truck's drive before it raises again, a barracks sending soldiers) follows it; the four- and five-second windows stay the same on every difficulty. |
+| 7 | Launch sites fired every 7 s, not every 5 as written. | After the first launch, one every reload while manned. A check counts two launches in 12 s on Easy. |
+| 8 | A crate weaker than the rounds in use gave no sign it was picked up. | It says what it gave ("AP ROUNDS +60"). A check covers it. |
+| 9 | The alarm could wake a launch site without its crew. | Waking a site wakes its crew. |
+
+Smaller ones, also fixed:
+- trucks driving past re-pinned cleared signals (only people and emplacements pin, and every metre of every route now keeps clear of the pickups, which a test checks);
+- automatic rockets could empty the rack (they keep the last salvo and fire at most one salvo per target every four seconds);
+- the ripple styles were rebuilt for every enemy every frame;
+- pieces from valley wrecks landed at a fixed height (they now land on the terrain);
+- the touch stick read the canvas's layout on every step;
+- a list with no users, duplicated snapshot fields and an inline copy of the round order;
+- a test that checked constants instead of landing.
+
+## 16. Controls
 
 | Action | Desktop | Touch |
 | --- | --- | --- |
@@ -469,8 +553,8 @@ The review also noted that each fighter costs about ten draw calls. The crews ar
 | Mark the drop (the flight flies there and releases) | Click the city or the map; right click cancels | Tap the city |
 | Payload, release now, salvo | 1–9, Space, X | Payload chips, Release, Salvo |
 | Drill floor or pattern angle, formation spacing | E / C or the mouse wheel, the angle buttons, Q | Floor ladder, the dial's arrows or the angle buttons, spacing button |
-| Gunboat | WASD, pointer aim and fire, 1 gun / 2 rockets / 3 laser, Q air strike | Two sticks, weapon icons, strike icon |
-| Helicopter | WASD, pointer aim and fire, 1 gun / 2 rockets / 3 guided, F flares, hold E winch | Two sticks, weapon and flare buttons, hold Winch |
+| Gunboat | WASD, pointer aim and fire, 1 gun / 2 rockets / 3 laser, Q air strike (rockets follow the gun onto heavy targets) | Two sticks, weapon icons, strike icon |
+| Helicopter | WASD (fly over people and crates to pick them up), hold the mouse to fire towards the pointer or Space to fire the way you fly, 1 gun / 2 rockets / 3 guided, F flares | Left stick flies, right stick fires in its direction, weapon and flare buttons |
 | Pause, retry | Esc, R | Top bar |
 
 Keys are read by physical position, so on an AZERTY keyboard Z Q S D steer like W A S D.

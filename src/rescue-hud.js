@@ -1,4 +1,4 @@
-import { isHostileEntity } from "./rescue-data.js";
+import { isHostileEntity, riverAt } from "./rescue-data.js";
 
 export class RescueHUD {
   constructor(game) {
@@ -56,14 +56,6 @@ export class RescueHUD {
     $("flare-stock").textContent = r.gear.flares;
     $("flare-action").disabled =
       r.gear.flares === 0 || r.flareCooldown > 0 || state.status !== "playing";
-    $("winch-action").classList.toggle("available", r.canWinch);
-    $("winch-progress").style.transform = `scaleX(${r.hoist})`;
-    $("winch-label").textContent =
-      r.state === "LANDING"
-        ? "LANDING"
-        : r.rescued === r.total
-          ? "LAND"
-          : "WINCH";
     $("rocket-weapon").disabled = r.gear.rockets <= 0;
     $("guided-weapon").disabled = r.gear.guided <= 0;
     this.draw();
@@ -78,10 +70,28 @@ export class RescueHUD {
     c.clearRect(0, 0, w, h);
     c.fillStyle = "#264a46";
     c.fillRect(0, 0, w, h);
-    const a = this.mapPoint({ x: -12, z: 0 }).x,
-      b = this.mapPoint({ x: 12, z: 0 }).x;
+    const map = r.layout.map;
     c.fillStyle = "#368b92";
-    c.fillRect(a, 0, b - a, h);
+    c.beginPath();
+    const left = [],
+      right = [];
+    for (let z = r.layout.bounds.near; z >= r.layout.bounds.far; z -= 4) {
+      const river = riverAt(map, z);
+      left.push(this.mapPoint({ x: river.x - river.width / 2, z }));
+      right.push(this.mapPoint({ x: river.x + river.width / 2, z }));
+    }
+    [...left, ...right.reverse()].forEach((p, i) => (i ? c.lineTo(p.x, p.y) : c.moveTo(p.x, p.y)));
+    c.closePath();
+    c.fill();
+    c.strokeStyle = "#e9c98c88";
+    c.lineWidth = 2;
+    c.beginPath();
+    map.road.forEach(([x, z], i) => {
+      const p = this.mapPoint({ x, z });
+      if (i) c.lineTo(p.x, p.y);
+      else c.moveTo(p.x, p.y);
+    });
+    c.stroke();
     c.strokeStyle = "#c6e6d618";
     c.lineWidth = 1;
     for (let y = 18; y < h; y += 32) {
@@ -100,12 +110,7 @@ export class RescueHUD {
     c.stroke();
     c.setLineDash([]);
     for (const e of g.entities) {
-      if (
-        !isHostileEntity(e) ||
-        e.launcherDisabled ||
-        e.position.distanceTo(g.player.position) > 48
-      )
-        continue;
+      if (!isHostileEntity(e) || e.position.distanceTo(g.player.position) > 48) continue;
       const p = this.mapPoint(e.position);
       c.fillStyle = "#ff8a74";
       c.fillRect(p.x - 1.5, p.y - 1.5, 3, 3);
@@ -126,7 +131,11 @@ export class RescueHUD {
       c.fillStyle = "#eff9e6";
       c.fillText(String(i + 1), p.x + 7, p.y + 3);
     });
-    const base = this.mapPoint(r.layout.base);
+    // Where the sortie started (cyan) and where it lands (gold).
+    const start = this.mapPoint(r.layout.start);
+    c.fillStyle = "#7fe8ff";
+    c.fillRect(start.x - 3, start.y - 3, 6, 6);
+    const base = this.mapPoint(r.layout.landing);
     c.fillStyle = "#ffdb83";
     c.fillRect(base.x - 4, base.y - 4, 8, 8);
     c.fillStyle = "#fff";

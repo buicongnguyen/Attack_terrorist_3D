@@ -29,6 +29,7 @@ class Spec:
 P, F, H, M, W, U = ('assets_people', 'assets_friendly', 'assets_hostile', 'assets_munitions', 'assets_world',
                     'assets_pickups')
 B = 'assets_harbour'
+R = 'assets_frontier'
 
 SPECS = [
     # characters
@@ -111,6 +112,16 @@ SPECS = [
     Spec('harbour-crane', B + ':harbour_crane', 'prop', {}, (), ('city',), 'Harbour crane'),
     Spec('buoy', B + ':buoy', 'prop', {}, (), ('city',), 'Channel buoy'),
     Spec('container-stack', B + ':container_stack', 'prop', {}, (), ('city',), 'Container stack'),
+    # frontier (river and valley): Ashen Front launchers, drone pad and barracks; riverside and canyon props
+    Spec('missile-truck', R + ':missile_truck', 'vehicle', {'Rack': None}, (), ('valley',), 'Missile launcher truck'),
+    Spec('missile-site', R + ':missile_site', 'vehicle', {'Rack': None}, (), ('valley',), 'Missile launch site'),
+    Spec('drone-pad', R + ':drone_pad', 'vehicle', {}, (), ('valley',), 'Drone launch pad'),
+    Spec('barracks-hut', R + ':barracks_hut', 'vehicle', {}, (), ('river', 'valley'), 'Ashen barracks hut'),
+    Spec('pine', R + ':pine', 'prop', {}, (), ('river', 'valley'), 'Pine'),
+    Spec('log-pile', R + ':log_pile', 'prop', {}, (), ('river',), 'Log pile'),
+    Spec('shed', R + ':shed', 'prop', {}, (), ('river',), 'Sawmill shed'),
+    Spec('reeds', R + ':reeds', 'prop', {}, (), ('river', 'valley'), 'Reeds'),
+    Spec('shrub', R + ':shrub', 'prop', {}, (), ('valley',), 'Dry shrub'),
 ]
 
 BY_NAME = {s.name: s for s in SPECS}

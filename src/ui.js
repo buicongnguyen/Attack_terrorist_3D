@@ -233,7 +233,6 @@ export class UI {
     this.pointerPosition = null;
     this.moveStick = { x: 0, z: 0 };
     this.fireStick = null;
-    this.winchHeld = false;
     this.padResets = [];
     this.lastHUD = -1;
     this.toastTime = 0;
@@ -422,14 +421,6 @@ export class UI {
     $("laser-weapon").onclick = () => this.weapon("laser");
     $("strike-action").onclick = () => this.game.op?.callAirStrike?.();
     $("flare-action").onclick = () => this.game.rescue?.flare();
-    const winch = $("winch-action");
-    winch.onpointerdown = (event) => {
-      if (this.game.paused || !this.game.rescue) return;
-      event.preventDefault();
-      winch.setPointerCapture(event.pointerId);
-      this.winchHeld = true;
-    };
-    winch.onpointerup = winch.onpointercancel = winch.onlostpointercapture = () => (this.winchHeld = false);
     $("flight-cards").addEventListener("click", (event) => {
       const chip = event.target.closest("[data-bomb]");
       if (chip) this.strike?.select(chip.dataset.bomb);
@@ -784,9 +775,8 @@ export class UI {
     this.keys.clear();
     this.pointerFire = false;
     this.fireStick = null;
-    this.winchHeld = false;
     this.moveStick = { x: 0, z: 0 };
-    Object.assign(this.game.input, { winch: false, fire: false, stickAim: null, x: 0, z: 0 });
+    Object.assign(this.game.input, { fire: false, stickAim: null, pointerAim: false, x: 0, z: 0 });
     document.querySelectorAll(".stick-knob").forEach((el) => (el.style.transform = ""));
   }
 
@@ -811,7 +801,8 @@ export class UI {
     this.aimedByStick = Boolean(this.fireStick);
     input.stickAim = this.fireStick;
     if (input.fire && !this.fireStick && this.pointerPosition) this.aim(this.pointerPosition.x, this.pointerPosition.y);
-    input.winch = this.game.chapter === 2 && (this.winchHeld || this.keys.has("KeyE"));
+    // Lantern (2.7): holding the mouse button fires towards the pointer; Space fires the way she flies.
+    input.pointerAim = this.pointerFire && !this.fireStick;
     if (this.game.chapter === 2) {
       const length = Math.min(1, Math.hypot(input.x, input.z));
       if (length > 0) {
@@ -924,10 +915,10 @@ export class UI {
         ["BLOCK", "Sit between guns and barges"],
       ],
       [
-        ["WASD", "Fly Lantern"],
-        ["POINTER", "Aim and fire"],
+        ["WASD", "Fly Lantern: fly over people and crates to pick them up"],
+        ["HOLD CLICK", "Fire towards the pointer"],
+        ["SPACE", "Fire the way you fly"],
         ["1 / 2 / 3", "Gun / rockets / guided"],
-        ["HOLD E", "Winch or land"],
         ["F", "Flares"],
       ],
     ];
@@ -949,9 +940,8 @@ export class UI {
         ["BLOCK", "Sit between guns and barges"],
       ],
       [
-        ["LEFT STICK", "Fly Lantern"],
-        ["RIGHT STICK", "Aim and fire"],
-        ["WINCH", "Hold to lift or land"],
+        ["LEFT STICK", "Fly Lantern: fly over people and crates"],
+        ["RIGHT STICK", "Fire in that direction"],
         ["FLARES", "Tap to break a lock"],
       ],
     ];
@@ -1230,6 +1220,7 @@ export class UI {
           .map((value) => `<span>${Array.from({ length: 3 }, (_, i) => `<i class="${i >= value ? "lost" : ""}"></i>`).join("")}</span>`)
           .join(""),
       );
+      this.updateRounds(state.round);
     }
     if (chapter === 1) this.updateRiver(state, op);
     if (chapter === 2) {
@@ -1432,6 +1423,24 @@ export class UI {
     else text = "NO SHIPS UNDER IT";
     if (count && count.textContent !== text) count.textContent = text;
     count?.classList.toggle("hot", Boolean(p && p.sinks && !p.civilian));
+  }
+
+  // The gun button shows the rounds in use (2.7): nothing for standard rounds, else the kind and
+  // how many are left, in the rounds' colour; the desktop label names them.
+  updateRounds(round) {
+    const badge = $("round-stock");
+    const special = round && round.kind !== "standard";
+    badge.hidden = !special;
+    if (special) {
+      const text = `${round.kind === "plasma" ? "PL" : round.short}${round.count}`;
+      if (badge.textContent !== text) badge.textContent = text;
+      badge.dataset.round = round.kind;
+    }
+    const gun = this.game.chapter === 1 ? "DECK GUN" : "CHAIN GUN";
+    if (this.game.weapon === "gun") {
+      const label = special ? `${gun} / ${round.name} ${round.count}` : gun;
+      if ($("weapon-label").textContent !== label) $("weapon-label").textContent = label;
+    }
   }
 
   updateRiver(state, op) {

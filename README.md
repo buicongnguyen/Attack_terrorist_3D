@@ -39,7 +39,9 @@ Solace Harbor lies three metres below the tide. Only the Tidelock, a storm barri
 ### Chapter 2: river convoy
 
 - The barges follow Marlin's wake down a wide canal. Guns and skiffs show a red aim line before they fire (a banner states the chance a round will hurt), wear health pips, and ripple on the water; you can block shots with the gunboat.
-- Three weapons: the deck gun, rocket salvos that burst, and a laser that burns through gun lines until it overheats. **Q calls an air strike**: Kestrel Two lays a line of bombs across the canal where you aim.
+- Three weapons: the deck gun, rocket salvos that burst, and a laser that burns through gun lines until it overheats. **Q calls an air strike**: Kestrel Two lays a line of bombs across the canal where you aim. Hold the deck gun on a bunker or a barracks and a rocket salvo follows on its own.
+- **Rounds**: crates of AP, HE and plasma rounds; the gun always fires the strongest you hold.
+- Every mission has its own banks and hour, and what stands on them can be shot down: houses, trees, sheds and log piles go up with pieces flying and smoke. **Barracks** on the banks send riflemen down to the water until you knock them flat.
 - Crates on the water bring help: the **Hornet gunship** flies your wing and shoots where you shoot, **Duarte's escort launch** guards the barges, and crates of rockets and air strikes restock you.
 - Fuel drums and a bridge ammunition crate chain-detonate whole crews. Skiff pincers meet at a marked point, where one hit sets off the rest.
 - The Lock Gate boss: two gun towers and skiff pincers, then the shielded generator. Then the gates swing open and the field medal floats out.
@@ -49,10 +51,13 @@ Solace Harbor lies three metres below the tide. Only the Tidelock, a storm barri
 
 ### Chapter 3: valley rescue
 
-- Hover low and slow over a clear zone and hold the winch. Everyone must return to the Highwater pad.
-- You carry a chain gun, rockets, guided missiles and flares. Supply caches, anti-air trucks, cave launchers and drones are spread through a jungle valley at sunset.
+- **Fly over people and crates to pick them up**: no hovering, no winch. A signal pinned by a squad ("PINNED") waits until you clear it. Then land at the next base: each sortie ends somewhere new.
+- **Fire like a 2D shooter**: rounds fly along a direction (towards the pointer, the right stick, or the way you fly) and hit whatever they cross.
+- Three maps: jungle lowlands in the afternoon, a red-rock canyon of broken crossings in the storm, and a pine ridge at last light.
+- The enemy needs time to launch. Launch crews run to their missiles when they see you, missile trucks stop and raise their racks for five seconds, drone stations spin up for five seconds: kill them first and nothing flies. What you destroy explodes, throws pieces into the sky and leaves a crater of holes.
+- You carry a chain gun (with AP, HE and plasma rounds from crates), rockets, guided missiles and flares.
 
-![Lantern over Cinder Valley](docs/chapter3.png)
+![Lantern over North Ridge at last light: a launch site destroyed, a signal still pinned](docs/chapter3.png)
 
 Every mission opens with a briefing and ends with a story debrief and star criteria. All eighteen missions can be selected from Mission Control. Progress saves locally, and the game resumes at your first unfinished mission.
 
@@ -66,10 +71,10 @@ Every mission opens with a briefing and ends with a story debrief and star crite
 | Payload, release now, salvo | 1–9, Space, X | Payload chips, Release, Salvo |
 | Drill floor or pattern angle, formation spacing | E / C, mouse wheel or the angle buttons, Q | Floor ladder, the dial's arrows or the angle buttons, spacing button |
 | Move boat or helicopter | WASD / arrows | Left stick |
-| Aim and fire | Pointer (hold), or Space | Right stick |
+| Aim and fire | Pointer (hold), or Space (helicopter: the way you fly) | Right stick |
 | Gunboat weapons, air strike | 1 gun, 2 rockets, 3 laser (hold), Q | Weapon icons, strike icon |
 | Helicopter weapons, flares | 1 gun, 2 rockets, 3 guided, F | Weapon icons, flare icon |
-| Winch / land | Hold E over a clear zone | Hold Winch |
+| Pick up, land (helicopter) | Fly over the signal, crate or pad | The same |
 | Pause, retry | Esc, R | Top bar |
 
 On portrait phones, Chapter 1's camera looks along the flight path so the district fills the width. Keys are read by physical position, so AZERTY players steer with Z Q S D. The layout follows the input you last used: touch shows the sticks, and a mouse or keyboard shows key hints.

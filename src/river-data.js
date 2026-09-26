@@ -62,7 +62,75 @@ export const SUPPORT = Object.freeze({
   ally: { time: 25, every: 0.45, damage: 2, range: 34 },
 });
 
+// Houses, trees and sheds along the banks can be shot down (2.7): hit points against Marlin's
+// gun (2 a round), how big a target each is, and what it leaves behind.
+export const SCENERY = Object.freeze({
+  "stilt-house": { hp: 8, radius: 2.3, lift: 2.2, reward: 25, wreck: "house", colors: [0x2fb3a6, 0xe2704f, 0xc47f45, 0xf2b441] },
+  "jungle-tree": { hp: 4, radius: 1.5, lift: 2.6, reward: 10, wreck: "tree", colors: [0x3aa33c, 0x23843a, 0x8fd64a, 0x8b5a3c] },
+  palm: { hp: 2, radius: 1.1, lift: 2.6, reward: 10, wreck: "tree", colors: [0x3aa33c, 0x8fd64a, 0xc8904f] },
+  pine: { hp: 4, radius: 1.4, lift: 2.4, reward: 10, wreck: "tree", colors: [0x23843a, 0x2f6b3a, 0x8b5a3c] },
+  reeds: { hp: 1, radius: 1.1, lift: 0.7, reward: 5, wreck: "reeds", colors: [0x8fd64a, 0x7cc443, 0x8b5a3c] },
+  shed: { hp: 10, radius: 2.8, lift: 1.8, reward: 25, wreck: "house", colors: [0xc47f45, 0xe2704f, 0x8a5530, 0x9aa6af] },
+  "log-pile": { hp: 6, radius: 2, lift: 0.8, reward: 15, wreck: "logs", colors: [0x8b5a3c, 0xe0a868, 0xc47f45] },
+  "container-stack": { hp: 8, radius: 2.2, lift: 1.4, reward: 20, wreck: "house", colors: [0xff4b2b, 0x2fb3a6, 0xf2b441, 0x3a4048] },
+  streetlight: { hp: 1, radius: 0.7, lift: 2, reward: 5, wreck: "post", colors: [0x3a4048, 0xfff1a8] },
+});
+
+// Each canal mission has its own banks (2.7): colours, what stands on them, and extras like the
+// Narrows' rock walls or the Cut's concrete. `props` picks what stands at slot i on a side.
+export const RIVER_THEMES = [
+  {
+    // 2.1 Mangrove Mile: mangroves, palms and stilt villages.
+    bank: 0x6fbf4a,
+    top: 0x5cbf45,
+    beach: 0xf2d19a,
+    props: (i) => (i % 5 === 2 ? "stilt-house" : i % 7 === 3 ? "reeds" : i % 4 === 0 ? "rock" : i % 2 ? "jungle-tree" : "palm"),
+  },
+  {
+    // 2.2 The Narrows: a stone step at the water, then boulders and pines crowding the banks.
+    bank: 0x8d8791,
+    top: 0x6f9a4a,
+    beach: 0xb4a8a0,
+    walls: [{ color: 0x9c8f86, height: 1.8, offset: 2.9, width: 1.4 }],
+    props: (i) => (i % 2 === 0 ? "rock" : i % 7 === 3 ? "stilt-house" : "pine"),
+  },
+  {
+    // 2.3 Floodplain: low banks, flooded paddies, reeds and half-drowned houses.
+    bank: 0x6fbf4a,
+    top: 0x8fd64a,
+    beach: 0xd9c38f,
+    paddies: true,
+    props: (i) => (i % 4 === 1 ? "stilt-house" : i % 2 ? "reeds" : i % 3 ? "palm" : "jungle-tree"),
+  },
+  {
+    // 2.4 Sawmill Reach: log yards, sheds and cut pine.
+    bank: 0xb08a5a,
+    top: 0xc99f74,
+    beach: 0xe0a868,
+    props: (i) => (i % 4 === 0 ? "log-pile" : i % 4 === 2 ? "shed" : i % 3 ? "pine" : "log-pile"),
+  },
+  {
+    // 2.5 The Cut: concrete canal walls, lamps, and the ridge's pines beyond.
+    bank: 0xa8967e,
+    top: 0x8fbf5a,
+    beach: 0xd8c6aa,
+    walls: [{ color: 0xd8c6aa, height: 1.6, offset: 0.4, width: 1.4, lip: 0xffcc1f }],
+    props: (i) => (i % 4 === 0 ? "streetlight" : i % 3 ? "pine" : "rock"),
+  },
+  {
+    // 2.6 Lock Gate: Highwater's industrial approach, containers and sheds.
+    bank: 0x9a9aa0,
+    top: 0x7cc443,
+    beach: 0xd8c6aa,
+    props: (i) => (i % 4 === 0 ? "container-stack" : i % 4 === 2 ? "shed" : i % 3 ? "streetlight" : "palm"),
+  },
+];
+
+// Bank barracks (2.7): a hut on the bank that sends riflemen down to the water one by one.
+export const BARRACKS = Object.freeze({ hp: 16, crew: 4, every: 2.4, offset: 5.5 });
+
 const guns = (d, side, opts = {}) => ({ d, type: "guns", side, count: 1, ...opts });
+const barracks = (d, side, crew = BARRACKS.crew) => ({ d, type: "barracks", side, crew });
 const mines = (d, xs) => ({ d, type: "mines", xs: xs.map((x) => x * WIDEN) });
 const skiffs = (d, pattern, count, opts = {}) => ({
   d,
@@ -90,8 +158,10 @@ export const RIVER_MISSIONS = [
       guns(34, -1, { crew: 2, drums: true }),
       radio(32, "drumsHint"),
       pickup(46, "star", -4),
+      pickup(40, "ap", 3),
       guns(58, 1, { count: 2, crew: 2, drums: true }),
       guns(64, -1, { count: 1, crew: 1, launcher: true }),
+      barracks(84, 1, 3),
       skiffs(72, "wedge", 3, { x: -2 }),
       radio(70, "skiffs"),
       mines(90, [-6, 0, 6]),
@@ -124,7 +194,9 @@ export const RIVER_MISSIONS = [
       { d: 84, type: "bridge" },
       radio(80, "bridge"),
       pickup(96, "star", -3),
+      barracks(104, -1),
       skiffs(110, "pincer", 6, { meet: { x: -2, z: 0 }, delay: 6.5 }),
+      pickup(118, "he", 2),
       mines(126, [-7, -1, 5]),
       pickup(132, "health", 5),
       guns(136, -1, { count: 2, crew: 2, launcher: true, drums: true }),
@@ -136,6 +208,7 @@ export const RIVER_MISSIONS = [
       pickup(206, "health", -4),
       mines(214, [-3, 6]),
       guns(222, -1, { crew: 2, launcher: true }),
+      barracks(200, 1),
       mark(244, "NARROWS CLEAR"),
     ],
   },
@@ -157,6 +230,8 @@ export const RIVER_MISSIONS = [
       skiffs(46, "column", 5, { x: 8 }),
       guns(60, -1, { count: 3, crew: 2, launcher: true }),
       pickup(70, "heli", 4),
+      barracks(76, -1),
+      pickup(90, "ap", -3),
       skiffs(82, "pincer", 8, { meet: { x: 0, z: -3 }, delay: 6 }),
       mines(96, [-9, -4, 3, 8]),
       pickup(104, "health", -5),
@@ -166,6 +241,8 @@ export const RIVER_MISSIONS = [
       guns(146, -1, { count: 2, crew: 2, drums: true }),
       skiffs(160, "pincer", 8, { meet: { x: 2, z: -2 }, delay: 6 }),
       pickup(170, "ammo", 3),
+      barracks(176, 1),
+      pickup(188, "he", -4),
       skiffs(184, "column", 6, { x: 0 }),
       guns(196, 1, { count: 3, crew: 2, launcher: true }),
       skiffs(210, "wedge", 7, { x: 4 }),
@@ -185,6 +262,7 @@ export const RIVER_MISSIONS = [
       guns(20, -1, { count: 3, crew: 2, launcher: true }),
       skiffs(30, "wedge", 5, { x: 2 }),
       pickup(40, "ally", -5),
+      barracks(46, 1),
       mines(52, [-6, 0, 6]),
       guns(62, 1, { count: 2, crew: 2, launcher: true, drums: true }),
       skiffs(74, "pincer", 8, { meet: { x: -1, z: -2 }, delay: 6 }),
@@ -192,6 +270,8 @@ export const RIVER_MISSIONS = [
       { d: 98, type: "bridge" },
       radio(94, "bridge"),
       pickup(112, "ammo", -4),
+      barracks(116, -1),
+      pickup(128, "plasma", 3),
       guns(122, -1, { count: 3, crew: 2, drums: true }),
       skiffs(134, "column", 5, { x: -7 }),
       skiffs(136, "column", 5, { x: 7 }),
@@ -199,6 +279,7 @@ export const RIVER_MISSIONS = [
       guns(158, 1, { count: 3, crew: 2, launcher: true }),
       mines(170, [-8, -3, 3, 8]),
       pickup(178, "heli", -3),
+      barracks(182, 1),
       skiffs(188, "pincer", 8, { meet: { x: 2, z: -3 }, delay: 6 }),
       guns(204, -1, { count: 2, crew: 2, drums: true, launcher: true }),
       pickup(214, "health", 3),
@@ -219,6 +300,8 @@ export const RIVER_MISSIONS = [
       guns(6, 1, { count: 3, crew: 2, drums: true }),
       guns(10, -1, { count: 3, crew: 2, drums: true }),
       pickup(20, "ally", 4),
+      barracks(26, -1),
+      pickup(50, "he", -3),
       skiffs(30, "pincer", 8, { meet: { x: 0, z: -2 }, delay: 6 }),
       mines(44, [-7, -2, 3, 8]),
       guns(56, 1, { count: 3, crew: 2, launcher: true }),
@@ -226,6 +309,7 @@ export const RIVER_MISSIONS = [
       pickup(68, "ammo", -5),
       skiffs(78, "wedge", 7, { x: 0 }),
       pickup(90, "heli", 5),
+      barracks(96, 1),
       skiffs(100, "column", 6, { x: -8 }),
       skiffs(102, "column", 6, { x: 8 }),
       guns(116, 1, { count: 3, crew: 2, drums: true, launcher: true }),
@@ -236,6 +320,8 @@ export const RIVER_MISSIONS = [
       mines(160, [-8, -3, 2, 7]),
       guns(170, -1, { count: 3, crew: 2, launcher: true }),
       pickup(180, "star", -4),
+      barracks(186, -1),
+      pickup(196, "plasma", 2),
       skiffs(190, "wedge", 7, { x: 3 }),
       guns(200, 1, { count: 3, crew: 2, drums: true }),
       pickup(208, "ammo", 4),
@@ -256,11 +342,13 @@ export const RIVER_MISSIONS = [
       guns(8, 1, { count: 2, crew: 2, drums: true }),
       skiffs(24, "wedge", 5, { x: 0 }),
       pickup(30, "ammo", 4),
+      pickup(50, "ap", -2),
       mines(36, [-4, 2, 7]),
       pickup(44, "health", -3),
       guns(56, -1, { count: 2, crew: 2, launcher: true, drums: true }),
       skiffs(72, "pincer", 6, { meet: { x: 0, z: -4 }, delay: 6 }),
       pickup(84, "star", 4),
+      barracks(88, -1),
       guns(92, 1, { count: 3, crew: 2, launcher: true }),
       pickup(96, "heli", -5),
       skiffs(100, "wedge", 5, { x: 2 }),

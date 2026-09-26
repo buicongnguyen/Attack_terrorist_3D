@@ -618,8 +618,9 @@ export const MISSION_STORY = [
     place: "LOWLAND OUTPOST",
     clock: "16:45",
     goals: [
-      "Winch up Cpl. Kofi Mensah and medic Lin Tao",
-      "Return to Highwater's pad",
+      "Fly over Cpl. Kofi Mensah and medic Lin Tao to pick them up",
+      "Shoot launch crews before they reach their missiles",
+      "Land at the Verde aid station",
     ],
     brief: [
       line(
@@ -628,25 +629,28 @@ export const MISSION_STORY = [
       ),
       line(
         "iona",
-        "Lantern is fuelled. Clear each pickup zone, hover low and slow, and hold the winch. Everyone comes back to the pad.",
+        "Lantern is fuelled. Fly over each signal and they ride the line up: no hovering. Launch crews lounge by their missiles until they see you, so shoot them first. Then land at the Verde aid station.",
       ),
     ],
     radio: {
       start: line("kofi", "Green smoke's out. You'll see our signals."),
-      pickup: line("kofi", "Aboard! Sergeant Reyes went north with the key."),
-      success: line("iona", "Two home. Refuel and go back for the rest."),
+      siteSilent: line("iona", "Launch crew down. That site won't fire now."),
+      drones: line("iona", "Drones in the air! Rockets or guided, Kestrel."),
+      pickup: line("kofi", "Aboard! Sergeant Reyes went north with the key. The aid station is upriver."),
+      success: line("iona", "Two safe at the aid station. Refuel and go back for the rest."),
     },
     success:
       "Mensah and Tao are safe. They confirm Sgt. Reyes carries the override key toward North Ridge.",
     failure:
-      "Lantern lost protection. Use flares against locks, and clear each zone before you hover.",
+      "Lantern lost protection. Use flares against locks, and shoot launch crews before they reach their missiles.",
   },
   {
     place: "BROKEN CROSSING",
     clock: "17:40",
     goals: [
-      "Winch up three members of Echo team",
-      "Beat the anti-air patrols at the crossings",
+      "Fly over three members of Echo team to pick them up",
+      "Stop missile trucks before their racks are up",
+      "Land at the East Crossing camp",
     ],
     brief: [
       line(
@@ -655,25 +659,28 @@ export const MISSION_STORY = [
       ),
       line(
         "iona",
-        "Anti-air trucks patrol the crossings. Rockets break up vehicles; guided missiles pick off drones.",
+        "Missile trucks patrol the crossings. When they see you they stop and raise the rack: five seconds before they fire. Hit them first. Rockets break up vehicles.",
       ),
     ],
     radio: {
       start: line("echo", "Three signals. Watch those trucks at the crossings."),
+      siteSilent: line("iona", "That launch crew is down. Site's dead."),
+      drones: line("iona", "Drones up from the station! Break their locks with flares."),
       pickup: line("echo", "That's my people. Thank you, Lantern."),
       success: line("iona", "Five of Echo home. One sortie left. The storm is here."),
     },
     success:
       "The rear guard is aboard. The typhoon's outer bands are hitting the coast. Only North Ridge remains.",
     failure:
-      "The crossings held. Kill the anti-air trucks' launchers first and resupply at the aid stations.",
+      "The crossings held. Kill missile trucks before their racks are up, and fly through the supply crates.",
   },
   {
     place: "NORTH RIDGE",
     clock: "18:30",
     goals: [
       "Rescue the last of Echo team, and Sgt. Reyes with the key",
-      "Land at Highwater before last light",
+      "Hit drone stations before their drones lift",
+      "Land at Highwater Station before last light",
     ],
     brief: [
       line(
@@ -691,6 +698,8 @@ export const MISSION_STORY = [
     ],
     radio: {
       start: line("echo", "Four signals on the ridge. I'm the last one out."),
+      siteSilent: line("iona", "Launch crew down. One less missile."),
+      drones: line("echo", "Drones lifting off the ridge! Hit the stations before the rest go up."),
       pickup: line("echo", "Key's aboard. Take us home."),
       success: line(
         "okafor",
@@ -700,7 +709,7 @@ export const MISSION_STORY = [
     success:
       "The gates met as the surge arrived. The typhoon broke against the Tidelock and Solace Harbor stayed dry. Marrow's last broadcast cut out mid-sentence.",
     failure:
-      "Lantern went down on the ridge. Pace your missiles, flare the drones' locks, and resupply before the climb.",
+      "Lantern went down on the ridge. Hit drone stations before their drones lift, flare the locks, and fly through the crates.",
   },
 ];
 
@@ -729,6 +738,7 @@ export const RIVER_RADIO = {
   weapons: line("iona", "Try the rockets and the laser, Kestrel. And Kestrel Two will lay an air strike wherever you aim."),
   overheat: line("iona", "Laser's overheated. Switch to the gun while it cools."),
   noStrike: line("piper", "No bombs left, Marlin. Find us a crate and we'll rearm."),
+  barracks: line("iona", "Barracks on the bank! Riflemen are coming down to the water. Knock it flat before they're out."),
 };
 
 export const FINALE = {

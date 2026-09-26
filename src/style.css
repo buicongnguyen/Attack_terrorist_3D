@@ -1535,6 +1535,22 @@ html[data-touch="true"] .keys-only {
   display: flex;
   gap: 6px;
 }
+/* The gun button's round badge wears the colour of the rounds in use (2.7). */
+#round-stock {
+  padding: 0 3px;
+  border-radius: 4px;
+  background: #123b46;
+  line-height: 13px;
+}
+#round-stock[data-round="ap"] {
+  color: #ffb13b;
+}
+#round-stock[data-round="he"] {
+  color: #ff6a2b;
+}
+#round-stock[data-round="plasma"] {
+  color: #c77dff;
+}
 #flare-action {
   position: relative;
   width: 50px;
@@ -1543,39 +1559,6 @@ html[data-touch="true"] .keys-only {
   background: var(--panel);
   border: 2px solid rgba(255, 198, 43, 0.6);
 }
-#winch-action {
-  position: relative;
-  flex: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  background: var(--panel);
-  border: 2px solid var(--line);
-  border-radius: 12px;
-  font-size: 14px;
-  font-weight: 700;
-  touch-action: none;
-  user-select: none;
-}
-#winch-action.available {
-  background: var(--mint);
-  color: var(--ink);
-  border-color: #fff;
-  box-shadow: 0 4px 0 #17996b;
-}
-#winch-progress {
-  position: absolute;
-  left: 5px;
-  right: 5px;
-  height: 4px;
-  bottom: 4px;
-  background: #fff;
-  border-radius: 99px;
-  transform-origin: left;
-  transform: scaleX(0);
-}
-
 /* ------------------------------------------------------------------ dialogs */
 dialog {
   padding: 26px;
@@ -2268,7 +2251,6 @@ html[data-touch="true"] kbd {
   #convoy-hud {
     width: 136px;
   }
-  #winch-label,
   #shield-count,
   #shield-hud > svg,
   .brand strong,
@@ -2513,7 +2495,7 @@ html[data-touch="true"] kbd {
 }
 
 /* Small landscape phones (568x320 and similar): one bottom row of controls
-   (stick, shields, weapons, stick) with the winch above it. */
+   (stick, shields, weapons, stick) with the rescue status above it. */
 @media (orientation: landscape) and (max-height: 420px) {
   :root {
     --stick: 84px;

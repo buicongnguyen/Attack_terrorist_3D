@@ -1,5 +1,42 @@
 # Release Verification
 
+## Tidelock 2.7 (banks that burn, and a helicopter that is easy to fly)
+
+The canal's destructible banks and barracks, rounds, and the helicopter's three maps, fly-over pickups, direction fire, launch crews, missile trucks and drone stations ([REDESIGN.md §15](REDESIGN.md#15-tidelock-27-banks-that-burn-and-a-helicopter-that-is-easy-to-fly)) were verified on 2026-09-26 against the production build (`vite preview`), with GPU rendering and with SwiftShader as in CI.
+
+- **88 Node tests.** New or changed:
+  - rounds: the strongest fires first, spent magazines fall back to standard rounds, each grade outhits the one below, a stock holds two magazines, and every kind has crates on the canal and in the valleys;
+  - every canal mission dresses its banks differently, what stands there has hit points, and barracks stand in every mission early enough to be seen;
+  - three sortie maps, each a different country, landing at a different base from where it started (and the next one starting there);
+  - nothing stands in the water or past the valley walls, every signal is pinned by a squad, and no vehicle's route passes within reach of a pickup;
+  - bridges stand wherever the road crosses the water, and patrols keep to the road;
+  - trucks and drone stations give five seconds, and the chain gun can stop each in time.
+- **303 browser checks**, zero runtime or resource errors, both on the GPU and on SwiftShader. New:
+  - a pinned signal waits, a cleared one is picked up by flying over it, and the sortie ends by landing at the other base;
+  - flying over a base repairs and rearms Lantern;
+  - direction fire hits along the line, Space fires the way she flies, she turns to face her fire, and the assist takes an incoming missile before a soldier on the same line;
+  - rounds load and fall back, plasma goes through two targets, and a weaker crate still says what it gave;
+  - launch crews idle until they see Lantern, then run to the launcher, which fires and fires again a reload later; kill the crew and it never fires;
+  - a destroyed launch site leaves debris, smoke and a crater;
+  - a missile truck raises its rack for five seconds before it fires, and killed early it never fires;
+  - a drone station launches after five seconds, and hit first its drones never fly;
+  - barracks send soldiers out one by one, and trucks don't pin signals;
+  - the three maps render and look different, and the touch fire stick hits along its direction;
+  - on the canal, bank houses go down with pieces and smoke and come back intact, without smoke, when the bank scrolls round;
+  - every canal mission's banks differ, barracks send riflemen to the water and go down with those inside;
+  - rockets follow the deck gun onto a heavy target but keep the last salvo, AP rounds hit twice as hard, twin guns keep the best rounds, and enemy positions clear the bank.
+- **Scripted pilots**, all on Easy:
+
+  | Missions | Result |
+  | --- | --- |
+  | City 1.1–1.6 | all six; 1, 4, 5, 8, 9 and 13 bombs in 11–173 s |
+  | Harbour 1.7–1.9 | the quota: 20, 15 and 20 bombs in 190–323 s |
+  | Canal 2.1–2.6 | all six, barges almost untouched, 3 stars each |
+  | Rescue 3.1–3.3 | everyone aboard and landed at the next base in 25, 29 and 33 s, every pinning squad cleared |
+- **Layout audit** at eight sizes from 320×568 to 1440×900 across every chapter: no overlaps, nothing off-screen.
+- **Rendering:** 182–262 draw calls on the canal and in the valleys, at most 0.8 ms a frame on the test GPU. The nine new models add 365 KB (60 models, 4.48 MB of the 4.5 MiB budget).
+- **Independent review:** 9 findings and a tail of smaller ones, all fixed ([REDESIGN.md §15](REDESIGN.md#independent-review-of-27)).
+
 ## Tidelock 2.6 (a lower city, with parks, road works and crowded barracks)
 
 The lower storeys with blasts measured in storeys, the three kinds of park, the road works and the crewed barracks ([REDESIGN.md §14](REDESIGN.md#14-tidelock-26-a-lower-city-with-parks-road-works-and-crowded-barracks)) were verified on 2026-09-26 against the production build (`vite preview`), with GPU rendering and with SwiftShader as in CI.

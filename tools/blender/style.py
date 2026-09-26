@@ -40,6 +40,7 @@ PALETTE = {
     'mustard': '#f2b441', 'teal': '#2fb3a6', 'cream': '#f6e7c8', 'asphalt': '#3a3d46',
     'hazard': '#ffcc1f', 'glass': '#7fd8ff', 'rubber': '#24262b', 'gunmetal': '#3a4048',
     'steel': '#9aa6af', 'brass': '#f2b134', 'lamp': '#fff1a8',
+    'khaki': '#8f9a5b', 'pine': '#1f8450', 'olive': '#a6a64c',
 }
 
 # key: (material name, sRGB colour, roughness, metallic, emission strength, options)
@@ -112,6 +113,10 @@ MATERIALS = {
     'tyre': ('Tyre black', '#24262b', .75, 0),
     'coconut': ('Coconut', '#9a5a2c', .55, 0),
     'blossom': ('Blossom', '#ff7fa8', .45, 0),
+    # frontier (river / valley): Ashen barracks walls, conifers, dry canyon scrub
+    'khaki': ('Olive khaki', '#8f9a5b', .6, 0),
+    'pine': ('Pine green', '#1f8450', .5, 0),
+    'olive': ('Dry olive', '#a6a64c', .62, 0),
 }
 
 RAMP_LOW, RAMP_HIGH = .74, 1.0

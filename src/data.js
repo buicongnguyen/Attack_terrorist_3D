@@ -50,9 +50,19 @@ export const MODELS = [
   "container-stack",
   "gunship",
   "escort-boat",
+  // 2.7: launchers, trucks and stations for the valleys; barracks and bank dressing.
+  "missile-truck",
+  "missile-site",
+  "drone-pad",
+  "barracks-hut",
+  "pine",
+  "log-pile",
+  "shed",
+  "reeds",
+  "shrub",
 ];
 
-export const ASSET_REVISION = "canal-1";
+export const ASSET_REVISION = "frontier-1";
 
 export const CHAPTERS = [
   { name: "Breakwater", label: "City and harbour strikes", icon: "plane", color: "#ffc62b" },

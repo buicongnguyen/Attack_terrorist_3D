@@ -5,7 +5,8 @@ import { createPickupBadgeMaterial, badgeWorldSize } from "./pickups.js";
 import { createRescueScenery } from "./rescue-world.js";
 import { STRIKE_MISSIONS, CITY, FLIGHT, cityBounds } from "./strike-data.js";
 import { consolidate } from "./consolidate.js";
-import { RIVER } from "./river-data.js";
+import { RIVER, RIVER_THEMES, SCENERY } from "./river-data.js";
+import { chapterStart } from "./data.js";
 
 const materialCache = new Map();
 const boxGeometry = new THREE.BoxGeometry(1, 1, 1);
@@ -58,6 +59,27 @@ const MOODS = [
     sunOffset: [-52, 26, 18],
   },
 ];
+
+// Each canal and valley mission keeps its chapter's mood but has its own hour and weather
+// (2.7), so no two maps look alike. Keys are mission indices; values override the chapter's.
+const MISSION_MOODS = {
+  // Mangrove Mile: a green-gold morning.
+  9: { top: 0x2f86e8, horizon: 0xffe2b0, sun: 0xfff0c8, sunIntensity: 3.1, ground: 0x5f8a3a, water: [0.03, 0.34, 0.3, 0.1, 0.6, 0.48], sunOffset: [-30, 40, 30] },
+  // The Narrows: cool and overcast between rock walls.
+  10: { top: 0x4a78b0, horizon: 0xd6e6ee, sun: 0xf1f4ff, sunIntensity: 2.5, sky: 0xd3e2ee, ground: 0x6d7070, hemi: 1.55, water: [0.04, 0.26, 0.36, 0.14, 0.5, 0.58], exposure: 1.02 },
+  // Sawmill Reach: a warm, smoky afternoon.
+  12: { top: 0x3a7ad0, horizon: 0xffc98a, sun: 0xffd9a0, sunIntensity: 3.0, ground: 0x8a6a45, water: [0.06, 0.3, 0.26, 0.2, 0.52, 0.42], sunOffset: [-36, 36, 26] },
+  // The Cut: hazy late light down a straight canal.
+  13: { top: 0x3a6fc0, horizon: 0xffd6a8, sun: 0xffe6c0, sunIntensity: 2.9, water: [0.03, 0.28, 0.4, 0.1, 0.52, 0.62] },
+  // Lock Gate: sunset over Highwater.
+  14: { top: 0x3a4a9a, horizon: 0xff9a5a, sun: 0xffb070, sunIntensity: 2.8, sky: 0xc9b8ff, ground: 0x6a5a7a, rim: 0xffb3a0, water: [0.08, 0.22, 0.4, 0.34, 0.44, 0.5], sunOffset: [-50, 28, 16] },
+  // Lowland Outpost: an afternoon in the jungle.
+  15: { top: 0x2f7fe0, horizon: 0xffd9a8, sun: 0xffe8c0, sunIntensity: 3.1, sky: 0xbfe6ff, ground: 0x6f8a3f, hemi: 1.4, rim: 0x9fdcff, water: [0.02, 0.32, 0.36, 0.06, 0.58, 0.55], exposure: 1, sunOffset: [-26, 44, 26] },
+  // Broken Crossing: the storm's outer bands, grey and green.
+  16: { top: 0x3a4a62, horizon: 0xa9b8b4, sun: 0xe6eeff, sunIntensity: 2.1, sky: 0xb4c2c8, ground: 0x6a5a48, hemi: 1.6, rim: 0xb8d0e0, water: [0.06, 0.2, 0.24, 0.2, 0.36, 0.38], exposure: 0.98, sunOffset: [-20, 50, 20] },
+  // North Ridge: last light, low and orange.
+  17: { top: 0x2b2d6e, horizon: 0xff7a45, sun: 0xffa46a, sunIntensity: 2.6, sky: 0xb0a0ff, ground: 0x5a4a6a, hemi: 1.45, rim: 0xff9a7a, water: [0.1, 0.16, 0.32, 0.4, 0.34, 0.46], exposure: 1.03, sunOffset: [-60, 20, 12] },
+};
 
 let textures = null;
 function fxTextures() {
@@ -206,9 +228,10 @@ export class WorldView {
     source.traverse((mesh) => {
       if (!mesh.isMesh) return;
       part.multiplyMatrices(rootInverse, mesh.matrixWorld);
-      const paint = options.paint && mesh.material.name === options.paint;
+      // `paint` recolours one named material; `tint` multiplies every part by each placement's colour.
+      const paint = options.tint || (options.paint && mesh.material.name === options.paint);
       const material = paint ? mesh.material.clone() : mesh.material;
-      if (paint) material.color.set(0xffffff);
+      if (paint && !options.tint) material.color.set(0xffffff);
       const batch = new THREE.InstancedMesh(mesh.geometry, material, placements.length);
       placements.forEach((p, i) => {
         rotation.setFromAxisAngle(up, p.rotation || 0);
@@ -389,8 +412,8 @@ export class WorldView {
     return new THREE.Mesh(geometry, shader);
   }
 
-  applyMood(chapter) {
-    const mood = MOODS[chapter] || MOODS[0];
+  applyMood(chapter, index) {
+    const mood = { ...(MOODS[chapter] || MOODS[0]), ...(MISSION_MOODS[index] || {}) };
     this.sky.material.uniforms.top.value.set(mood.top);
     this.sky.material.uniforms.horizon.value.set(mood.horizon);
     this.scene.fog.color.set(mood.horizon);
@@ -453,12 +476,12 @@ export class WorldView {
     this.ownedGeometries = [];
     this.chapter = chapter;
     this.missionIndex = index;
-    this.applyMood(chapter);
+    this.applyMood(chapter, index);
     this.strikeLayout = chapter === 0 ? STRIKE_MISSIONS[index] : null;
     this.strikeFollow = { x: 0, z: 0 };
     if (chapter === 0) this.createHarbour();
-    else if (chapter === 1) this.createRiver();
-    else createRescueScenery(this, mission);
+    else if (chapter === 1) this.createRiver(index);
+    else createRescueScenery(this, mission, index);
     this.resize();
   }
 
@@ -488,25 +511,44 @@ export class WorldView {
     this.distant = distant;
   }
 
-  createRiver() {
+  createRiver(index = chapterStart(1)) {
     const V = (x, y, z) => new THREE.Vector3(x, y, z);
-    // Banks of the (2.4: wider) canal: a sand beach where the guns stand, then jungle.
+    // 2.7: each canal mission has its own banks (see RIVER_THEMES).
+    const theme = RIVER_THEMES[index - chapterStart(1)] || RIVER_THEMES[0];
     const bank = RIVER.bank;
+    const scale = { rock: 1.8, "stilt-house": 1, shed: 1, "log-pile": 1, "container-stack": 0.8, streetlight: 0.9, reeds: 1.2 };
     for (const side of [-1, 1]) {
-      this.box(V(side * (bank + 13.3), 0.3, -30), V(22, 1.4, 200), 0x6fbf4a);
-      this.box(V(side * (bank + 1.1), 0.42, -30), V(2.4, 1.16, 200), 0xf2d19a);
-      this.box(V(side * (bank + 13.8), 1.06, -30), V(21, 0.12, 200), 0x5cbf45);
+      this.box(V(side * (bank + 13.3), 0.3, -30), V(22, 1.4, 200), theme.bank);
+      this.box(V(side * (bank + 1.1), 0.42, -30), V(2.4, 1.16, 200), theme.beach);
+      this.box(V(side * (bank + 13.8), 1.06, -30), V(21, 0.12, 200), theme.top);
+      // Rock walls over the Narrows; concrete walls, with a yellow lip, along the Cut.
+      for (const w of theme.walls || []) {
+        this.box(V(side * (bank + w.offset), 1 + w.height / 2, -30), V(w.width, w.height, 200), w.color);
+        if (w.lip) this.box(V(side * (bank + w.offset), 1 + w.height + 0.05, -30), V(w.width + 0.1, 0.12, 200), w.lip);
+      }
       for (let i = 0; i < 22; i++) {
         const prop = new THREE.Group();
         this.level.add(prop);
+        const kind = theme.props(i, side);
         const x = side * (bank + 4.6 + (i % 3) * 2.4),
           z = 30 - i * 6;
-        prop.position.set(x, 1.1, z);
-        const kind = i % 5 === 2 ? "stilt-house" : i % 4 === 0 ? "rock" : i % 2 ? "jungle-tree" : "palm";
+        // Half-drowned houses on the floodplain.
+        prop.position.set(x, theme.paddies && kind === "stilt-house" ? 0.6 : 1.1, z);
         const name = this.assets.has(kind) ? kind : "palm";
-        const mesh = this.model(name, V(), kind === "rock" ? 1.8 : kind === "stilt-house" ? 1 : 1.15, prop);
+        const mesh = this.model(name, V(), scale[kind] ?? 1.15, prop);
         mesh.rotation.y = i * 1.3 + side;
+        // Houses, trees and sheds can be shot down; the canal op reads what each one is.
+        if (SCENERY[kind]) prop.userData.scenery = kind;
         this.scrollProps.push(prop);
+        // Flooded paddies between the props on the floodplain.
+        if (theme.paddies && i % 2 === 0) {
+          const paddy = new THREE.Group();
+          this.level.add(paddy);
+          paddy.position.set(side * (bank + 11), 1.1, z - 3);
+          this.box(V(0, 0.02, 0), V(6.4, 0.08, 5), 0x7cc443, paddy);
+          this.box(V(0, 0.05, 0), V(5.8, 0.06, 4.4), 0x5fb8b0, paddy);
+          this.scrollProps.push(paddy);
+        }
       }
     }
   }
@@ -701,7 +743,8 @@ export class WorldView {
   }
 
   aim(clientX, clientY, entities = []) {
-    const rect = this.canvas.getBoundingClientRect();
+    // The rect cached on resize: the touch fire stick asks every step.
+    const rect = this.canvasRect || this.canvas.getBoundingClientRect();
     const pointer = new THREE.Vector2(
       ((clientX - rect.left) / rect.width) * 2 - 1,
       (-(clientY - rect.top) / rect.height) * 2 + 1,

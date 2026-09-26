@@ -299,6 +299,107 @@ export async function checkRiver(page, check) {
     const banner = document.getElementById("flak-warning");
     out.bannerNamesTheHitChance = !banner.hidden && /HIT CHANCE|CAN'T HIT YOU YET/.test(banner.textContent);
     out.gunsWearHealthPips = Boolean(aimer.hpBar);
+
+    // 2.7: the banks' houses and trees can be shot down, with a blast, pieces thrown into the
+    // sky and smoke; the wreck scrolls on, and the stretch comes back intact when it scrolls round.
+    ui.start(9);
+    g.paused = false;
+    const house = g.op.scenery.find((r) => r.kind === "stilt-house");
+    house.prop.position.z = -14;
+    g.player.position.set(house.prop.position.x > 0 ? 8 : -8, 0.08, -2);
+    const scoreBefore = g.score;
+    const aimAt = house.prop.position.clone().setY(house.prop.position.y + house.spec.lift);
+    for (let i = 0; i < 240 && house.alive; i++) {
+      g.cooldown = 0;
+      g.fire(aimAt.clone());
+      g.updateProjectiles(1 / 120);
+      g.updateEffects(1 / 120);
+    }
+    out.bankHousesCanBeShotDown = !house.alive && !house.model.visible && Boolean(house.wreck) && g.score >= scoreBefore + house.spec.reward;
+    out.wrecksThrowPiecesAndSmoke = g.fragments.length > 5 && g.emitters.length > 0;
+    house.prop.position.z = 35.99;
+    g.update(1 / 120);
+    out.scrolledRoundBankComesBack = house.alive && house.model.visible && !house.wreck && house.hp === house.spec.hp;
+    // Every canal mission dresses its banks differently.
+    const dressing = [];
+    for (const m of [9, 10, 11, 12, 13, 14]) {
+      ui.start(m);
+      // What stands on the banks, and how much of each.
+      const count = {};
+      for (const r of g.op.scenery) count[r.kind] = (count[r.kind] || 0) + 1;
+      dressing.push(JSON.stringify(Object.entries(count).sort()));
+    }
+    out.eachMissionHasItsOwnBanks = new Set(dressing).size === 6;
+
+    // Bank barracks send riflemen down to the water; knocked down, those still inside are lost.
+    ui.start(10);
+    g.paused = false;
+    g.hitChance = 0;
+    g.op.spawn({ d: 0, type: "barracks", side: 1, crew: 4 });
+    const hut = g.entities.find((e) => e.type === "barracks");
+    hut.position.z = -18;
+    for (let i = 0; i < 120 * 5.5; i++) g.update(1 / 120);
+    const riflemen = g.entities.filter((e) => e.type === "enemy" && !e.dead && e.position.x > 17 && e.position.x < 20.5);
+    out.barracksSendsRiflemenToTheWater = riflemen.length >= 2 && riflemen.some((e) => e.gunner);
+    const inside = hut.crew;
+    const beforeHut = g.score;
+    g.damage(hut, 99, true);
+    out.barracksGoesDownWithThoseInside = hut.dead && inside > 0 && g.score >= beforeHut + 200 + 50 * inside;
+
+    // With the deck gun held on a heavy target, a rocket salvo follows on its own.
+    ui.start(11);
+    g.paused = false;
+    ui.weapon("gun");
+    g.op.spawn({ d: 0, type: "guns", side: 1, count: 1, launcher: true });
+    const bunker = g.entities.find((e) => e.type === "launcher");
+    bunker.position.z = -16;
+    const rocketsBefore = g.op.rockets;
+    g.input.aim.copy(bunker.position).setY(1.5);
+    g.input.fire = true;
+    for (let i = 0; i < 12; i++) g.update(1 / 120);
+    g.input.fire = false;
+    out.rocketsFollowOnHeavyTargets = g.op.rockets === rocketsBefore - 3;
+    // Rounds: a crate of AP doubles the deck gun's punch.
+    const bankGun = g.entities.find((e) => e.type === "cannon");
+    bankGun.position.z = -12;
+    bankGun.hp = 20;
+    for (const shot of g.projectiles) shot.dead = true;
+    g.gainRounds("ap");
+    g.cooldown = 0;
+    g.fire(bankGun.position.clone().setY(bankGun.position.y + 1));
+    for (let i = 0; i < 90; i++) g.updateProjectiles(1 / 120);
+    out.apRoundsHitTwiceAsHard = bankGun.hp === 20 - 2 * 2;
+    // Twin guns firing on their own keep the crates for the player's trigger.
+    g.gainRounds("plasma");
+    const plasma = g.rounds.plasma;
+    g.twin = 3;
+    for (let i = 0; i < 120 * 2; i++) g.update(1 / 120);
+    out.twinGunsKeepTheBestRounds = g.rounds.plasma === plasma && g.shots > 0;
+    // Automatic rockets keep the last salvo in the rack for the player.
+    const hut2 = g.entities.find((e) => e.type === "launcher" && !e.dead) || bunker;
+    g.op.rockets = 3;
+    g.rocketCooldown = 0;
+    g.input.aim.copy(hut2.position).setY(1.5);
+    g.input.fire = true;
+    for (let i = 0; i < 12; i++) g.update(1 / 120);
+    g.input.fire = false;
+    out.lastSalvoStaysForThePlayer = g.op.rockets === 3;
+    // Guns and launchers make way on the bank: no house stands where a bunker sets up.
+    ui.start(14);
+    g.paused = false;
+    g.op.spawn({ d: 0, type: "guns", side: 1, count: 2, launcher: true });
+    const set = g.entities.filter((e) => e.type === "cannon" || e.type === "launcher");
+    out.enemyPositionsClearTheBank = set.every((e) =>
+      g.op.scenery.every((r) => !r.alive || r.hidden || Math.sign(r.prop.position.x) !== Math.sign(e.position.x) || Math.abs(r.prop.position.z - e.position.z) >= 3),
+    );
+    // A house shot down and scrolled round comes back without the smoke of its wreck.
+    const shack = g.op.scenery.find((r) => r.alive && !r.hidden && r.spec.wreck === "house");
+    g.op.destroyScenery(shack);
+    const smoke = shack.smoke;
+    shack.prop.position.z = 35.99;
+    g.update(1 / 120);
+    g.update(1 / 120);
+    out.rebuiltHouseDoesNotSmoke = shack.alive && !g.emitters.includes(smoke);
     return out;
   });
   for (const [name, value] of Object.entries(mechanics)) check(`river ${name}`, value);

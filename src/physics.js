@@ -35,6 +35,11 @@ export function segmentSphere(a, b, centre, radius) {
   return t >= 0 && t <= 1 ? t : null;
 }
 
+// The same test on the map (x and z only): Lantern's flat rounds hit whatever they cross (2.7).
+export function segmentCircle(a, b, centre, radius) {
+  return segmentSphere({ x: a.x, y: 0, z: a.z }, { x: b.x, y: 0, z: b.z }, { x: centre.x, y: 0, z: centre.z }, radius);
+}
+
 export function movement(velocity, intent, dt, acceleration, drag, maxSpeed) {
   const len = Math.hypot(intent.x, intent.z);
   const divisor = Math.max(1, len);

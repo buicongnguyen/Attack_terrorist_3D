@@ -12,6 +12,8 @@ const NODES = {
   "rescue-soldier": ["WaveArm"],
   cannon: ["Turret"],
   "aa-truck": ["TruckTurret"],
+  "missile-truck": ["Rack"],
+  "missile-site": ["Rack"],
   drone: ["DroneRotor"],
   "aa-nest": ["Turret", "MuzzleL", "MuzzleR"],
   "relay-mast": ["Dish", "Beacon"],
