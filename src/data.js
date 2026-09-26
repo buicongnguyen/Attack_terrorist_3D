@@ -48,9 +48,11 @@ export const MODELS = [
   "harbour-crane",
   "buoy",
   "container-stack",
+  "gunship",
+  "escort-boat",
 ];
 
-export const ASSET_REVISION = "harbour-1";
+export const ASSET_REVISION = "canal-1";
 
 export const CHAPTERS = [
   { name: "Breakwater", label: "City and harbour strikes", icon: "plane", color: "#ffc62b" },
@@ -70,6 +72,9 @@ export const MISSIONS = [
   { chapter: 0, name: "The Ring" },
   { chapter: 1, name: "Mangrove Mile" },
   { chapter: 1, name: "The Narrows" },
+  { chapter: 1, name: "Floodplain" },
+  { chapter: 1, name: "Sawmill Reach" },
+  { chapter: 1, name: "The Cut" },
   { chapter: 1, name: "Lock Gate" },
   {
     chapter: 2,
@@ -117,11 +122,20 @@ export function chapterSize(chapter) {
   return MISSIONS.filter((m) => m.chapter === chapter).length;
 }
 
-// Saves from before the harbour missions (key tidelock-v2) number every mission after 1.6
-// three lower: those records move up by three.
-export function migrateSave(saved) {
-  const records = {};
-  for (const [key, value] of Object.entries(saved?.records || {})) records[+key >= 6 ? +key + 3 : +key] = value;
+// Saves number missions by index. A v2 save predates the three harbour missions inserted after
+// 1.6; a v3 save predates the three canal missions inserted before Lock Gate (its index 11).
+// Each insertion moves the records at and after it up by three.
+const INSERTED = [
+  [6, 3],
+  [11, 3],
+];
+export function migrateSave(saved, version = 2) {
+  let records = { ...(saved?.records || {}) };
+  for (const [at, count] of INSERTED.slice(version - 2)) {
+    const moved = {};
+    for (const [key, value] of Object.entries(records)) moved[+key >= at ? +key + count : +key] = value;
+    records = moved;
+  }
   return { ...saved, records };
 }
 

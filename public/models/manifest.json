@@ -5,7 +5,7 @@
   "units": "metres",
   "up": "+Y in glTF (Blender +Z)",
   "forward": "-Z in glTF (Blender +Y)",
-  "totalBytes": 3794580,
+  "totalBytes": 4112092,
   "assets": [
     {
       "name": "enemy",
@@ -187,6 +187,64 @@
           1.734,
           2.89,
           4.008
+        ]
+      }
+    },
+    {
+      "name": "gunship",
+      "file": "gunship.glb",
+      "kind": "vehicle",
+      "chapters": [
+        "river"
+      ],
+      "meshes": 17,
+      "triangles": 5932,
+      "bytes": 190788,
+      "nodes": [
+        "Rotor",
+        "TailRotor",
+        "ChinTurret",
+        "HeliMuzzle"
+      ],
+      "materials": [],
+      "boundsGltf": {
+        "min": [
+          -3.4,
+          -1.0,
+          -3.1
+        ],
+        "max": [
+          3.4,
+          1.544,
+          4.717
+        ]
+      }
+    },
+    {
+      "name": "escort-boat",
+      "file": "escort-boat.glb",
+      "kind": "vehicle",
+      "chapters": [
+        "river"
+      ],
+      "meshes": 16,
+      "triangles": 4076,
+      "bytes": 126724,
+      "nodes": [
+        "Turret",
+        "Muzzle"
+      ],
+      "materials": [],
+      "boundsGltf": {
+        "min": [
+          -0.92,
+          -0.26,
+          -2.06
+        ],
+        "max": [
+          0.92,
+          1.95,
+          2.285
         ]
       }
     },

@@ -1,5 +1,41 @@
 # Release Verification
 
+## Tidelock 2.4 (crowded harbours, a canal at war)
+
+The crowded harbours, the angle buttons, the wider canal with its weapons, air strike and help, and the three new canal missions ([REDESIGN.md §12](REDESIGN.md#12-tidelock-24-crowded-harbours-and-a-canal-at-war)) were verified on 2026-09-26 against the production build (`vite preview`, GPU rendering).
+
+- **64 Node tests.** New:
+  - every harbour has 30 or more boats, a quota between 80 % and 100 % of them, its key groups and enough bombs;
+  - each new group has a pattern and angle that sinks it in one release, sidesteps included;
+  - no hull collides or runs aground over four minutes of every timetable in the widened harbours;
+  - six canal legs with valid crates and nothing spawned in the banks;
+  - the new legs teach rockets, the laser, the gunship and the escort;
+  - an air strike always crosses the canal bank to bank, ahead of the barges;
+  - the laser overheats after 3.2 s and restarts once cooled;
+  - saves from 2.2 and 2.3 keep their records on the right missions.
+- **Browser checks**, zero runtime or resource errors. New:
+  - a mark in the far west basin: the flight flies there, the camera slides after it, and the Stick sinks a boatyard row;
+  - the angle buttons turn and flip the pattern;
+  - the quota waits for the key ships, then lets the rest run;
+  - keys 2 and 3 pick rockets and the laser;
+  - a rocket salvo of three bursts through a pack;
+  - the laser burns a gun down in under a second, then overheats;
+  - Q lays the air strike across the canal and clears it, every bomb more than 10 m ahead of the barges;
+  - two strikes only dent the lock gate;
+  - crates restock rockets and strikes and call the gunship and the escort;
+  - the gunship fires where Marlin fires, and help does not count towards accuracy.
+- **Scripted pilots:**
+
+  | Missions | Result |
+  | --- | --- |
+  | Strike 1.1–1.6 | as in 2.3 |
+  | Harbour 1.7–1.9 | quota reached with 15, 14 and 16 bombs (the greedy pilot steers by hand, no marks) |
+  | River 2.1–2.6 | all six with both barges; 3, 3, 2, 3, 2 and 3 stars |
+  | Rescue 3.1–3.3 | full sorties home |
+- **Layout audit** at nine sizes from 320×568 to 1440×900 across city, harbour, canal and rescue, with every help timer and weapon showing: no overlaps and nothing off-screen.
+- **Rendering:** the crowded harbours draw 290–505 calls; a frame costs under 2.5 ms on the test GPU.
+- **Independent review:** 5 defects and a tail of smaller ones, all fixed ([REDESIGN.md §12](REDESIGN.md#independent-review-of-24)).
+
 ## Tidelock 2.3 (mark the drop, a wider city)
 
 Aim marks, homing assist, mission power, the 3 × 4 city and the sliding camera ([REDESIGN.md §11](REDESIGN.md#11-tidelock-23-mark-the-drop-a-wider-city)) were verified on 2026-09-26 against the production build (`vite preview`, GPU rendering).

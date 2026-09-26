@@ -681,6 +681,34 @@ html[data-touch="true"] .keys-only {
   background: rgba(255, 255, 255, 0.05);
   border-radius: 12px;
 }
+.pattern-diagram {
+  cursor: pointer;
+}
+/* Angle buttons: the pattern drawn at 0°, 45°, 90° and 135°. */
+.turn-chips {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 4px;
+  margin-top: 6px;
+}
+.turn-chips button {
+  aspect-ratio: 1;
+  min-width: 0;
+  padding: 3px;
+  border-radius: 8px;
+  border: 2px solid rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.06);
+  cursor: pointer;
+}
+.turn-chips button.on {
+  border-color: var(--gold);
+  background: rgba(255, 198, 43, 0.18);
+}
+.turn-chips svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
 .pattern-count {
   margin: 6px 0 0;
   font-size: 11px;
@@ -767,7 +795,7 @@ html[data-touch="true"] .keys-only {
   flex-direction: column;
   gap: 4px;
 }
-#ladder-floors button {
+#ladder-floors button[data-floor] {
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -778,20 +806,20 @@ html[data-touch="true"] .keys-only {
   font-size: 12px;
   font-weight: 600;
 }
-#ladder-floors button em {
+#ladder-floors button[data-floor] em {
   font-style: normal;
   color: var(--ember);
   letter-spacing: 1px;
 }
-#ladder-floors button.set {
+#ladder-floors button[data-floor].set {
   outline: 2px dashed rgba(255, 138, 43, 0.8);
 }
-#ladder-floors button.drill {
+#ladder-floors button[data-floor].drill {
   background: #ff8a2b;
   color: var(--ink);
   box-shadow: 0 3px 0 #b8540c;
 }
-#ladder-floors button.drill em {
+#ladder-floors button[data-floor].drill em {
   color: #6a0f00;
 }
 .ladder-hint {
@@ -1304,6 +1332,46 @@ html[data-touch="true"] .keys-only {
   right: 4px;
   font-size: 10px;
   font-weight: 700;
+}
+/* Canal weapons: the laser's heat bar, an empty rocket rack, the air strike in orange. */
+.weapon-bar .heat {
+  position: absolute;
+  left: 6px;
+  right: 6px;
+  bottom: 4px;
+  height: 4px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.18);
+  overflow: hidden;
+}
+.weapon-bar .heat i {
+  display: block;
+  height: 100%;
+  background: linear-gradient(90deg, #7fe8ff, #ffc62b 60%, #ff4b2b);
+  transform-origin: left;
+  transform: scaleX(0);
+}
+.weapon-bar .overheated {
+  animation: overheat 0.4s ease-in-out infinite alternate;
+}
+@keyframes overheat {
+  to {
+    box-shadow: 0 0 0 3px rgba(255, 75, 43, 0.75);
+  }
+}
+.weapon-bar .empty small {
+  color: #ff8a6b;
+}
+.weapon-bar .strike {
+  background: #ff8a1f;
+  color: var(--ink);
+}
+.weapon-bar .strike:disabled {
+  background: rgba(255, 138, 31, 0.3);
+  color: rgba(255, 255, 255, 0.6);
+}
+.bonus.help .bonus-fill {
+  background: #7fd8ff;
 }
 .desktop-combat {
   position: absolute;
@@ -1891,7 +1959,7 @@ html[data-touch="true"] kbd {
     width: 112px;
     padding: 7px;
   }
-  #ladder-floors button {
+  #ladder-floors button[data-floor] {
     height: 22px;
     font-size: 11px;
   }
@@ -2148,7 +2216,7 @@ html[data-touch="true"] kbd {
     width: 110px;
     padding: 6px;
   }
-  #ladder-floors button {
+  #ladder-floors button[data-floor] {
     height: 20px;
   }
   .ladder-hint {
@@ -2275,7 +2343,7 @@ html[data-touch="true"] kbd {
   #ladder-floors {
     gap: 2px;
   }
-  #ladder-floors button {
+  #ladder-floors button[data-floor] {
     height: 18px;
     font-size: 10px;
     border-radius: 6px;
@@ -2406,7 +2474,7 @@ html[data-touch="true"] kbd {
     display: grid;
     grid-template-columns: 1fr 1fr;
   }
-  #ladder-floors button {
+  #ladder-floors button[data-floor] {
     height: 18px;
     padding: 0 5px;
   }
@@ -2593,4 +2661,88 @@ html[data-reduced-motion="true"] *::before,
 html[data-reduced-motion="true"] *::after {
   animation: none !important;
   transition: none !important;
+}
+
+/* Phones: bonus timers become compact chips (icon and seconds) so the canal help fits beside the
+   mission panel: a column in portrait, a row in landscape. */
+@media (max-width: 700px), (orientation: landscape) and (max-height: 520px) {
+  #powerup,
+  html[data-touch="true"] #powerup {
+    width: auto;
+    gap: 4px;
+  }
+  .bonus {
+    padding: 4px 8px 7px;
+    gap: 6px;
+    font-size: 10px;
+    border-radius: 10px;
+  }
+  .bonus span {
+    display: none;
+  }
+  .bonus svg {
+    width: 15px;
+    height: 15px;
+  }
+  .bonus-track {
+    left: 6px;
+    right: 6px;
+    bottom: 2px;
+  }
+}
+@media (orientation: landscape) and (max-height: 520px) {
+  #powerup,
+  html[data-touch="true"] #powerup {
+    flex-direction: row;
+    top: 146px;
+  }
+}
+/* The narrowest phones: four weapon buttons on the boat still clear the shield bar. */
+@media (max-width: 380px) {
+  #combat-controls .weapon-bar {
+    gap: 3px;
+    padding: 4px;
+  }
+  #combat-controls .weapon-bar .icon-button {
+    min-width: 36px;
+    width: 36px;
+    height: 36px;
+  }
+}
+/* In pattern mode the ladder holds the diagram, the angle buttons and the count, one under another. */
+#ladder.pattern-mode #ladder-floors {
+  display: flex;
+  flex-direction: column;
+}
+/* Portrait phones: the four angle buttons wrap two by two so they stay large enough to tap. */
+@media (max-width: 700px) and (orientation: portrait) {
+  .turn-chips {
+    grid-template-columns: repeat(2, 1fr);
+    max-width: 88px;
+    margin-left: auto;
+    margin-right: auto;
+  }
+}
+@media (orientation: landscape) and (max-height: 520px) {
+  .turn-chips {
+    gap: 2px;
+    margin-top: 3px;
+  }
+  .turn-chips button {
+    padding: 2px;
+  }
+}
+/* Short portrait phones: one row of four keeps the pattern panel clear of the radio line. */
+@media (max-width: 700px) and (orientation: portrait) and (max-height: 640px) {
+  .pattern-diagram {
+    max-width: 42px;
+  }
+  .turn-chips {
+    grid-template-columns: repeat(4, 1fr);
+    max-width: none;
+    gap: 3px;
+  }
+  .turn-chips button {
+    padding: 2px;
+  }
 }

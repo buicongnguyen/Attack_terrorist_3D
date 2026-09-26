@@ -26,6 +26,8 @@ export const SHIPS = Object.freeze({
     score: 1000,
     flak: { f: -3.6, y: 2.8 },
   },
+  // Fast raiders: the Front's small attack craft, drawn as a scaled-down river skiff.
+  raider: { name: "Raider", model: "skiff", scale: 0.75, hp: 1, length: 3.5, beam: 1.25, evade: 0.55, score: 100 },
   ferry: { name: "Island Belle", model: "ferry", hp: 1, length: 7.2, beam: 2.6, evade: 0, score: 0, civilian: true },
   // The harbour's pilot launch: a small civilian boat, drawn as a scaled-down ferry.
   launch: { name: "Pilot launch", model: "ferry", scale: 0.6, hp: 1, length: 4.3, beam: 1.6, evade: 0, score: 0, civilian: true },
@@ -299,15 +301,45 @@ const warehouse = (id, x, z, floors, name, color) => ({
 
 const NORTH_QUAY = [-27, -27, 27, -16];
 
+// 2.4: each harbour gains a west and an east basin, so the flotilla is 30-odd boats strong.
+// The quay runs the whole width; piers from it divide the basins, and the south moles close them
+// (the mouth stays in the middle basin). The camera slides over the basins like the city's.
+const WIDE_COLS = 10;
+function widen(harbour, extra = {}) {
+  return {
+    ...harbour,
+    wide: true,
+    land: [
+      [-67, -27, 67, -16],
+      ...harbour.land.filter((l) => l !== NORTH_QUAY),
+      [-30, -16, -27, 2],
+      [27, -16, 30, 2],
+      [-74, -27, -67, 27],
+      [67, -27, 74, 27],
+      [-67, 21, -27, 27],
+      [27, 21, 67, 27],
+      ...(extra.land || []),
+    ],
+    cranes: [...(harbour.cranes || []), { x: -48, z: -18.5, heading: 90 }, { x: 46, z: -18.5, heading: 90 }],
+    containers: [...(harbour.containers || []), { x: -60, z: -21 }, { x: -38, z: -22 }, { x: 36, z: -22 }, { x: 58, z: -20.5 }],
+    buoys: [...(harbour.buoys || []), ...(extra.buoys || [])],
+  };
+}
+const quayShed = (id, x, name, color, floors = 1) => warehouse(id, x, -21.5, floors, name, color);
+// Explicit moored slots: [x, z, heading in degrees].
+const berths = (list) => list.map(([x, z, heading]) => ({ x, z, heading }));
+const moor = (x, z, label, place, slots) => ({ x, z, moored: true, hold: 1e6, label, place, slots: berths(slots) });
+const raiders = (n) => Array(n).fill("raider");
+
 export const HARBOUR_MISSIONS = [
   {
     // 1.7 Harbour Mouth: a patrol column waits in the diagonal channel, then wheels south for the mouth.
     // Teaches the Stick and its angle.
     lesson: "stick",
     select: "stick",
-    cols: 3,
+    cols: WIDE_COLS,
     rows: 3,
-    harbour: {
+    harbour: widen({
       land: [NORTH_QUAY, [-27, 21, 11, 27]],
       // Channel buoys alternate sides of the diagonal the column waits on.
       buoys: [
@@ -319,10 +351,23 @@ export const HARBOUR_MISSIONS = [
       cranes: [{ x: -4, z: -18.5, heading: 90 }, { x: 18, z: -18.5, heading: 90 }],
       containers: [{ x: -21, z: -19 }, { x: 11, z: -22 }],
       mouth: { x: 19, z: 24 },
-    },
+    }, {
+      // Boatyard pontoons between the raider rows in the west basin.
+      land: [
+        [-62, -6.2, -50, -4.8],
+        [-62, 0.8, -50, 2.2],
+      ],
+      buoys: [
+        { x: -44, z: 16 },
+        { x: 34, z: 17 },
+        { x: 62, z: -12 },
+      ],
+    }),
     buildings: [
       warehouse("W1", -14, -21.5, 2, "Net Store", "#e2704f"),
       warehouse("W2", 4, -21.5, 1, "Customs Shed", "#2fb3a6"),
+      quayShed("W3", -56, "Boat Shed", "#ffc62b", 2),
+      quayShed("W4", 50, "Chandlery", "#b04cff"),
     ],
     plazas: [],
     masts: [],
@@ -365,12 +410,56 @@ export const HARBOUR_MISSIONS = [
           },
         ],
       },
+      {
+        // West basin: raiders moored abreast in three rows at the boatyard. A Stick laid across a
+        // row sinks all four.
+        id: "boatyard",
+        ships: raiders(12),
+        stations: [
+          moor(-56, -2, "RAIDERS AT THE BOATYARD", "WEST BASIN", [
+            [-60.2, -9, 90], [-57.4, -9, 90], [-54.6, -9, 90], [-51.8, -9, 90],
+            [-60.2, -2, 90], [-57.4, -2, 90], [-54.6, -2, 90], [-51.8, -2, 90],
+            [-60.2, 5, 90], [-57.4, 5, 90], [-54.6, 5, 90], [-51.8, 5, 90],
+          ]),
+        ],
+      },
+      {
+        // A raider column runs up and down the west basin, then wheels onto the diagonal.
+        id: "westColumn",
+        ships: raiders(4),
+        speed: 1.2,
+        start: 4,
+        stations: [
+          { x: -39, z: 2, heading: 90, formation: "column", hold: 20, label: "RAIDER COLUMN", place: "WEST BASIN" },
+          { x: -39, z: 4, heading: 45, formation: "column", hold: 16, label: "COLUMN WHEELS", place: "WEST BASIN" },
+        ],
+      },
+      {
+        // East anchorage: two lines abreast, up and down the screen, riding at anchor. (Raiders
+        // abreast are too close to turn onto a course without touching.)
+        id: "lineA",
+        ships: raiders(5),
+        stations: [{ x: 40, z: -2, heading: 0, formation: "line", hold: 1e6, label: "RAIDERS ABREAST", place: "EAST ANCHORAGE" }],
+      },
+      {
+        id: "lineB",
+        ships: raiders(5),
+        stations: [{ x: 52, z: 6, heading: 0, formation: "line", hold: 1e6, label: "SECOND LINE", place: "EAST ANCHORAGE" }],
+      },
+      {
+        id: "echelon",
+        ships: ["patrol", "patrol", "patrol", "patrol"],
+        stations: [{ x: 62, z: 12, heading: 90, formation: "echelon", hold: 1e6, label: "PATROL ECHELON", place: "EAST MOLE" }],
+      },
     ],
     aircraft: [
-      { callsign: "Kestrel One", crew: "iona", payload: { stick: 5 } },
-      { callsign: "Kestrel Two", crew: "piper", payload: { stick: 4 } },
+      { callsign: "Kestrel One", crew: "iona", payload: { stick: 9 } },
+      { callsign: "Kestrel Two", crew: "piper", payload: { stick: 8 } },
     ],
-    par: 2,
+    // Sink 30 of the 36 boats, the channel column among them; the rest run for the open sea.
+    quota: 30,
+    required: ["column"],
+    par: 8,
     alert: 0,
     startLane: -10,
   },
@@ -379,9 +468,9 @@ export const HARBOUR_MISSIONS = [
     // flak frigate at anchor and a civilian ferry crossing. Teaches the L and U shapes.
     lesson: "shapes",
     select: "ell",
-    cols: 3,
+    cols: WIDE_COLS,
     rows: 3,
-    harbour: {
+    harbour: widen({
       land: [
         NORTH_QUAY,
         [-16.5, -16, -13, 5.5],
@@ -398,8 +487,28 @@ export const HARBOUR_MISSIONS = [
       cranes: [{ x: 12, z: -19, heading: 90 }, { x: -15, z: -19, heading: 90 }],
       containers: [{ x: -22, z: -21 }, { x: -5, z: -20 }, { x: 0, z: 23.5 }],
       mouth: { x: 18, z: 24 },
-    },
-    buildings: [warehouse("W1", 23, -21.5, 1, "Pump House", "#f2b441")],
+    }, {
+      land: [
+        // West slipway: an L pontoon with raiders moored inside the corner.
+        [-62, -12, -59, 4],
+        [-62, 4, -46, 7],
+        // East slipway, the same L turned half round.
+        [59, -4, 62, 12],
+        [46, -7, 62, -4],
+        // A U-shaped slip cut into the east quay.
+        [32, -16, 34, -4],
+        [42, -16, 44, -4],
+      ],
+      buoys: [
+        { x: -40, z: 17 },
+        { x: 52, z: 16 },
+      ],
+    }),
+    buildings: [
+      warehouse("W1", 23, -21.5, 1, "Pump House", "#f2b441"),
+      quayShed("W2", -50, "Slipway Shed", "#e2704f", 2),
+      quayShed("W3", 54, "Rigging Loft", "#2fb3a6"),
+    ],
     plazas: [],
     masts: [],
     aa: [],
@@ -473,12 +582,57 @@ export const HARBOUR_MISSIONS = [
           { x: -20, z: 11, heading: 180, hold: 10 },
         ],
       },
+      {
+        id: "westSlip",
+        ships: raiders(5),
+        stations: [
+          moor(-55, -3, "RAIDERS ON THE SLIPWAY", "WEST BASIN", [
+            [-57, -8, 90], [-57, -4, 90], [-57, 0, 90], [-53, 2, 0], [-49, 2, 0],
+          ]),
+        ],
+      },
+      {
+        id: "westColumn",
+        ships: raiders(4),
+        speed: 1.2,
+        start: 6,
+        stations: [
+          { x: -38, z: 0, heading: 90, formation: "column", hold: 18, label: "RAIDER COLUMN", place: "WEST BASIN" },
+          { x: -38, z: 8, heading: 45, formation: "column", hold: 16, label: "COLUMN WHEELS", place: "WEST BASIN" },
+        ],
+      },
+      {
+        id: "eastSlip",
+        ships: raiders(5),
+        stations: [
+          moor(55, 3, "RAIDERS ON THE EAST SLIP", "EAST BASIN", [
+            [57, 8, 90], [57, 4, 90], [57, 0, 90], [53, -2, 0], [49, -2, 0],
+          ]),
+        ],
+      },
+      {
+        // Three walls of the east slip: a U with its open end to the south.
+        id: "eastDock",
+        ships: raiders(5),
+        stations: [
+          moor(38, -9, "RAIDERS IN THE SLIP", "EAST QUAY", [
+            [35.2, -11, 90], [35.2, -7, 90], [40.8, -11, 90], [40.8, -7, 90], [38, -13.6, 0],
+          ]),
+        ],
+      },
+      {
+        id: "eastLine",
+        ships: raiders(5),
+        stations: [{ x: 38, z: 10, heading: 0, formation: "line", hold: 1e6, label: "RAIDERS ABREAST", place: "EAST ROADS" }],
+      },
     ],
     aircraft: [
-      { callsign: "Kestrel One", crew: "iona", payload: { ell: 3, stick: 3 } },
-      { callsign: "Kestrel Two", crew: "piper", payload: { yoke: 3 } },
+      { callsign: "Kestrel One", crew: "iona", payload: { ell: 5, stick: 4 } },
+      { callsign: "Kestrel Two", crew: "piper", payload: { yoke: 4, stick: 3 } },
     ],
-    par: 4,
+    quota: 27,
+    required: ["frigate"],
+    par: 7,
     alert: 0,
     startLane: 0,
   },
@@ -487,9 +641,9 @@ export const HARBOUR_MISSIONS = [
     // and the destroyer Cinder runs for the mouth. O-Ring, Box, and the Stick along a long hull.
     lesson: "ring",
     select: "ring",
-    cols: 3,
+    cols: WIDE_COLS,
     rows: 3,
-    harbour: {
+    harbour: widen({
       land: [NORTH_QUAY, [15, -16, 18.5, 2], [-27, 22, 9, 27]],
       buoys: [
         { x: 4, z: 12 },
@@ -499,10 +653,22 @@ export const HARBOUR_MISSIONS = [
       cranes: [{ x: 16.8, z: -19, heading: 90 }, { x: -18, z: -19, heading: 90 }],
       containers: [{ x: -7, z: -20.5 }, { x: 22.5, z: -22 }, { x: -3, z: 23.5 }],
       mouth: { x: 18, z: 24 },
-    },
+    }, {
+      land: [
+        // West pontoon between two rafts of raiders; an east pontoon above a third.
+        [-62, -1, -50, 1],
+        [48, -12.6, 60, -11.2],
+      ],
+      buoys: [
+        { x: -58, z: 16 },
+        { x: 40, z: -12 },
+      ],
+    }),
     buildings: [
       warehouse("W1", -18, -21.5, 2, "Fuel Office", "#ff8a6b"),
       warehouse("W2", 3, -21.5, 1, "Harbourmaster", "#6ec3f0"),
+      quayShed("W3", -45, "Net Loft", "#ffc62b"),
+      quayShed("W4", 52, "Ice House", "#6ec3f0", 2),
     ],
     plazas: [],
     masts: [],
@@ -565,13 +731,53 @@ export const HARBOUR_MISSIONS = [
         ships: ["frigate"],
         stations: [{ x: 1, z: 18.4, heading: 0, hold: 1e6, label: "FRIGATE ON STATION", place: "SOUTH MOLE" }],
       },
+      {
+        // Raiders rafted five abreast either side of the west pontoon: a Box each.
+        id: "westRaftA",
+        ships: raiders(5),
+        stations: [{ x: -56, z: -6, heading: 90, formation: "raft", moored: true, hold: 1e6, label: "RAFTED RAIDERS", place: "WEST PONTOON" }],
+      },
+      {
+        id: "westRaftB",
+        ships: raiders(5),
+        stations: [{ x: -56, z: 6, heading: 90, formation: "raft", moored: true, hold: 1e6 }],
+      },
+      {
+        // Eight raiders circle the west basin: the O-Ring fits them too.
+        id: "westRing",
+        ships: raiders(8),
+        stations: [{ x: -40, z: 5, formation: "ring", orbit: 0.9, hold: 1e6, label: "RAIDERS CIRCLING", place: "WEST BASIN" }],
+      },
+      {
+        id: "eastRaft",
+        ships: raiders(5),
+        stations: [{ x: 54, z: -8, heading: 90, formation: "raft", moored: true, hold: 1e6, label: "RAFTED RAIDERS", place: "EAST PONTOON" }],
+      },
+      {
+        id: "eastColumn",
+        ships: raiders(4),
+        speed: 1.2,
+        start: 2,
+        stations: [
+          { x: 42, z: 6, heading: 0, formation: "column", hold: 18, label: "RAIDER COLUMN", place: "EAST BASIN" },
+          { x: 46, z: 12, heading: 45, formation: "column", hold: 16, label: "COLUMN WHEELS", place: "EAST BASIN" },
+        ],
+      },
+      {
+        id: "patrolLine",
+        ships: ["patrol", "patrol", "patrol", "patrol"],
+        stations: [{ x: 58, z: 12, heading: 90, formation: "line", hold: 1e6, label: "PATROL LINE", place: "EAST MOLE" }],
+      },
     ],
     aircraft: [
-      { callsign: "Kestrel One", crew: "iona", payload: { ring: 3, stick: 2 } },
-      { callsign: "Kestrel Two", crew: "piper", payload: { box: 3, stick: 2 } },
-      { callsign: "Kestrel Three", crew: "bram", payload: { stick: 3, shockwave: 2 } },
+      { callsign: "Kestrel One", crew: "iona", payload: { ring: 4, stick: 3 } },
+      { callsign: "Kestrel Two", crew: "piper", payload: { box: 5, stick: 3 } },
+      { callsign: "Kestrel Three", crew: "bram", payload: { stick: 4, shockwave: 3 } },
     ],
-    par: 6,
+    // The escort ring and Cinder must go; 34 of the 41 boats in all.
+    quota: 34,
+    required: ["ring", "cinder"],
+    par: 9,
     alert: 0,
     startLane: 3,
   },

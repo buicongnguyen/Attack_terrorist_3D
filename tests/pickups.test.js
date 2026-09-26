@@ -16,13 +16,22 @@ test("both weapon bonuses remain independently visible", () => {
     ["gun"],
   );
   assert.equal(activeBonuses({ twin: 0, auto: 0 }).length, 0);
+  // Canal help shows its time left beside the weapon bonuses.
+  assert.deepEqual(
+    activeBonuses({ twin: 0, auto: 2, heli: 12, ally: 3 }).map((b) => b.kind),
+    ["gun", "heli", "ally"],
+  );
 });
 
 test("pickup rules preserve distinct effects and rewards", () => {
-  assert.equal(PICKUPS.star.duration, 7);
-  assert.equal(PICKUPS.gun.duration, 5);
+  assert.equal(PICKUPS.star.duration, 10);
+  assert.equal(PICKUPS.gun.duration, 8);
+  assert.equal(PICKUPS.heli.duration, 20);
+  assert.equal(PICKUPS.ally.duration, 25);
   assert.equal(PICKUPS.medal.reward, 250);
+  // Four crate models; the badge above each names what it gives.
   assert.equal(new Set(Object.values(PICKUPS).map((p) => p.model)).size, 4);
+  assert.equal(new Set(Object.values(PICKUPS).map((p) => p.label)).size, Object.keys(PICKUPS).length);
 });
 
 test("pickup badges maintain their screen size across camera zoom and viewports", () => {

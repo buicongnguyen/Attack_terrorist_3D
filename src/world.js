@@ -5,6 +5,7 @@ import { createPickupBadgeMaterial, badgeWorldSize } from "./pickups.js";
 import { createRescueScenery } from "./rescue-world.js";
 import { STRIKE_MISSIONS, CITY, FLIGHT, cityBounds } from "./strike-data.js";
 import { consolidate } from "./consolidate.js";
+import { RIVER } from "./river-data.js";
 
 const materialCache = new Map();
 const boxGeometry = new THREE.BoxGeometry(1, 1, 1);
@@ -489,14 +490,16 @@ export class WorldView {
 
   createRiver() {
     const V = (x, y, z) => new THREE.Vector3(x, y, z);
+    // Banks of the (2.4: wider) canal: a sand beach where the guns stand, then jungle.
+    const bank = RIVER.bank;
     for (const side of [-1, 1]) {
-      this.box(V(side * 25.5, 0.3, -30), V(22, 1.4, 200), 0x6fbf4a);
-      this.box(V(side * 13.3, 0.42, -30), V(2.4, 1.16, 200), 0xf2d19a);
-      this.box(V(side * 26, 1.06, -30), V(21, 0.12, 200), 0x5cbf45);
+      this.box(V(side * (bank + 13.3), 0.3, -30), V(22, 1.4, 200), 0x6fbf4a);
+      this.box(V(side * (bank + 1.1), 0.42, -30), V(2.4, 1.16, 200), 0xf2d19a);
+      this.box(V(side * (bank + 13.8), 1.06, -30), V(21, 0.12, 200), 0x5cbf45);
       for (let i = 0; i < 22; i++) {
         const prop = new THREE.Group();
         this.level.add(prop);
-        const x = side * (16.8 + (i % 3) * 2.4),
+        const x = side * (bank + 4.6 + (i % 3) * 2.4),
           z = 30 - i * 6;
         prop.position.set(x, 1.1, z);
         const kind = i % 5 === 2 ? "stilt-house" : i % 4 === 0 ? "rock" : i % 2 ? "jungle-tree" : "palm";
@@ -518,7 +521,9 @@ export class WorldView {
     if (this.chapter === 0 && this.strikeLayout) this.frameCity(aspect, mobile);
     else {
       this.strikeWindow = null;
-      const heightWorld = Math.max(43, 38 / aspect);
+      // Narrow screens keep the whole width in view: the canal and its banks, or the valley.
+      const across = this.chapter === 1 ? RIVER.bank * 2 + 9 : 38;
+      const heightWorld = Math.max(43, across / aspect);
       this.camera.left = (-heightWorld * aspect) / 2;
       this.camera.right = (heightWorld * aspect) / 2;
       this.camera.top = heightWorld / 2;
@@ -553,8 +558,9 @@ export class WorldView {
   // and the camera slides it after the flight (followStrike).
   frameCity(aspect, mobile) {
     const layout = this.strikeLayout;
-    const w = layout.grid ? 1.75 * CITY.pitch + 4 : (layout.cols * CITY.pitch) / 2 + 4,
-      d = layout.grid ? 1.5 * CITY.pitch + 5 : (layout.rows * CITY.pitch) / 2 + 5;
+    const windowed = Boolean(layout.grid || layout.harbour?.wide);
+    const w = windowed ? 1.75 * CITY.pitch + 4 : (layout.cols * CITY.pitch) / 2 + 4,
+      d = windowed ? 1.5 * CITY.pitch + 5 : (layout.rows * CITY.pitch) / 2 + 5;
     this.strikeWindow = { w, d, bounds: cityBounds(layout) };
     this.target.set(0, 4, 0);
     // Portrait phones look along the flight path so the district fills the screen width:
@@ -576,7 +582,7 @@ export class WorldView {
     // Keep the formation in view once it is over the district (portrait: from its first third).
     // Landscape frames the whole sweep, turns included, so the wingover at either edge stays in
     // view. Portrait looks along the flight path and keeps the district large instead.
-    const sweep = layout.grid ? w + 2 : (layout.cols * CITY.pitch) / 2 + FLIGHT.turnMargin + FLIGHT.turnReach * 0.5;
+    const sweep = windowed ? w + 2 : (layout.cols * CITY.pitch) / 2 + FLIGHT.turnMargin + FLIGHT.turnReach * 0.5;
     const band = this.strikePortrait ? [-w * 0.3, w] : [-sweep, sweep];
     for (const x of band) for (const z of [-d + 3, d - 3]) include(x, FLIGHT.altitude, z);
     // HUD bands the district must avoid: top bar, flight panel, and (landscape phones) the side panel.

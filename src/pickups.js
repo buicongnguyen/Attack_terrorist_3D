@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import { SUPPORT } from "./river-data.js";
 
 export const PICKUPS = Object.freeze({
   health: {
@@ -13,16 +14,40 @@ export const PICKUPS = Object.freeze({
     color: 0xffd369,
     label: "TWIN x2",
     reward: 60,
-    duration: 7,
-    toast: "TWIN GUNS / 7 SEC",
+    duration: 10,
+    toast: "TWIN GUNS / 10 SEC",
   },
   gun: {
     model: "pickup-gun",
     color: 0x6bdaff,
     label: "GUIDED",
     reward: 60,
-    duration: 5,
-    toast: "GUIDED SUPPORT / 5 SEC",
+    duration: 8,
+    toast: "GUIDED SUPPORT / 8 SEC",
+  },
+  // Canal help (2.4): a gunship that fires where Marlin fires, an escort boat, an air strike.
+  heli: {
+    model: "pickup-gun",
+    color: 0x7fd8ff,
+    label: "GUNSHIP",
+    reward: 80,
+    duration: SUPPORT.heli.time,
+    toast: `GUNSHIP ON STATION / ${SUPPORT.heli.time} SEC`,
+  },
+  ally: {
+    model: "pickup-star",
+    color: 0x33d69f,
+    label: "ESCORT",
+    reward: 80,
+    duration: SUPPORT.ally.time,
+    toast: `ESCORT BOAT JOINS / ${SUPPORT.ally.time} SEC`,
+  },
+  strike: {
+    model: "pickup-medal",
+    color: 0xff8a1f,
+    label: "AIR STRIKE",
+    reward: 80,
+    toast: "AIR STRIKE +1",
   },
   medal: {
     model: "pickup-medal",
@@ -51,6 +76,8 @@ export function activeBonuses(state) {
   return [
     { kind: "star", remaining: state.twin, ...PICKUPS.star },
     { kind: "gun", remaining: state.auto, ...PICKUPS.gun },
+    { kind: "heli", remaining: state.heli || 0, ...PICKUPS.heli },
+    { kind: "ally", remaining: state.ally || 0, ...PICKUPS.ally },
   ].filter((bonus) => bonus.remaining > 0);
 }
 
@@ -95,6 +122,60 @@ export function createPickupBadgeMaterial(kind) {
     ctx.font = "bold 30px Arial";
     ctx.textAlign = "center";
     ctx.fillText("x2", 96, 133);
+  } else if (kind === "heli") {
+    // Gunship: fuselage, tail boom and a rotor bar.
+    ctx.fillRect(38, 40, 116, 9);
+    ctx.fillRect(92, 44, 8, 16);
+    ctx.beginPath();
+    ctx.ellipse(86, 78, 36, 20, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillRect(110, 72, 44, 9);
+    ctx.fillRect(146, 60, 9, 26);
+    ctx.fillRect(58, 96, 60, 7);
+    ctx.fillStyle = accent;
+    ctx.beginPath();
+    ctx.ellipse(72, 74, 13, 9, 0, 0, Math.PI * 2);
+    ctx.fill();
+  } else if (kind === "ally") {
+    // Escort boat: hull, cabin and a gun.
+    ctx.beginPath();
+    ctx.moveTo(36, 88);
+    ctx.lineTo(156, 88);
+    ctx.lineTo(140, 112);
+    ctx.lineTo(52, 112);
+    ctx.fill();
+    ctx.fillRect(66, 60, 44, 28);
+    ctx.fillRect(118, 70, 14, 18);
+    ctx.fillRect(128, 74, 30, 7);
+    ctx.fillStyle = accent;
+    ctx.fillRect(72, 66, 32, 12);
+    ctx.fillRect(84, 36, 5, 24);
+  } else if (kind === "strike") {
+    // Air strike: a bomber over three falling bombs.
+    ctx.beginPath();
+    ctx.moveTo(96, 30);
+    ctx.lineTo(104, 58);
+    ctx.lineTo(150, 66);
+    ctx.lineTo(104, 72);
+    ctx.lineTo(100, 90);
+    ctx.lineTo(112, 96);
+    ctx.lineTo(80, 96);
+    ctx.lineTo(92, 90);
+    ctx.lineTo(88, 72);
+    ctx.lineTo(42, 66);
+    ctx.lineTo(88, 58);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = accent;
+    for (const [x, y] of [
+      [66, 112],
+      [96, 122],
+      [126, 112],
+    ]) {
+      ctx.beginPath();
+      ctx.ellipse(x, y, 6, 10, 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
   } else if (["gun", "ammo", "support"].includes(kind)) {
     ctx.save();
     ctx.translate(96, 76);

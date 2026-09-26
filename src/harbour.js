@@ -269,8 +269,17 @@ export class Fleet {
     return this.ships.filter((s) => !s.civilian);
   }
 
+  // Boats still to sink: the mission's quota, and never fewer than its key ships still afloat.
   left() {
-    return this.ships.filter((s) => !s.civilian && !s.dead).length;
+    const hostile = this.hostile();
+    const alive = hostile.filter((s) => !s.dead);
+    const layout = this.op.layout;
+    const keys = alive.filter((s) => layout.required?.includes(s.group.data.id)).length;
+    return Math.max(this.needed() - (hostile.length - alive.length), keys);
+  }
+
+  needed() {
+    return this.op.layout.quota ?? this.hostile().length;
   }
 
   // Intel strip entries: each labelled station with a timetable, like the city's gatherings.

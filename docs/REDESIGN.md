@@ -212,6 +212,8 @@ Added on top:
 | 1.8 Dry Dock | The L and U shapes, civilians | Missile boats round the corner of the L pier; boats against three walls of the dry dock with the pilot launch in the entrance; a flak frigate at anchor; the Island Belle crossing. |
 | 1.9 The Ring | The O-Ring and the Box | Five escorts circling the seized Island Belle (sink them and she steams clear); missile boats rafted at the fuel pier; the destroyer Cinder and a flak frigate. |
 
+![The O-Ring centred on the Island Belle: five escorts on target, the ferry spared](chapter1-harbour.png)
+
 Harbourmaster Ines Duarte joins the cast. The flotilla stands between the city and the river mouth, so Chapter 1 now ends by opening the way for Okafor's convoy in Chapter 2.
 
 ### Design checks (Node tests)
@@ -290,7 +292,68 @@ Also:
 - **Right-to-left segments lost their search margin** in the new building index, so a segment could miss a building it clipped. Both directions now search the same box, and a Node test compares the index with a search of every building for 600 random points and segments.
 - **The scripted pilot re-marked its target while the first bomb was falling** and dropped extra bombs. It now waits for the bomb, like the release rule it tests.
 
-## 12. Controls
+## 12. Tidelock 2.4: crowded harbours and a canal at war
+
+### The brief
+
+In the harbour: change the bomb shape between a vertical line, a horizontal line and the rest with a button or a click, and put more than 30 ships in each harbour so it looks crowded and fun. On the canal escort: make the guns, bullets and missiles clearer and more beautiful, give the player more power, more levels and a larger canal, and more weapons such as a laser and rockets. Add a strike button for help, and bonus packets on the way: an Apache helicopter that joins and fires where the player fires, or allied boats with guns that fire at the enemy.
+
+### The harbour
+
+| Ask | Change |
+| --- | --- |
+| Change the shape with a button or a click | **Angle buttons.** Under the pattern diagram, four buttons show the actual shape across, on both diagonals and up and down. Tap one to point the pattern along it; tap the lit one again to flip it half round (which matters for the L and the U). Clicking the diagram turns it one step. E / C, the wheel and the dial still work. The O-Ring looks the same at every angle, so it has no buttons. |
+| More than 30 ships | **Every harbour gained a west and an east basin**, behind piers off a quay that now runs the whole width. The camera slides over them like the city's, and the map panel shows all three basins. 1.7 has 36 boats, 1.8 32 and 1.9 41. The new ones are mostly **raiders**, small fast boats that sink with one hit, moored and formed up so the shapes pay off: three rows at the west boatyard (a Stick across each row, or a vertical Stick between two columns for six), raider lines abreast in the east anchorage (a vertical Stick each), wheeling columns (the diagonal), L-shaped slipways, a U-shaped slip, rafts for the Box, and eight raiders circling the west basin for the O-Ring. |
+| Crowded but still easy | **A quota.** Sink 30 of 36, 27 of 32 or 34 of 41, including each harbour's key ships (the channel column, the flak frigate, the escort ring and Cinder); the rest run for the open sea. Payloads grew to match (up to 22 bombs in 1.9), and a flight with no mark turns round near the boats rather than at the far quay. |
+
+![The west basin of 1.9: an O-Ring over eight circling raiders, rafts beside it](chapter1-crowd.png)
+
+Every new group is held to the harbour's rules in Node tests: its intended pattern and angle sinks it in one release with the sidesteps included; no hull overlaps another or a quay over four minutes of every timetable; and every harbour has 30 or more boats, a quota between 80 % and 100 % of them, and enough bombs for it.
+
+### The canal
+
+| Ask | Change |
+| --- | --- |
+| A larger canal | The banks moved from ±12.2 m to ±17.5 m. Guns, crews, launchers, the bridge, the lock gate and the skiff formations all spread to the wider water, and narrow screens keep the whole width in view. |
+| Clearer, more beautiful fire | Marlin's rounds are bright gold tracers in a soft halo; enemy rounds are glowing fireballs that shed embers; missiles and rockets burn at the tail and leave smoke. Muzzle flashes are bigger. The shots use shared geometry, so the extra glow costs no extra draw calls. |
+| More weapons | Keys 1, 2 and 3 (or the weapon icons): the **deck gun**; **rockets**, fired in salvos of three that home on what you aim at and burst (18 to start, crates add 9); and the **laser**, a held beam that burns the first enemy it touches and knocks down missiles. The laser overheats after 3.2 s of fire and restarts once it has cooled. |
+| More power | The deck gun hits twice as hard and a little faster, the barges have half as much armour again (24), twin guns last 10 s and guided support 8 s. |
+| A strike button | **Air strike (Q or the orange icon).** Kestrel Two lays a line of nine bombs right across the canal where Marlin aims, marked on the water first. It always falls well ahead of the barges. Two per mission; crates add more. |
+| Bonus packets | Floating crates now carry help as well as repairs: the **Hornet gunship** (Capt. Sol Adeyemi) flies Marlin's wing for 20 s and shoots where Marlin shoots, or at the nearest threat, with a rocket every few seconds; **Duarte's escort launch** rides beside the barges for 25 s and shoots whatever comes closest; and crates of **rockets** and **air strikes**. Timers for the help show beside the weapon bonuses. Help doesn't count towards Marlin's accuracy. |
+| More levels | Three new canal missions before Lock Gate: **2.3 Floodplain** (skiff swarms on wide water: rockets and the air strike), **2.4 Sawmill Reach** (gun lines in a lumber camp and a log bridge: the laser, and the escort joins), **2.5 The Cut** (gun lines on both banks the whole way, with every kind of help). Lock Gate is now 2.6, with tougher towers and help crates of its own. Saves from 2.3 and earlier keep their records on the right missions. |
+
+Two new Blender models carry the help: the **gunship** (a tandem-seat attack helicopter in Kestrel navy and sky with stub wings, rocket pods, missile rails and a chin cannon; 5.9k triangles) and the **escort boat** (a white launch with sky and sunflower stripes and a twin gun; 4.1k), so neither can be mistaken for Marlin or the rescue helicopter. The asset library is 4.1 MB of its 4.5 MiB budget.
+
+![The Floodplain: Marlin's laser, the Hornet gunship and the escort launch](chapter2.png)
+
+### Independent review of 2.4
+
+A separate reviewer read the change and reproduced each defect with a browser probe before reporting it. All are fixed.
+
+| # | Defect | Fix |
+| --- | --- | --- |
+| 1 | The Drill ladder's button style overrode the new angle buttons: their pictures shrank to nothing and on phones the fourth button spilled out of the panel. | The ladder's style applies to floor rows only; the buttons wrap two by two on portrait phones and sit in one row on short ones. |
+| 2 | Two air strikes beat the Lock Gate boss without a shot: overlapping bombs each dealt full damage, and one strike reached both towers. | A strike hits any one target once, and the gate's towers and generator are hardened (6 damage a strike). A check strikes the gate twice and finds everything standing. |
+| 3 | On touch, the air strike always fell at the default aim once the fire stick was let go. | The stick's last aim stays the aim. |
+| 4 | In portrait the angle buttons and the pattern diagram were drawn in world orientation, a quarter turn off what the rotated camera shows. | They are drawn as seen on screen (like the minimap), with labels to match. |
+| 5 | A desktop render check still used the old mission numbers and no longer covered the gate or the rescue. | It renders Lock Gate and the first rescue again. |
+
+Smaller findings, also fixed:
+- the rocket rack's "empty" style carried over into the rescue chapter;
+- after a mission ended the laser beam stayed lit and the bombers and help froze in mid-air (they now fly on, harmlessly);
+- the gunship could spin a full turn when the aim crossed behind it;
+- the escort's comments described its targeting wrongly, and its range outreached its bullets (now 34 m). Aiming it at the threat nearest the barges instead let skiff columns past it on its own side, so it keeps guarding its side;
+- embers could crowd kill explosions out of the effect budget (embers now stop well short of the cap);
+- keyboard-only wording ("press Q", "key 2") reached touch players;
+- a check that could never fail now measures that every bomb bursts more than 10 m ahead of the nearest barge;
+- the widened lock gate's doors skewed as they opened (it now scales evenly);
+- the harbour's star criterion still said "every target";
+- clicking the diagram of a single bomb turned an unused pattern;
+- and a few dead checks and duplicated values.
+
+Kills by the gunship, the escort and the air strike count towards the score and combos, as the flight's own help; they don't count towards Marlin's accuracy.
+
+## 13. Controls
 
 | Action | Desktop | Touch |
 | --- | --- | --- |
@@ -298,8 +361,9 @@ Also:
 | Turn the flight round | F | Reverse |
 | Mark the drop (the flight flies there and releases) | Click the city or the map; right click cancels | Tap the city |
 | Payload, release now, salvo | 1–9, Space, X | Payload chips, Release, Salvo |
-| Drill floor or pattern angle, formation spacing | E / C or the mouse wheel, Q | Floor ladder or the dial's arrows, spacing button |
-| Gunboat and helicopter | WASD, pointer aim and fire, 1/2/3 weapons, F flares, hold E winch | Two sticks, weapon and flare buttons, hold Winch |
+| Drill floor or pattern angle, formation spacing | E / C or the mouse wheel, the angle buttons, Q | Floor ladder, the dial's arrows or the angle buttons, spacing button |
+| Gunboat | WASD, pointer aim and fire, 1 gun / 2 rockets / 3 laser, Q air strike | Two sticks, weapon icons, strike icon |
+| Helicopter | WASD, pointer aim and fire, 1 gun / 2 rockets / 3 guided, F flares, hold E winch | Two sticks, weapon and flare buttons, hold Winch |
 | Pause, retry | Esc, R | Top bar |
 
 Keys are read by physical position, so on an AZERTY keyboard Z Q S D steer like W A S D.

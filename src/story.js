@@ -45,6 +45,12 @@ export const CAST = Object.freeze({
     initials: "KM",
     color: "#8fd64a",
   },
+  sol: {
+    name: "Capt. Sol Adeyemi",
+    role: "Hornet gunship",
+    initials: "SA",
+    color: "#8fb8ff",
+  },
   marrow: {
     name: "Marrow",
     role: "Ashen Front / intercept",
@@ -293,8 +299,8 @@ export const MISSION_STORY = [
     place: "SOLACE HARBOR / MAIN CHANNEL",
     clock: "10:30",
     goals: [
-      "Sink the patrol column waiting in the channel",
-      "Sink the two missile boats at the north quay",
+      "Sink 30 of the 36 boats, the channel column among them",
+      "Lay the Stick across the boatyard rows and along the raider lines",
     ],
     brief: [
       line(
@@ -306,14 +312,18 @@ export const MISSION_STORY = [
         "Harbourmaster Duarte. Their patrol column waits at the channel buoys, nose to tail on the diagonal. Two missile boats lie against the north quay.",
       ),
       line(
+        "ines",
+        "And that's only the middle basin. Raiders are moored in rows at the west boatyard and lined up abreast in the east anchorage. Thirty-six boats in all.",
+      ),
+      line(
         "piper",
-        "Stick bombs, Kestrel: five in a line. Turn the line to lie along the column and one pass sinks the lot.",
+        "Stick bombs, Kestrel: five in a line. Turn it across, down or on the diagonal with the angle buttons, and one pass sinks a whole row. Tap a group on the map and we'll fly there.",
       ),
     ],
     radio: {
       start: line("iona", "We fly slow over the water. Turn back whenever you want another look."),
       multi: line("piper", "The whole column in one line!"),
-      success: line("ines", "The channel is clear. Every one of them is on the bottom."),
+      success: line("ines", "The channel is clear. What's left of them is running for the open sea."),
     },
     success:
       "The patrol column never left the channel. Duarte's tugs can move again, but the dry dock is still full of Front boats.",
@@ -324,7 +334,7 @@ export const MISSION_STORY = [
     place: "SOLACE HARBOR / DRY DOCK",
     clock: "11:20",
     goals: [
-      "Sink the boats on the L pier and in the dry dock",
+      "Sink 27 of the 32 boats: piers, slipways and the dry dock",
       "Sink the flak frigate",
       "Never hit the Island Belle ferry",
     ],
@@ -332,6 +342,10 @@ export const MISSION_STORY = [
       line(
         "ines",
         "They've moored boats round the corner of the fitting-out pier, and against three walls of the dry dock.",
+      ),
+      line(
+        "ines",
+        "The west and east slipways are L-shaped too, and there's a U-shaped slip in the east quay packed with raiders.",
       ),
       line(
         "iona",
@@ -359,8 +373,8 @@ export const MISSION_STORY = [
     clock: "12:15",
     goals: [
       "Break the escort ring without touching the Island Belle",
-      "Sink the missile boats rafted at the fuel pier",
       "Sink the destroyer Cinder",
+      "Sink 34 of the 41 boats: rafts, the raider ring and the columns",
     ],
     brief: [
       line(
@@ -377,7 +391,11 @@ export const MISSION_STORY = [
       ),
       line(
         "bram",
-        "Box bombs for the boats rafted at the fuel pier. I'm saving a Stick for Cinder's hull.",
+        "Box bombs for the boats rafted at the fuel pier and the pontoons. I'm saving a Stick for Cinder's hull.",
+      ),
+      line(
+        "ines",
+        "Eight raiders are circling in the west basin. No ferry in the middle of that one: any ring will do.",
       ),
     ],
     radio: {
@@ -453,12 +471,114 @@ export const MISSION_STORY = [
       start: line("okafor", "Entering the Narrows. It's tight in here."),
       pincer: line("iona", "Pincer forming. Watch where the lines cross."),
       bridge: line("iona", "Gunners on the bridge, with an ammunition crate in the middle."),
-      success: line("okafor", "We're through! Highwater's lock is dead ahead."),
+      success: line("okafor", "We're through! Wide water ahead, and it's flooded."),
     },
     success:
-      "The pincer broke on its own fuel. Beyond the Narrows, the lock gate at Highwater is sealed and guarded.",
+      "The pincer broke on its own fuel. Beyond the Narrows the river spills over the floodplain, and the Front is waiting in the water.",
     failure:
       "The Narrows held. Shoot skiffs where their paths meet, and body-block shots aimed at the barges.",
+  },
+  {
+    place: "VERDE FLOODPLAIN",
+    clock: "15:50",
+    goals: [
+      "Escort both barges across the flooded fields",
+      "Break skiff swarms with rockets (2) and the air strike (Q)",
+    ],
+    brief: [
+      line(
+        "okafor",
+        "Past the Narrows the Verde spills over the rice fields. Wide water, and the Front has skiffs hidden in every flooded barn.",
+      ),
+      line(
+        "iona",
+        "Marlin's rocket pods are loaded: three rockets a salvo, and they burst. Save them for crowds.",
+      ),
+      line(
+        "piper",
+        "Piper here. Kestrel Two is overhead with bombs to spare. Aim where you want them and call the strike. We lay a line right across the water.",
+      ),
+    ],
+    radio: {
+      start: line("okafor", "Open water. They can come at us from anywhere now."),
+      rockets: line("iona", "Rockets are loaded, Kestrel. Put a salvo into a pack of skiffs."),
+      strike: line("piper", "Air strike ready. Point at the swarm and call it."),
+      barge: line("okafor", "They're swarming the barges!"),
+      pincer: line("iona", "Pincer forming. Rockets on the meeting point."),
+      skiffs: line("iona", "Skiffs in the columns. Rake them before they reach the barges."),
+      success: line("okafor", "Across the floodplain. There's a sawmill camp ahead; I can smell the smoke."),
+    },
+    success:
+      "The floodplain is behind the convoy. Upriver, the Front has turned the old sawmill into a fortress on both banks.",
+    failure:
+      "The swarm got through. Fire a rocket salvo into a crowd, and call the air strike across the canal ahead of the barges.",
+  },
+  {
+    place: "SAWMILL REACH",
+    clock: "16:05",
+    goals: [
+      "Get the convoy past the sawmill camp",
+      "Burn the gun lines down with the laser (3)",
+    ],
+    brief: [
+      line(
+        "okafor",
+        "The sawmill camp holds both banks: gun lines in the log yards, launchers behind the stacks, and a log bridge across the reach.",
+      ),
+      line(
+        "iona",
+        "Your laser is live. Hold it on a target and it burns through; let go before it overheats.",
+      ),
+      line(
+        "ines",
+        "Duarte here. I've sent my harbour launch up after you. Pick up the green crate and she'll ride with the barges.",
+      ),
+    ],
+    radio: {
+      start: line("okafor", "Sawmill in sight. Keep us in the middle of the channel."),
+      laser: line("iona", "Laser's hot. Sweep it along the gun line."),
+      bridge: line("iona", "Log bridge ahead, gunners on top and an ammunition crate in the middle."),
+      barge: line("okafor", "Hits on Relief Two! Cover us!"),
+      pincer: line("iona", "Skiffs from both banks. Watch where they cross."),
+      success: line("okafor", "Through the sawmill. One more stretch: the Cut."),
+    },
+    success:
+      "The sawmill burns behind the convoy. Ahead lies the Cut, a straight canal through the ridge and the last road to Highwater.",
+    failure:
+      "The camp held the reach. Burn the gun lines with the laser, shoot the fuel drums, and take every crate of help on the water.",
+  },
+  {
+    place: "THE CUT",
+    clock: "16:20",
+    goals: [
+      "Run the Cut with both barges",
+      "Use every kind of help: gunship, escort boat and air strike",
+    ],
+    brief: [
+      line(
+        "okafor",
+        "The Cut runs straight through the ridge for two hundred metres. Marrow has gun lines along both banks, the whole way.",
+      ),
+      line(
+        "sol",
+        "Hornet, Captain Adeyemi. I'm refuelling at the ridge. Grab my crate on the water and I'll fly your wing: I shoot where you shoot.",
+      ),
+      line(
+        "marrow",
+        "You'll never see Highwater, Okafor. The Cut is a grave with walls.",
+      ),
+    ],
+    radio: {
+      start: line("okafor", "Entering the Cut. No way back now."),
+      cut: line("iona", "Gun lines on both banks, Kestrel. Rockets, laser, air strike: use it all."),
+      barge: line("okafor", "We're taking fire from both sides!"),
+      pincer: line("iona", "Pincer from the banks!"),
+      success: line("okafor", "We're through the Cut! Highwater's lock is dead ahead."),
+    },
+    success:
+      "The Cut is clear and the barges are still afloat. Beyond it, the lock gate at Highwater is sealed and guarded.",
+    failure:
+      "The Cut held. Take the gunship and the escort crates, and save an air strike for the thickest gun line.",
   },
   {
     place: "HIGHWATER LOCK",
@@ -597,10 +717,24 @@ export const STRIKE_RADIO = {
   freed: line("ines", "The ferry is free!"),
 };
 
+// Canal lines that can come in any Chapter 2 mission: the help that joins from crates, and
+// weapon advice.
+export const RIVER_RADIO = {
+  heli: line("sol", "Hornet on station. I'm on your wing, Marlin: I'll shoot where you shoot."),
+  heliOut: line("sol", "Hornet's bingo fuel. Good hunting, Marlin."),
+  ally: line("ines", "My launch is with you. She'll keep the skiffs off the barges."),
+  allyOut: line("ines", "The launch is heading home. Well sailed, Marlin."),
+  strikeIn: line("piper", "Kestrel Two rolling in. Keep your heads down!"),
+  strikeGain: line("piper", "Rearmed and back overhead. Call it when you need it."),
+  weapons: line("iona", "Try the rockets and the laser, Kestrel. And Kestrel Two will lay an air strike wherever you aim."),
+  overheat: line("iona", "Laser's overheated. Switch to the gun while it cools."),
+  noStrike: line("piper", "No bombs left, Marlin. Find us a crate and we'll rearm."),
+};
+
 export const FINALE = {
   eyebrow: "OPERATION BREAKWATER / COMPLETE",
   title: "Solace Harbor stayed dry.",
-  text: "Twelve sorties, one flight, one gunboat and one helicopter. Echo team is home, the key is turned, and the Tidelock held through the worst of Typhoon Ilse. Well flown, Kestrel.",
+  text: "Eighteen sorties, one flight, one gunboat and one helicopter. Echo team is home, the key is turned, and the Tidelock held through the worst of Typhoon Ilse. Well flown, Kestrel.",
 };
 
 export function speaker(id) {

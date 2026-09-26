@@ -13,10 +13,10 @@ Solace Harbor lies three metres below the tide. Only the Tidelock, a storm barri
 | Chapter | You command | The job |
 | --- | --- | --- |
 | **1 Breakwater** (9 missions) | Kestrel Flight: up to three strike aircraft | Break the Front's hold on the Glass District, then its flotilla in the harbour. Echo recon reads the enemy's patrol schedules; time your passes so the gatherings are hit together. |
-| **2 Relief Run** (3 missions) | The gunboat *Marlin* | Escort Dr. Okafor's relief barges up the Verde River and break the Highwater lock gate. |
+| **2 Relief Run** (6 missions) | The gunboat *Marlin* | Escort Dr. Okafor's relief barges up the Verde River, across the floodplain, past the sawmill and through the Cut, then break the Highwater lock gate. |
 | **3 Last Light** (3 missions) | The rescue helicopter *Lantern* | Winch Echo team out of Cinder Valley and bring the override key home before the storm. |
 
-![Relief barges in Marlin's wake, a skiff pincer closing](docs/chapter2.png)
+![The Floodplain: Marlin's laser, the Hornet gunship on her wing and the escort launch beside the barges](docs/chapter2.png)
 
 ### Chapter 1: city and harbour strikes
 
@@ -30,15 +30,19 @@ Solace Harbor lies three metres below the tide. Only the Tidelock, a storm barri
   - **Lance** is a guided bomb for moving trucks.
 - The pipper forecasts each aircraft's impact exactly, including the floor a Drill will reach. It stays solid where the impact is visible and turns faint behind buildings. **Salvo** drops one bomb from every aircraft at once.
 - Enemies walk scheduled routes through doors, stairs and streets. The intel strip counts down to shift changes, musters and the lieutenants' meeting, when a whole cell stands together. Labels count who is actually at a gathering. Late missions add hiding after the first blast, flak locks you break away from when the HUD says BREAK, a technical convoy, and a civilian shelter that must never be hit. Coach hints guide the teaching missions.
-- **The harbour** (missions 1.7–1.9): sink the Front's flotilla with pattern bombs that burst into a line, an L, a U, a ring or a box. Turn the pattern to fit a column, a pier corner, a dry dock, escorts circling a ferry, or boats rafted together. The pipper counts what it will hit and sink. Ships sidestep falling bombs, and the civilian ferry and launch must never be hit.
+- **The harbour** (missions 1.7–1.9): sink the Front's flotilla, 32 to 41 boats across three basins, with pattern bombs that burst into a line, an L, a U, a ring or a box. The angle buttons point the pattern across, down or on either diagonal. Fit it to a column, a row of raiders, a pier corner, a dry dock, escorts circling a ferry, or boats rafted together. The pipper counts what it will hit and sink. Sink the quota, key ships included, and the rest run. Ships sidestep falling bombs, and the civilian ferry and launch must never be hit.
 
-![The O-Ring centred on the Island Belle: five escorts on target, the ferry spared](docs/chapter1-harbour.png)
+![The O-Ring over eight raiders circling the west basin: eight on target, eight sink](docs/chapter1-crowd.png)
 
 ### Chapter 2: river convoy
 
-- The barges follow Marlin's wake. Guns and skiffs show a red aim line before they fire, and you can block shots with the gunboat.
+- The barges follow Marlin's wake down a wide canal. Guns and skiffs show a red aim line before they fire, and you can block shots with the gunboat.
+- Three weapons: the deck gun, rocket salvos that burst, and a laser that burns through gun lines until it overheats. **Q calls an air strike**: Kestrel Two lays a line of bombs across the canal where you aim.
+- Crates on the water bring help: the **Hornet gunship** flies your wing and shoots where you shoot, **Duarte's escort launch** guards the barges, and crates of rockets and air strikes restock you.
 - Fuel drums and a bridge ammunition crate chain-detonate whole crews. Skiff pincers meet at a marked point, where one hit sets off the rest.
 - The Lock Gate boss: two gun towers and skiff pincers, then the shielded generator. Then the gates swing open and the field medal floats out.
+
+![Kestrel Two's air strike across the Cut](docs/chapter2-strike.png)
 - Kills within a second of each other chain into combos.
 
 ### Chapter 3: valley rescue
@@ -48,7 +52,7 @@ Solace Harbor lies three metres below the tide. Only the Tidelock, a storm barri
 
 ![Lantern over Cinder Valley](docs/chapter3.png)
 
-Every mission opens with a briefing and ends with a story debrief and star criteria. All fifteen missions can be selected from Mission Control. Progress saves locally, and the game resumes at your first unfinished mission.
+Every mission opens with a briefing and ends with a story debrief and star criteria. All eighteen missions can be selected from Mission Control. Progress saves locally, and the game resumes at your first unfinished mission.
 
 ## Controls
 
@@ -58,9 +62,10 @@ Every mission opens with a briefing and ends with a story debrief and star crite
 | Turn the flight round | F | Reverse |
 | Mark the drop point | Click the city or the map, right click cancels | Tap the city |
 | Payload, release now, salvo | 1–9, Space, X | Payload chips, Release, Salvo |
-| Drill floor or pattern angle, formation spacing | E / C or mouse wheel, Q | Floor ladder or the dial's arrows, spacing button |
+| Drill floor or pattern angle, formation spacing | E / C, mouse wheel or the angle buttons, Q | Floor ladder, the dial's arrows or the angle buttons, spacing button |
 | Move boat or helicopter | WASD / arrows | Left stick |
 | Aim and fire | Pointer (hold), or Space | Right stick |
+| Gunboat weapons, air strike | 1 gun, 2 rockets, 3 laser (hold), Q | Weapon icons, strike icon |
 | Helicopter weapons, flares | 1 gun, 2 rockets, 3 guided, F | Weapon icons, flare icon |
 | Winch / land | Hold E over a clear zone | Hold Winch |
 | Pause, retry | Esc, R | Top bar |
@@ -80,7 +85,7 @@ npm run dev
 npm test                                  # 54 Node tests: rules, schedules, ballistics, harbour fits, story, GLB contracts
 npm run build
 npm run preview -- --port 5183
-npm run test:browser                      # Chrome suite: 215 checks incl. scripted pilots for all 15 missions
+npm run test:browser                      # Chrome suite: 250+ checks incl. scripted pilots for all 18 missions
 ```
 
 The browser tests use system Chrome on Windows (`CHROME_PATH` overrides it) and SwiftShader by default. Set `GPU=1` to render on the real GPU, and `GAME_URL` to test another server. Screenshots go to `test-results/`. The QA handle `window.__TIDELOCK__` exists only with `?qa=1`. Add `&brief=1` or `&prologue=1` to keep the story dialogs in QA runs.

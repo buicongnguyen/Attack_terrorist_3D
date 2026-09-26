@@ -45,9 +45,11 @@ import {
   Grid2x2,
   ArrowLeftRight,
   Map as MapIcon,
+  Zap,
 } from "lucide";
 import { CHAPTERS, MISSIONS, missionNumber, chapterSize, saveResult, migrateSave } from "./data.js";
 import { BOMBS, BOMB_ORDER, FLIGHT, STRIKE_MISSIONS, isPattern } from "./strike-data.js";
+import { patternDiagram, ROTATION_STEP } from "./harbour-data.js";
 import { CAST, PROLOGUE, CHAPTER_STORY, MISSION_STORY, FINALE, speaker } from "./story.js";
 import { activeBonuses } from "./pickups.js";
 import { RescueHUD } from "./rescue-hud.js";
@@ -99,6 +101,7 @@ const iconSet = {
   Grid2x2,
   ArrowLeftRight,
   Map: MapIcon,
+  Zap,
 };
 const BOMB_ICON = {
   drill: "drill",
@@ -112,16 +115,19 @@ const BOMB_ICON = {
   box: "grid-2x2",
 };
 const $ = (id) => document.getElementById(id);
-const SAVE_KEY = "tidelock-v3";
-// v2 saves predate the three harbour missions inserted after mission 1.6 (see migrateSave).
-const LEGACY_KEY = "tidelock-v2";
+const SAVE_KEY = "tidelock-v4";
+// Older saves number missions before the harbour (v2) or canal (v3) missions were inserted.
+const LEGACY_KEYS = [
+  ["tidelock-v3", 3],
+  ["tidelock-v2", 2],
+];
 export const refreshIcons = () => createIcons({ icons: iconSet, attrs: { "aria-hidden": "true" } });
 
 export function readSave() {
   try {
-    const current = localStorage.getItem(SAVE_KEY),
-      legacy = localStorage.getItem(LEGACY_KEY);
-    const saved = current ? JSON.parse(current) : legacy ? migrateSave(JSON.parse(legacy)) : {};
+    const current = localStorage.getItem(SAVE_KEY);
+    const legacy = LEGACY_KEYS.map(([key, version]) => [localStorage.getItem(key), version]).find(([value]) => value);
+    const saved = current ? JSON.parse(current) : legacy ? migrateSave(JSON.parse(legacy[0]), legacy[1]) : {};
     const records = {};
     for (const [key, value] of Object.entries(saved.records || {})) {
       if (
@@ -177,12 +183,12 @@ const COACH = {
   lanceNone: ["No Lance lock yet. Bring the ring near a truck or a crowd", "No Lance lock yet. Bring the ring near a truck or a crowd"],
   reverse: ["Missed it? F turns the flight round for another pass", "Missed it? Tap Reverse to turn the flight round"],
   rotate: [
-    "Turn the Stick with E / C or the mouse wheel until it lies along the column",
-    "Turn the Stick with the arrows until it lies along the column",
+    "Turn the Stick with the angle buttons, E / C or the wheel until it lies along the column",
+    "Turn the Stick with the angle buttons until it lies along the column",
   ],
   shapes: [
-    "Fit the L to the pier corner and the U to the dry dock. E / C turns the pattern",
-    "Fit the L to the pier corner and the U to the dry dock. The arrows turn the pattern",
+    "Fit the L to the pier corner and the U to the dry dock. The angle buttons turn it",
+    "Fit the L to the pier corner and the U to the dry dock. The angle buttons turn it",
   ],
   ring: [
     "Centre the O-Ring on the ferry: the escorts sit on the ring",
@@ -378,6 +384,8 @@ export class UI {
     $("gun-weapon").onclick = () => this.weapon("gun");
     $("rocket-weapon").onclick = () => this.weapon("rocket");
     $("guided-weapon").onclick = () => this.weapon("guided");
+    $("laser-weapon").onclick = () => this.weapon("laser");
+    $("strike-action").onclick = () => this.game.op?.callAirStrike?.();
     $("flare-action").onclick = () => this.game.rescue?.flare();
     const winch = $("winch-action");
     winch.onpointerdown = (event) => {
@@ -392,8 +400,19 @@ export class UI {
       if (chip) this.strike?.select(chip.dataset.bomb);
     });
     $("ladder-floors").addEventListener("click", (event) => {
+      const strike = this.strike;
+      if (!strike) return;
       const row = event.target.closest("[data-floor]");
-      if (row && this.strike) this.strike.setFloor(+row.dataset.floor + 1);
+      if (row) strike.setFloor(+row.dataset.floor + 1);
+      // Angle buttons point the pattern along one of four axes; the lit one again flips it round.
+      const turn = event.target.closest("[data-turn]");
+      if (turn) {
+        const want = +turn.dataset.turn,
+          step = strike.patternStep;
+        strike.setPatternStep(step % 4 === want ? step + 4 : want + (step >= 4 ? 4 : 0));
+      }
+      // Clicking the shape itself turns it one step.
+      if (event.target.closest(".pattern-diagram") && isPattern(strike.selected)) strike.rotate(1);
     });
     // A HUD button clicked with a pointer hands focus back to the game, so Space never re-presses it.
     $("app").addEventListener("click", (event) => {
@@ -648,8 +667,9 @@ export class UI {
       if (code === "KeyC") this.dial(-1);
       return;
     }
-    if (digit) this.weapon(["gun", "rocket", "guided"][digit - 1] || this.game.weapon);
+    if (digit) this.weapon(this.arsenal()[digit - 1] || this.game.weapon);
     if (code === "KeyF") this.game.rescue?.flare();
+    if (code === "KeyQ" && this.game.chapter === 1) this.game.op.callAirStrike();
   }
 
   aim(x, y) {
@@ -730,6 +750,8 @@ export class UI {
       return;
     }
     input.fire = this.pointerFire || this.keys.has("Space") || Boolean(this.fireStick);
+    if (this.aimedByStick && !this.fireStick && this.game.aimPoint) input.aim.copy(this.game.aimPoint);
+    this.aimedByStick = Boolean(this.fireStick);
     input.stickAim = this.fireStick;
     if (input.fire && !this.fireStick && this.pointerPosition) this.aim(this.pointerPosition.x, this.pointerPosition.y);
     input.winch = this.game.chapter === 2 && (this.winchHeld || this.keys.has("KeyE"));
@@ -743,14 +765,25 @@ export class UI {
     }
   }
 
+  // Weapons on keys 1-3: Marlin carries rockets and a laser, Lantern rockets and guided missiles.
+  arsenal() {
+    return [["gun"], ["gun", "rocket", "laser"], ["gun", "rocket", "guided"]][this.game.chapter] || ["gun"];
+  }
+
   weapon(kind) {
-    if (this.game.chapter !== 2) kind = "gun";
+    if (!this.arsenal().includes(kind)) kind = "gun";
     this.game.weapon = kind;
-    $("gun-weapon").classList.toggle("selected", kind === "gun");
-    $("rocket-weapon").classList.toggle("selected", kind === "rocket");
-    $("guided-weapon").classList.toggle("selected", kind === "guided");
+    for (const name of ["gun", "rocket", "guided", "laser"]) $(`${name}-weapon`).classList.toggle("selected", kind === name);
     $("weapon-label").textContent =
-      kind === "guided" ? "GUIDED MISSILES" : kind === "rocket" ? "ROCKET PODS" : this.game.chapter === 1 ? "DECK GUN" : "CHAIN GUN";
+      kind === "guided"
+        ? "GUIDED MISSILES"
+        : kind === "rocket"
+          ? "ROCKET PODS"
+          : kind === "laser"
+            ? "LASER / HOLD"
+            : this.game.chapter === 1
+              ? "DECK GUN"
+              : "CHAIN GUN";
   }
 
   updateSound() {
@@ -829,6 +862,8 @@ export class UI {
       [
         ["WASD", "Steer Marlin"],
         ["POINTER", "Aim and fire"],
+        ["1 / 2 / 3", "Gun / rockets / laser"],
+        ["Q", "Air strike where you aim"],
         ["BLOCK", "Sit between guns and barges"],
       ],
       [
@@ -853,6 +888,7 @@ export class UI {
       [
         ["LEFT STICK", "Steer Marlin"],
         ["RIGHT STICK", "Aim and fire"],
+        ["ICONS", "Gun, rockets, laser; orange for the air strike"],
         ["BLOCK", "Sit between guns and barges"],
       ],
       [
@@ -967,10 +1003,13 @@ export class UI {
     $("combat-controls").hidden = c === 0;
     $("shield-hud").hidden = c === 0;
     $("convoy-hud").hidden = c !== 1;
-    $("rocket-weapon").hidden = c !== 2;
+    $("rocket-weapon").hidden = c === 0;
     $("guided-weapon").hidden = c !== 2;
+    $("laser-weapon").hidden = $("strike-action").hidden = c !== 1;
+    $("rocket-weapon").classList.remove("empty");
+    $("laser-weapon").classList.remove("overheated");
     $("rescue-hud").hidden = $("rescue-actions").hidden = c !== 2;
-    $("rocket-stock").hidden = c !== 2;
+    $("rocket-stock").hidden = c === 0;
     $("rocket-weapon").disabled = false;
     // Progressive HUD: Drill floor, salvo and formation controls only appear when this flight can use them.
     const flight = c === 0 ? this.game.op.aircraft : [];
@@ -1082,7 +1121,7 @@ export class UI {
       op = g.op;
     if (g.chapter === 0)
       return [
-        [result.success, "Eliminate every target"],
+        [result.success, op.fleet ? `Sink ${op.fleet.needed()} boats, the key ships among them` : "Eliminate every target"],
         [result.success && op.used <= op.layout.par, `Use ${op.layout.par} bombs or fewer (used ${op.used})`],
         [result.success && !op.damaged, "Bring the whole flight home unscathed"],
       ];
@@ -1132,9 +1171,9 @@ export class UI {
       $("objective-count").textContent = `${op.rescued} / ${op.total}`;
       $("objective-unit").textContent = "SOLDIERS ABOARD";
     }
-    const bonuses = activeBonuses(state);
+    const bonuses = activeBonuses({ ...state, heli: op.help?.heli, ally: op.help?.ally });
     $("powerup").hidden = chapter !== 1 || bonuses.length === 0;
-    for (const kind of ["star", "gun"]) {
+    for (const kind of ["star", "gun", "heli", "ally"]) {
       const bonus = bonuses.find((entry) => entry.kind === kind);
       const row = $(`bonus-${kind}`);
       row.hidden = !bonus;
@@ -1258,6 +1297,38 @@ export class UI {
       });
   }
 
+  // Four angle buttons under the pattern, each drawn as the shape itself at that angle (none for
+  // the O-Ring, which looks the same at every angle).
+  turnChips(p, color) {
+    const names = ["Across", "Diagonal down", "Up and down", "Diagonal up"];
+    // Buttons run in screen order; the portrait camera turns the world a quarter, so each shows
+    // the world angle that looks that way on screen.
+    const turn = this.view.strikePortrait ? 2 : 0;
+    return `<div class="turn-chips">${[0, 1, 2, 3]
+      .map((screen) => {
+        const step = (screen - turn + 4) % 4;
+        const on = p.angle % 180 === step * 45;
+        const svg = this.patternSvg(patternDiagram(BOMBS[p.kind].pattern, step * ROTATION_STEP), color, 0.62, 2, 0.8);
+        return `<button type="button" data-turn="${step}" class="${on ? "on" : ""}" aria-pressed="${on}" aria-label="${names[screen]}" title="${names[screen]}${on ? " (again to flip)" : ""}">${svg}</button>`;
+      })
+      .join("")}</div>`;
+  }
+
+  // A pattern's bomblets drawn as the player sees them: in portrait the camera looks along the
+  // flight, so world x runs down the screen and world z runs right to left (as on the minimap).
+  patternSvg(cells, color, radius, minSpan, pad, attrs = 'aria-hidden="true"', extra = "") {
+    const portrait = this.view.strikePortrait;
+    const at = (c) => (portrait ? { u: -c.z, v: c.x } : { u: c.x, v: c.z });
+    const span = Math.max(minSpan, ...cells.map((c) => Math.max(Math.abs(c.x), Math.abs(c.z)))) + pad;
+    const dots = cells
+      .map((c) => {
+        const p = at(c);
+        return `<circle cx="${p.u.toFixed(2)}" cy="${p.v.toFixed(2)}" r="${radius}" fill="${color}"/>`;
+      })
+      .join("");
+    return `<svg ${attrs} viewBox="${-span} ${-span} ${span * 2} ${span * 2}">${extra}${dots}</svg>`;
+  }
+
   // Harbour missions: the ladder panel shows the selected pattern, its angle and what it would hit.
   updatePattern(op) {
     const p = op.pattern;
@@ -1265,16 +1336,22 @@ export class UI {
     panel.classList.remove("empty");
     panel.classList.toggle("shelter", Boolean(p?.civilian || op.shelter));
     $("ladder-name").textContent = p ? `${p.name.toUpperCase()} / ${p.angle}°` : `${(BOMBS[op.selected]?.name || "").toUpperCase()}`;
-    const key = p ? `${p.kind}|${p.angle}` : op.selected;
+    const key = p ? `${p.kind}|${p.angle}|${this.view.strikePortrait}` : op.selected;
     if (key !== this.patternKey) {
       this.patternKey = key;
       const color = BOMBS[op.selected]?.css || "#fff";
       const cells = p?.diagram || [{ x: 0, z: 0 }];
-      const span = Math.max(3, ...cells.map((c) => Math.max(Math.abs(c.x), Math.abs(c.z)))) + 0.9;
-      const dots = cells
-        .map((c) => `<circle cx="${c.x.toFixed(2)}" cy="${c.z.toFixed(2)}" r="0.55" fill="${color}"/>`)
-        .join("");
-      $("ladder-floors").innerHTML = `<svg class="pattern-diagram" viewBox="${-span} ${-span} ${span * 2} ${span * 2}" role="img" aria-label="${escape(p ? `${p.name} at ${p.angle} degrees` : BOMBS[op.selected]?.name || "")}"><circle cx="0" cy="0" r="0.22" fill="#ffffff" opacity="0.8"/>${dots}</svg><p class="pattern-count"></p>`;
+      const label = escape(p ? `${p.name} at ${p.angle} degrees` : BOMBS[op.selected]?.name || "");
+      const diagram = this.patternSvg(
+        cells,
+        color,
+        0.55,
+        3,
+        0.9,
+        `class="pattern-diagram" role="img" aria-label="${label}"`,
+        `<title>${p ? "Click to turn" : label}</title><circle cx="0" cy="0" r="0.22" fill="#ffffff" opacity="0.8"/>`,
+      );
+      $("ladder-floors").innerHTML = `${diagram}${p && p.kind !== "ring" ? this.turnChips(p, color) : ""}<p class="pattern-count"></p>`;
     }
     const count = $("ladder-floors").querySelector(".pattern-count");
     let text;
@@ -1288,6 +1365,13 @@ export class UI {
   }
 
   updateRiver(state, op) {
+    const w = op.weapons;
+    $("rocket-stock").textContent = w.rockets;
+    $("rocket-weapon").classList.toggle("empty", w.rockets <= 0);
+    $("laser-heat").style.transform = `scaleX(${w.heat.toFixed(3)})`;
+    $("laser-weapon").classList.toggle("overheated", w.overheated);
+    $("strike-stock").textContent = w.strikes;
+    $("strike-action").disabled = w.strikes <= 0 || w.striking;
     $("objective-count").textContent = `${Math.max(0, Math.ceil(op.length - op.distance))}`;
     $("objective-unit").textContent = op.holding ? "CONVOY HOLDING" : "METRES TO GO";
     setHTML(

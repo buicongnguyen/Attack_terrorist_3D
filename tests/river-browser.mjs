@@ -3,7 +3,7 @@
 export function skipper() {
   const { game: g, ui } = window.__TIDELOCK__;
   const out = [];
-  for (let index = 9; index <= 11; index++) {
+  for (let index = 9; index <= 14; index++) {
     ui.start(index);
     g.paused = false;
     const op = g.op;
@@ -45,13 +45,26 @@ export function skipper() {
       targets.sort((a, b) => score(a) - score(b))[0];
     g.input.fire = Boolean(target);
     if (target) g.input.aim.copy(target.hostile ? target.position : g.targetPosition(target));
+    // Pick the weapon a player would: rockets for bunkers, towers and bunched skiffs, the laser
+    // for gun lines while it is cool, the deck gun for the rest.
+    const w = op.snapshot().weapons;
+    const bunched = target?.type === "skiff" && targets.filter((e) => e.type === "skiff" && e.position.distanceTo(target.position) < 4).length >= 3;
+    const heavy = target && ["launcher", "tower", "generator"].includes(target.type);
+    const laser = target && ["cannon", "enemy"].includes(target.type) && w.heat < 0.8 && !w.overheated;
+    ui.weapon(target && !target.hostile && w.rockets > 0 && (heavy || bunched) ? "rocket" : laser ? "laser" : "gun");
+    // A crowd ahead of the barges gets the air strike.
+    const band = targets.filter((e) => e.position.z > -40 && e.position.z < -8 && e.type !== "mine");
+    if (band.length >= 5 && w.strikes > 0 && !w.striking) op.callAirStrike(band.reduce((sum, e) => sum + e.position.z, 0) / band.length);
     // Stay ahead of the barges, shadow the threat's lane, and slide away from close mines.
-    let goalX = target ? Math.max(-7, Math.min(7, target.position.x * 0.6)) : 0;
+    let goalX = target ? Math.max(-10, Math.min(10, target.position.x * 0.6)) : 0;
     const goalZ = op.holding ? 2 : 5;
     for (const mine of g.entities)
       if (mine.type === "mine" && !mine.dead && mine.position.z > p.z - 12 && mine.position.z < p.z + 3 && Math.abs(mine.position.x - p.x) < 3.2)
         goalX = p.x + (p.x > mine.position.x ? 5 : -5);
     const heal = g.entities.find((e) => e.type === "pickup" && !e.dead && e.kind === "health" && e.position.z > p.z - 16 && e.position.z < p.z + 4);
+    // Help crates are worth a detour; repairs when the shields are low.
+    const help = g.entities.find((e) => e.type === "pickup" && !e.dead && e.kind !== "health" && e.position.z > p.z - 12 && e.position.z < p.z + 3);
+    if (help) goalX = help.position.x;
     if (heal && g.shields.reduce((a, b) => a + b, 0) < 7) goalX = heal.position.x;
     g.input.x = Math.max(-1, Math.min(1, (goalX - p.x) * 0.5));
     g.input.z = Math.max(-1, Math.min(1, (goalZ - p.z) * 0.4));
@@ -134,7 +147,7 @@ export async function checkRiver(page, check) {
     out.ramKillsTheSkiffWithoutReward =
       ram.dead && rammed.hp === before.hp - 3 && g.score === before.score && g.kills === before.kills;
     // The gate towers take hits from base to top, and the medal floats out once the gate opens.
-    ui.start(11);
+    ui.start(14);
     g.paused = false;
     g.op.spawnGate();
     for (const e of g.entities) if (e.scrolling && e.type !== "pickup") e.position.z = -24;
@@ -150,6 +163,128 @@ export async function checkRiver(page, check) {
     g.update(1 / 120);
     out.medalFloatsOutWhenTheGateOpens =
       g.op.boss.phase === "open" && g.entities.some((e) => e.type === "pickup" && e.kind === "medal" && !e.dead);
+
+    // 2.4 weapons. Keys 2 and 3 pick rockets and the laser on the boat.
+    const V3 = g.player.position.constructor;
+    const key = (code, down = true) =>
+      window.dispatchEvent(new KeyboardEvent(down ? "keydown" : "keyup", { code, key: code.slice(-1).toLowerCase() }));
+    ui.start(11);
+    g.paused = false;
+    g.update(1 / 120);
+    key("Digit2");
+    key("Digit2", false);
+    const rocketKey = g.weapon === "rocket";
+    key("Digit3");
+    key("Digit3", false);
+    out.keysPickRocketsAndLaser = rocketKey && g.weapon === "laser";
+    // Rockets: a salvo of three that homes and bursts.
+    const skiffAt = (x, z, scrolling = false) =>
+      g.entity("skiff", "skiff", new V3(x, 0.1, z), { hp: 3, radius: 1.3, order: { pattern: "column", x, spawned: 1e9 }, slot: 0, cooldown: 99, aim: 0, scrolling });
+    const stock = g.op.rockets;
+    const pack = [-1.2, 0, 1.2].map((x) => skiffAt(x, -16));
+    g.op.fireRockets(pack[1].position.clone());
+    const salvo = g.projectiles.filter((shot) => shot.missile && !shot.hostile).length;
+    for (let i = 0; i < 120 * 2; i++) g.updateProjectiles(1 / 120);
+    out.rocketSalvoOfThree = stock - g.op.rockets === 3 && salvo === 3;
+    out.rocketsBurstThroughAPack = pack.every((e) => e.dead);
+    // The laser burns a gun down in well under a second, then overheats if held.
+    ui.start(11);
+    g.paused = false;
+    g.hurtPlayer = () => {};
+    g.op.spawn({ d: 0, type: "guns", side: 1, count: 1 });
+    const gun = g.entities.find((e) => e.type === "cannon");
+    gun.position.set(8, 1.05, -12);
+    gun.scrolling = false;
+    ui.weapon("laser");
+    g.input.fire = true;
+    let burned = 0;
+    for (let i = 0; i < 120 * 1.2 && !gun.dead; i++) {
+      g.input.aim.copy(gun.position);
+      g.update(1 / 120);
+      burned += 1 / 120;
+    }
+    out.laserBurnsAGun = gun.dead && burned < 1;
+    for (let i = 0; i < 120 * 4; i++) {
+      g.input.aim.set(0, 0.2, -20);
+      g.update(1 / 120);
+    }
+    out.laserOverheats = g.op.laser.locked && !g.op.beam.group.visible;
+    g.input.fire = false;
+    delete g.hurtPlayer;
+    // Q: the air strike falls across the canal where Marlin aims, and clears it bank to bank.
+    ui.start(11);
+    g.paused = false;
+    g.update(1 / 120);
+    // A row of mines right across the canal.
+    g.op.spawn({ d: 0, type: "mines", xs: [-12, -6, 0, 6, 12] });
+    const line = g.entities.filter((e) => e.type === "mine");
+    line.forEach((e) => (e.position.z = -20));
+    g.aimPoint = line[2].position.clone();
+    const charges = g.op.strikes;
+    key("KeyQ");
+    key("KeyQ", false);
+    const called = g.op.strikes === charges - 1 && Boolean(g.op.airStrike);
+    // Every bomb bursts well ahead of the nearest barge.
+    const bursts = [];
+    const detonate = g.op.detonateStrike.bind(g.op);
+    g.op.detonateStrike = (p, struck) => {
+      bursts.push(Math.min(...g.op.barges.map((b) => b.position.z)) - p.z);
+      return detonate(p, struck);
+    };
+    for (let i = 0; i < 120 * 4; i++) g.update(1 / 120);
+    out.airStrikeClearsTheLine = called && line.every((e) => e.dead) && !g.op.airStrike;
+    out.airStrikeFallsAheadOfTheBarges = bursts.length === 9 && bursts.every((ahead) => ahead > 10);
+    // The lock gate is hardened: two strikes dent the towers and the generator but break nothing.
+    ui.start(14);
+    g.paused = false;
+    g.op.spawnGate();
+    for (const e of g.entities) if (e.scrolling && e.type !== "pickup") e.position.z = -24;
+    const boss = g.op.boss;
+    boss.generator.shielded = false;
+    g.op.strikes = 2;
+    for (const round of [0, 1]) {
+      g.op.callAirStrike(boss.gate.position.z);
+      for (let i = 0; i < 120 * 4; i++) {
+        g.shields = [3, 3, 3];
+        for (const b of g.op.barges) b.hp = b.max;
+        g.update(1 / 120);
+      }
+    }
+    out.strikesOnlyDentTheLockGate =
+      boss.towers.every((t) => !t.dead && t.hp >= t.maxHp - 2 * 6) && !boss.generator.dead && boss.generator.hp >= boss.generator.maxHp - 2 * 6;
+    // Crates: rockets, an air strike, the gunship and the escort boat.
+    ui.start(12);
+    g.paused = false;
+    g.update(1 / 120);
+    const give = (kind) => g.collect(g.spawnPickup(g.player.position.z, kind, g.player.position.x));
+    const stocked = { rockets: g.op.rockets, strikes: g.op.strikes };
+    give("ammo");
+    give("strike");
+    give("heli");
+    give("ally");
+    out.cratesRefillRocketsAndStrikes = g.op.rockets === stocked.rockets + 9 && g.op.strikes === stocked.strikes + 1;
+    out.cratesCallTheGunshipAndEscort = Boolean(g.op.support.heli && g.op.support.ally) && g.op.snapshot().help.heli > 19;
+    // The gunship shoots where Marlin shoots, and help does not count towards Marlin's accuracy.
+    g.hurtPlayer = () => {};
+    const shots = g.shots;
+    g.input.fire = true;
+    ui.weapon("laser");
+    let toward = 0,
+      helped = 0;
+    for (let i = 0; i < 120 * 3; i++) {
+      g.input.aim.set(-9, 0.2, -18);
+      g.update(1 / 120);
+      for (const shot of g.projectiles)
+        if (shot.ally && !shot.missile && !shot.counted) {
+          shot.counted = true;
+          helped++;
+          if (shot.velocity.x < 0 && shot.velocity.z < 0) toward++;
+        }
+    }
+    g.input.fire = false;
+    delete g.hurtPlayer;
+    out.gunshipFiresWhereMarlinFires = helped > 5 && toward / helped > 0.5;
+    out.helpIsNotMarlinsAccuracy = g.shots === shots;
     return out;
   });
   for (const [name, value] of Object.entries(mechanics)) check(`river ${name}`, value);

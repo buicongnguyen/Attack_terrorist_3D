@@ -5,11 +5,38 @@ import { StrikeOperation } from "./strike.js";
 import { RiverOperation } from "./river.js";
 import { isHostileEntity } from "./rescue-data.js";
 import { MISSIONS, COLORS, SHOT_INTERVAL, damageShields } from "./data.js";
-import { DECK_GUN_RANGE } from "./river-data.js";
+import { DECK_GUN_RANGE, WEAPONS } from "./river-data.js";
 import { createPhysics, addBox, movement, segmentSphere, clamp } from "./physics.js";
 
 const V = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
 const forward = V(0, 0, -1);
+
+// Shared shot geometry: friendly rounds are bright tracers in a soft halo, hostile rounds are
+// glowing fireballs. Neither is disposed with a shot.
+const SHOT = {
+  tracer: new THREE.BoxGeometry(0.1, 0.1, 1.6),
+  halo: new THREE.BoxGeometry(0.32, 0.32, 2.3),
+  ball: new THREE.SphereGeometry(0.2, 10, 8),
+  core: new THREE.MeshBasicMaterial({ color: 0xfffbe0, toneMapped: false }),
+  ember: new THREE.MeshBasicMaterial({ color: 0xffe9a8, toneMapped: false }),
+  glow: new THREE.MeshBasicMaterial({
+    color: 0x7fe8ff,
+    transparent: true,
+    opacity: 0.5,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false,
+    toneMapped: false,
+  }),
+};
+const haloMaterials = new Map();
+const haloMaterial = (color) => {
+  if (!haloMaterials.has(color)) {
+    const m = SHOT.glow.clone();
+    m.color.set(color);
+    haloMaterials.set(color, m);
+  }
+  return haloMaterials.get(color);
+};
 const HOSTILE_TARGET_LIFT = {
   cave: 0.45,
   launcher: 1.4,
@@ -147,7 +174,10 @@ export class Game {
     if (this.status !== "playing") {
       this.updatePeople(dt);
       if (this.chapter === 0) this.op.settle(dt);
-      else this.updateProjectiles(dt);
+      else {
+        this.op.settle?.(dt);
+        this.updateProjectiles(dt);
+      }
       if (this.debrisActive) this.physics.world.step(dt);
       this.finishTimer += dt;
       if (this.finishTimer > 1.4 && !this.sentResult) {
@@ -192,10 +222,15 @@ export class Game {
       if (target) aim = this.targetPosition(target);
     }
     if (river) this.aimBoatTurret(aim);
+    this.aimPoint = aim;
     this.reticle.position.copy(aim);
     this.reticle.position.y = Math.max(0.13, aim.y + 0.1);
     this.reticle.visible = true;
-    if (this.input.fire && !this.input.winch) this.fire(aim, this.chapter === 2 && this.weapon !== "gun");
+    // Marlin's rockets fly in salvos and the laser is a held beam; both are the river op's.
+    if (this.input.fire && !this.input.winch) {
+      if (river && this.weapon === "rocket") this.op.fireRockets(aim);
+      else if (!(river && this.weapon === "laser")) this.fire(aim, this.chapter === 2 && this.weapon !== "gun");
+    }
     if (!river) this.view.followPlayer(this.player.position, dt);
     for (let i = 0; i < 3; i++) {
       this.shieldMeshes[i].position.copy(this.player.position).add(V(0, river ? 0.45 : -0.6, 0));
@@ -225,9 +260,13 @@ export class Game {
     }
     if (pickup.kind === "star") this.twin = info.duration;
     if (pickup.kind === "gun") this.auto = info.duration;
+    if (pickup.kind === "ammo") this.op.rockets = Math.min(WEAPONS.rocket.max, (this.op.rockets || 0) + WEAPONS.rocket.refill);
+    if (pickup.kind === "heli") this.op.callGunship?.();
+    if (pickup.kind === "ally") this.op.callEscort?.();
+    if (pickup.kind === "strike") this.op.gainStrike?.();
     this.updateBoatLoadout();
     this.score += info.reward;
-    this.notify("toast", info.toast);
+    this.notify("toast", pickup.kind === "ammo" ? `ROCKETS +${WEAPONS.rocket.refill}` : info.toast);
     this.audio.play("pickup");
     this.puff(pickup.position, info.color, 0.8);
     const ring = this.view.ring(this.player.position.clone().add(V(0, 0.3, 0)), 0.9, info.color, 0.11);
@@ -312,7 +351,8 @@ export class Game {
       this.rescue.gear[key]--;
     }
     if (rocket) this.rocketCooldown = 1.2;
-    else this.cooldown = SHOT_INTERVAL;
+    else this.cooldown = this.chapter === 1 ? WEAPONS.gun.interval : SHOT_INTERVAL;
+    const round = this.chapter === 1 ? { damage: WEAPONS.gun.damage } : {};
     if (this.chapter === 1) this.aimBoatTurret(aim);
     if (this.chapter === 2 && this.op.heliTurret) {
       this.player.updateMatrixWorld(true);
@@ -335,18 +375,45 @@ export class Game {
           aim.clone().add(V(side * 0.3, 0, 0)),
           false,
           false,
+          null,
+          null,
+          round,
         );
       }
-    } else this.spawnShot(origin, aim, rocket, false, target);
-    this.flash(origin, rocket ? 0xffd47e : COLORS.friendly, rocket ? 0.6 : 0.35);
+    } else this.spawnShot(origin, aim, rocket, false, target, null, rocket ? {} : round);
+    this.flash(origin, rocket ? 0xffd47e : 0xfff1b8, rocket ? 0.6 : this.chapter === 1 ? 0.7 : 0.35);
     this.audio.play("shot");
     return true;
   }
 
-  spawnShot(origin, aim, missile, hostile, target = null, aimedAt = null) {
-    let mesh;
-    if (missile) mesh = this.view.model(hostile ? "missile-enemy" : "missile-friendly", origin, hostile ? 1.5 : 1.1);
-    else mesh = this.view.box(origin, V(0.09, 0.09, 0.95), hostile ? COLORS.hostile : COLORS.friendly);
+  // Shots read at a glance: friendly rounds are bright tracers, hostile rounds glowing fireballs
+  // that leave embers, and missiles burn at the tail (their smoke trail is added in flight).
+  shotMesh(origin, missile, hostile, options = {}) {
+    if (missile) {
+      const mesh = this.view.model(hostile ? "missile-enemy" : "missile-friendly", origin, hostile ? 1.5 : 1.1);
+      const flame = this.view.fxSprite("glow", hostile ? 0xff6a1f : 0xbff8ff, 1, true);
+      flame.scale.setScalar(hostile ? 0.85 : 0.7);
+      flame.position.set(0, 0, 0.5);
+      mesh.add(flame);
+      return mesh;
+    }
+    const group = new THREE.Group();
+    group.position.copy(origin);
+    if (hostile) {
+      group.add(new THREE.Mesh(SHOT.ball, SHOT.ember));
+      const glow = this.view.fxSprite("glow", 0xff4a12, 1, true);
+      glow.scale.setScalar(this.chapter === 1 ? 1.5 : 1.1);
+      group.add(glow);
+    } else {
+      group.add(new THREE.Mesh(SHOT.tracer, SHOT.core));
+      group.add(new THREE.Mesh(SHOT.halo, haloMaterial(options.color ?? (this.chapter === 1 ? 0xffc62b : COLORS.friendly))));
+    }
+    this.view.level.add(group);
+    return group;
+  }
+
+  spawnShot(origin, aim, missile, hostile, target = null, aimedAt = null, options = {}) {
+    const mesh = this.shotMesh(origin, missile, hostile, options);
     const speed = missile ? (hostile ? 6 : 19) : hostile ? 12 : 55;
     const velocity = aim.clone().sub(origin).normalize().multiplyScalar(speed);
     if (!hostile && !missile) velocity.addScaledVector(this.velocity, 0.18);
@@ -365,10 +432,13 @@ export class Game {
       trail: 0,
       dead: false,
       radius: missile ? 0.5 : 0.11,
+      damage: options.damage ?? null,
+      ally: Boolean(options.ally),
     };
     mesh.quaternion.setFromUnitVectors(forward, velocity.clone().normalize());
     this.projectiles.push(shot);
-    if (!hostile) this.shots++;
+    // Help from allies doesn't count towards the player's accuracy.
+    if (!hostile && !shot.ally) this.shots++;
     return shot;
   }
 
@@ -379,6 +449,14 @@ export class Game {
       shot.life -= dt;
       shot.last.copy(shot.position);
       if (shot.missile) this.steerMissile(shot, dt);
+      else if (shot.hostile) {
+        // Fire rounds shed embers.
+        shot.trail -= dt;
+        if (shot.trail <= 0) {
+          shot.trail = 0.04;
+          this.ember(shot.position, 0xff6a1f, 0.42, 0.24);
+        }
+      }
       shot.position.addScaledVector(shot.velocity, dt);
       shot.mesh.quaternion.setFromUnitVectors(forward, shot.velocity.clone().normalize());
       if (shot.hostile) this.resolveHostileShot(shot);
@@ -420,8 +498,9 @@ export class Game {
     }
     shot.trail -= dt;
     if (shot.trail <= 0) {
-      this.puff(shot.position, shot.hostile ? 0xffb396 : 0xc8ffe9, 0.2, 0.6);
-      shot.trail = 0.06;
+      this.puff(shot.position, shot.hostile ? 0xffb396 : 0xe8fbff, 0.24, 0.7);
+      this.ember(shot.position, shot.hostile ? 0xff7a2b : 0x9ff3ff, 0.5, 0.18);
+      shot.trail = 0.05;
     }
     const threat = shot.hostile ? clamp(1 - shot.position.distanceTo(this.player.position) / 28, 0, 1) : 0;
     shot.mesh.scale.setScalar((shot.hostile ? 1.5 : 1.1) * (1 + threat * 0.25 + Math.sin(shot.age * 7) * 0.025));
@@ -464,7 +543,7 @@ export class Game {
     const endpoint = shot.position.clone();
     shot.position.copy(shot.last).lerp(endpoint, hit.t);
     shot.dead = true;
-    this.hits++;
+    if (!shot.ally) this.hits++;
     if (hit.missile) {
       hit.missile.dead = true;
       const bonus =
@@ -474,7 +553,7 @@ export class Game {
       this.blast(hit.missile.position, 1.25, COLORS.gold);
       return;
     }
-    this.damage(hit.entity, shot.missile ? 5 : 1, shot.missile);
+    this.damage(hit.entity, shot.damage ?? (shot.missile ? 5 : 1), shot.missile);
     this.blast(shot.position, shot.missile ? 1.7 : 0.3, shot.missile ? COLORS.gold : COLORS.friendly, {
       quiet: !shot.missile,
       small: !shot.missile,
@@ -614,6 +693,15 @@ export class Game {
       fade: 0.85,
       velocity: V((Math.random() - 0.5) * 0.8, 0.6 + Math.random(), (Math.random() - 0.5) * 0.8),
     });
+  }
+
+  ember(position, color, size, life) {
+    // Embers are garnish: they stop well short of the cap, so explosions always have room.
+    if (this.effects.length > 180) return;
+    const sprite = this.view.fxSprite("glow", color, 0.9, true);
+    sprite.position.copy(position);
+    sprite.scale.setScalar(size);
+    this.effects.push({ mesh: sprite, life, maxLife: life, size, grow: -0.6, fade: 0.9, velocity: V() });
   }
 
   flash(position, color, size) {

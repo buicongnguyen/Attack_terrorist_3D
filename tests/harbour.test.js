@@ -75,7 +75,7 @@ function bestAim(ships, kind, step, centre, span = 6) {
 }
 
 test("each harbour group has a pattern and angle that sinks it in one release", () => {
-  // [mission, group, kind, angle step, centre, lesson, station, shapes it must beat]
+  // [mission, group, kind, angle step, centre, lesson, station, ships it sinks (default: all)]
   // "angle": turned a quarter the wrong way, no aim point sinks the whole group.
   // "shape": no aim or angle of the other shapes sinks the whole group either.
   const cases = [
@@ -87,21 +87,43 @@ test("each harbour group has a pattern and angle that sinks it in one release", 
     [1, "frigate", "stick", 0, { x: -8, z: 14 }, "angle", 0],
     [2, "raft", "box", 0, { x: 10.2, z: -8 }, null, 0],
     [2, "cinder", "stick", 0, { x: -10, z: -9.5 }, "angle", 0],
+    // The west and east basins (2.4): a horizontal Stick per boatyard row, vertical Sticks for
+    // lines abreast, diagonal ones for wheeling columns, L and U slips, rafts and a raider ring.
+    [0, "boatyard", "stick", 0, { x: -56, z: -9 }, null, 0, 4],
+    [0, "boatyard", "stick", 0, { x: -56, z: -2 }, null, 0, 4],
+    [0, "boatyard", "stick", 0, { x: -56, z: 5 }, null, 0, 4],
+    [0, "westColumn", "stick", 2, { x: -39, z: 2 }, "angle", 0],
+    [0, "westColumn", "stick", 1, { x: -39, z: 4 }, "angle", 1],
+    [0, "lineA", "stick", 2, { x: 40, z: -2 }, "angle", 0],
+    [0, "lineB", "stick", 2, { x: 52, z: 6 }, "angle", 0],
+    [0, "echelon", "stick", 1, { x: 62, z: 12 }, null, 0],
+    [1, "westSlip", "ell", 0, { x: -52.8, z: -2.2 }, null, 0],
+    [1, "eastSlip", "ell", 4, { x: 52.8, z: 2.2 }, null, 0],
+    [1, "eastDock", "yoke", 4, { x: 38, z: -9 }, null, 0],
+    [1, "westColumn", "stick", 2, { x: -38, z: 0 }, "angle", 0],
+    [1, "eastLine", "stick", 2, { x: 38, z: 10 }, "angle", 0],
+    [2, "westRaftA", "box", 0, { x: -56, z: -6 }, null, 0],
+    [2, "westRaftB", "box", 0, { x: -56, z: 6 }, null, 0],
+    [2, "eastRaft", "box", 0, { x: 54, z: -8 }, null, 0],
+    [2, "westRing", "ring", 0, { x: -40, z: 5 }, null, 0],
+    [2, "eastColumn", "stick", 0, { x: 42, z: 6 }, "angle", 0],
+    [2, "patrolLine", "stick", 0, { x: 58, z: 12 }, "angle", 0],
   ];
-  for (const [m, id, kind, step, centre, lesson, station] of cases) {
+  for (const [m, id, kind, step, centre, lesson, station, expect] of cases) {
     const g = group(m, id);
     const ships = moored(g, station);
+    const want = expect ?? g.ships.length;
     const points = patternPoints(BOMBS[kind].pattern, centre, step * ROTATION_STEP);
     // Ships that can sidestep do so before the bombs land; the fit must still sink them all.
     const result = predictHits(ships, points, BOMBS[kind].radius, 1, 2.1);
-    assert.equal(result.sinks, g.ships.length, `1.${m + 7} ${id}: ${result.sinks}/${g.ships.length} sink`);
+    assert.equal(result.sinks, want, `1.${m + 7} ${id}: ${result.sinks}/${want} sink`);
     // Civilians near the group count too: the right fit must spare them.
     const civilians = HARBOUR_MISSIONS[m].fleet.filter((c) => c.ships.every((cls) => SHIPS[cls].civilian) && c.stations[0].hold >= PERMANENT);
     const all = [...ships, ...civilians.flatMap((c) => moored(c))];
     assert.ok(!predictHits(all, points, BOMBS[kind].radius).civilian, `1.${m + 7} ${id}: the fit touches a civilian`);
     if (lesson === "angle") {
       const wrong = bestAim(all, kind, step + 2, centre);
-      assert.ok(wrong < g.ships.length, `1.${m + 7} ${id} also sinks all ${g.ships.length} turned 90°`);
+      assert.ok(wrong < want, `1.${m + 7} ${id} also sinks ${want} turned 90°`);
     }
   }
 });
@@ -234,6 +256,19 @@ test("a freed ferry's run to safety stays off the quays and clear of every other
         }
       }
     }
+});
+
+test("every harbour is crowded: thirty-odd boats, a quota to sink and the key ships named", () => {
+  for (const m of HARBOUR_MISSIONS) {
+    const hostile = m.fleet.flatMap((g) => g.ships).filter((cls) => !SHIPS[cls].civilian).length;
+    assert.ok(hostile >= 30, `${m.lesson}: ${hostile} boats`);
+    assert.ok(m.quota >= hostile * 0.8 && m.quota < hostile, `${m.lesson}: quota ${m.quota} of ${hostile}`);
+    for (const id of m.required) assert.ok(m.fleet.some((g) => g.id === id), `${m.lesson}: key group ${id}`);
+    // The basins either side of the old harbour are reached by the sliding camera.
+    assert.ok(m.harbour.wide && m.cols * 13.5 > 130);
+    // Enough bombs to reach the quota at five sinks a release, with room to miss.
+    assert.ok(payloadTotal(m.aircraft) * 5 >= m.quota * 1.5, `${m.lesson}: payload`);
+  }
 });
 
 test("labelled stations count down, and permanent ones are always on", () => {

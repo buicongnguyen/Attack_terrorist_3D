@@ -161,7 +161,16 @@ export async function checkHarbour(page, check) {
     out.stickBurstsIntoFive = g.op.bombs.filter((b) => b.kind === "bomblet").length === 5;
     run(240);
     out.alignedStickSinksTheColumn = column.ships.every((s) => s.dead);
-    out.sunkShipsCountAsKills = g.op.remaining().ships === 2 && g.score > 0;
+    // The four column boats come off the mission's quota.
+    out.sunkShipsCountAsKills = g.op.remaining().ships === g.op.fleet.needed() - 4 && g.score > 0;
+    // Once the quota is met the rest may run, but not a key ship: the channel column must go.
+    const ships = g.op.fleet.hostile();
+    ships.filter((s) => s.group.data.id !== "column").forEach((s) => (s.dead = true));
+    column.ships.forEach((s) => (s.dead = false));
+    out.quotaWaitsForTheKeyShips = g.op.remaining().ships === 4;
+    column.ships.forEach((s) => (s.dead = true));
+    ships.filter((s) => s.group.data.id !== "column").slice(0, ships.length - g.op.fleet.needed()).forEach((s) => (s.dead = false));
+    out.quotaLetsTheRestRun = g.op.remaining().ships === 0;
 
     // The hit counter tells the truth, sidesteps included: fly the pattern onto its target, read
     // the counter, release, and count what sinks.
@@ -255,6 +264,29 @@ export async function checkHarbour(page, check) {
     const ferryX = ferry.position.x;
     run(120 * 8);
     out.brokenRingFreesTheFerry = ferry.group.freed && ferry.position.x < ferryX - 2;
+    // A mark in the far west basin: the flight flies over there, the camera slides after it,
+    // and the Stick laid across a boatyard row sinks the row.
+    ui.start(6);
+    g.paused = false;
+    run(12);
+    const yard = g.op.fleet.groups.find((x) => x.data.id === "boatyard");
+    const row = yard.ships.slice(0, 4);
+    g.op.select("stick");
+    g.op.setPatternStep(0);
+    g.op.setAim({ x: -56, z: -9 });
+    // The click lands 1.4 m from a raider, so the mark snaps to it and follows it.
+    const marked = Boolean(g.op.aim?.target);
+    for (let i = 0; i < 120 * 150 && g.op.used === 0 && g.status === "playing"; i++) run(1);
+    run(120 * 5);
+    out.harbourMarkFliesThereAndSinksTheRow = marked && g.op.used === 1 && row.every((ship) => ship.dead);
+    out.cameraSlidWest = g.view.strikeFollow.x < -20;
+    // The angle buttons point the Stick across, down or on either diagonal; the lit one flips it.
+    g.op.setPatternStep(0);
+    ui.updateHUD(true);
+    document.querySelector('#ladder-floors [data-turn="2"]')?.click();
+    const down = g.op.patternStep === 2;
+    document.querySelector('#ladder-floors [data-turn="2"]')?.click();
+    out.angleButtonsTurnAndFlip = down && g.op.patternStep === 6;
     return out;
   });
   for (const [name, value] of Object.entries(mechanics)) check(`harbour ${name}`, value === true);

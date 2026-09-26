@@ -139,7 +139,11 @@
           ><button id="rocket-weapon" class="icon-button" aria-label="Select rockets" title="Rockets (2)">
             <i data-lucide="rocket"></i><small id="rocket-stock">14</small></button
           ><button id="guided-weapon" class="icon-button" aria-label="Select guided missiles" title="Guided missiles (3)" hidden>
-            <i data-lucide="target"></i><small id="guided-stock">6</small>
+            <i data-lucide="target"></i><small id="guided-stock">6</small></button
+          ><button id="laser-weapon" class="icon-button" aria-label="Select laser" title="Laser (3): hold to burn, let it cool" hidden>
+            <i data-lucide="zap"></i><span class="heat" aria-hidden="true"><i id="laser-heat"></i></span></button
+          ><button id="strike-action" class="icon-button strike" aria-label="Call an air strike where you aim" title="Air strike (Q)" hidden>
+            <i data-lucide="plane"></i><small id="strike-stock">2</small>
           </button>
         </div>
         <div id="fire-stick" class="joystick fire-stick" tabindex="-1" aria-hidden="true">
@@ -166,6 +170,14 @@
         </div>
         <div id="bonus-gun" class="bonus" hidden>
           <i data-lucide="rocket"></i><span>GUIDED</span><strong>5.0s</strong>
+          <div class="bonus-track"><div class="bonus-fill"></div></div>
+        </div>
+        <div id="bonus-heli" class="bonus help" hidden>
+          <i data-lucide="plane"></i><span>GUNSHIP</span><strong>20.0s</strong>
+          <div class="bonus-track"><div class="bonus-fill"></div></div>
+        </div>
+        <div id="bonus-ally" class="bonus help" hidden>
+          <i data-lucide="ship"></i><span>ESCORT</span><strong>25.0s</strong>
           <div class="bonus-track"><div class="bonus-fill"></div></div>
         </div>
       </div>
@@ -251,16 +263,17 @@
           <span>Steer formation / vehicle</span><b class="pad">LEFT STICK</b><span>Aim and fire</span><b class="pad">RIGHT STICK</b>
           <span>Payload / Drill floor</span><b class="pad">CARDS / LADDER</b><span>Winch / land</span><b class="pad">HOLD WINCH</b>
           <span>Turn the flight round</span><b class="pad">REVERSE</b><span>Turn a pattern bomb</span><b class="pad">ARROWS</b>
-          <span>Mark the drop (auto release)</span><b class="pad">TAP MAP</b>
-          <span>Pause</span><b class="pad">PAUSE BUTTON</b>
+          <span>Mark the drop (auto release)</span><b class="pad">TAP MAP</b><span>Turn the pattern</span><b class="pad">ANGLE BUTTONS</b>
+          <span>Boat weapons / air strike</span><b class="pad">WEAPON ICONS</b><span>Pause</span><b class="pad">PAUSE BUTTON</b>
         </div>
         <div class="control-reference keys-only">
           <span>Steer formation / vehicle</span><kbd>W A S D</kbd><span>Throttle (flight)</span><kbd>A / D</kbd>
           <span>Payload select</span><kbd>1 – 9</kbd><span>Release now / Salvo</span><kbd>Space / X</kbd>
-          <span>Reverse the flight</span><kbd>F</kbd><span>Turn a pattern bomb</span><kbd>E / C / wheel</kbd>
+          <span>Reverse the flight</span><kbd>F</kbd><span>Turn a pattern bomb</span><kbd>E / C / wheel / angle buttons</kbd>
           <span>Mark the drop (auto release)</span><kbd>Click</kbd><span>Cancel the mark</span><kbd>Right click</kbd>
           <span>Drill floor</span><kbd>E / C</kbd><span>Formation spacing</span><kbd>Q</kbd>
-          <span>Fire (boat, helicopter)</span><kbd>Space / Pointer</kbd><span>Rockets / Guided</span><kbd>2 / 3</kbd>
+          <span>Fire (boat, helicopter)</span><kbd>Space / Pointer</kbd><span>Gun / Rockets</span><kbd>1 / 2</kbd>
+          <span>Boat laser / Helicopter guided</span><kbd>3</kbd><span>Air strike (boat)</span><kbd>Q</kbd>
           <span>Winch / land</span><kbd>Hold E</kbd><span>Flares</span><kbd>F</kbd>
           <span>Pause / Retry</span><kbd>Esc / R</kbd>
         </div>

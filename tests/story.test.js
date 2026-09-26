@@ -25,7 +25,7 @@ test("the campaign is one story: prologue, three chapters, finale", () => {
   // Echo team: spotters in Chapter 1, the rescue in Chapter 3, and the key comes home with Reyes.
   assert.ok(MISSION_STORY[5].radio.success.text.includes("override key"));
   // Lock Gate, the last river mission, frees Highwater for the key.
-  assert.ok(MISSION_STORY[11].radio.success.text.includes("override key"));
+  assert.ok(MISSION_STORY[MISSIONS.findIndex((m) => m.name === "Lock Gate")].radio.success.text.includes("override key"));
   const last = MISSIONS.at(-1);
   assert.equal(last.crew.length, last.team);
   assert.equal(last.crew.at(-1), "Sgt. Mara Reyes");

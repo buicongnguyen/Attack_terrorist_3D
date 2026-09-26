@@ -1,9 +1,33 @@
 import * as THREE from "three";
-import { RIVER, RIVER_MISSIONS, SKIFF, DECK_GUN_RANGE, skiffPath, riverStars } from "./river-data.js";
-import { MISSION_STORY } from "./story.js";
+import {
+  RIVER,
+  RIVER_MISSIONS,
+  SKIFF,
+  WEAPONS,
+  AIR_STRIKE,
+  SUPPORT,
+  skiffPath,
+  riverStars,
+  strikeLine,
+  laserHeat,
+} from "./river-data.js";
+import { MISSION_STORY, RIVER_RADIO } from "./story.js";
+import { isHostileEntity } from "./rescue-data.js";
 import { PICKUPS } from "./pickups.js";
 import { COLORS, chapterStart } from "./data.js";
 import { clamp, segmentSphere } from "./physics.js";
+import { dampAngle } from "./harbour.js";
+
+// The laser beam: a white-hot core inside two additive glows, stretched from muzzle to hit.
+const BEAM = {
+  geometry: new THREE.CylinderGeometry(1, 1, 1, 12, 1, true),
+  layers: [
+    { radius: 0.07, color: 0xffffff, opacity: 1 },
+    { radius: 0.24, color: 0x7fe8ff, opacity: 0.55 },
+    { radius: 0.55, color: 0x2fb6ff, opacity: 0.2 },
+  ],
+};
+const UP = new THREE.Vector3(0, 1, 0);
 
 const V = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
 const turretNode = (mesh) => {
@@ -43,11 +67,18 @@ export class RiverOperation {
     this.bargeDamage = 0;
     this.blocked = 0;
     this.combo = { count: 0, timer: 0 };
+    // Marlin's arsenal and the help that can join from crates.
+    this.rockets = WEAPONS.rocket.stock;
+    this.strikes = AIR_STRIKE.charges;
+    this.laser = { heat: 0, locked: false, beam: false };
+    this.airStrike = null;
+    this.support = { heli: null, ally: null };
+    this.beam = this.createBeam();
   }
 
   say(key) {
     if (this.said.has(key)) return;
-    const line = this.story?.radio?.[key];
+    const line = this.story?.radio?.[key] || RIVER_RADIO[key];
     if (!line) return;
     this.said.add(key);
     this.game.radio(line);
@@ -56,7 +87,7 @@ export class RiverOperation {
   createBarge(z, i) {
     const view = this.game.view;
     const model = view.assets.has("barge") ? "barge" : "boat";
-    const mesh = view.model(model, V(i ? 2.4 : -2.4, 0.05, z), model === "barge" ? 0.82 : 1.2);
+    const mesh = view.model(model, V(i ? RIVER.bargeSpread : -RIVER.bargeSpread, 0.05, z), model === "barge" ? 0.82 : 1.2);
     return {
       index: i,
       mesh,
@@ -109,7 +140,7 @@ export class RiverOperation {
       const s = event.side;
       for (let k = 0; k < event.count; k++) {
         const cz = z - k * 4.6;
-        const gun = g.entity("cannon", "cannon", V(s * 12.4, 1.05, cz), {
+        const gun = g.entity("cannon", "cannon", V(s * (RIVER.bank + 0.2), 1.05, cz), {
           radius: 1.1,
           hp: 4,
           cooldown: 1.6 + k * 0.9,
@@ -120,19 +151,19 @@ export class RiverOperation {
         gun.turret = turretNode(gun.mesh);
         gun.line = this.aimLine();
         for (let c = 0; c < (event.crew || 0); c++)
-          g.opponent(V(s * (13.6 + c * 0.7), 1.08, cz + 1.3 - c * 2.6), { scrolling: true, scale: 0.9 });
+          g.opponent(V(s * (RIVER.bank + 1.4 + c * 0.7), 1.08, cz + 1.3 - c * 2.6), { scrolling: true, scale: 0.9 });
       }
       if (event.drums) {
         const drums = g.entity(
           g.view.assets.has("fuel-drums") ? "drums" : "drums",
           g.view.assets.has("fuel-drums") ? "fuel-drums" : "supply",
-          V(s * 13.9, 1.05, z - ((event.count - 1) * 4.6) / 2 + 0.2),
+          V(s * (RIVER.bank + 1.7), 1.05, z - ((event.count - 1) * 4.6) / 2 + 0.2),
           { radius: 1.2, hp: 1, scrolling: true },
         );
         drums.halo = g.view.ring(V(0, 0.08, 0), 1.5, 0xffcc1f, 0.14, drums.mesh);
       }
       if (event.launcher) {
-        const launcher = g.entity("launcher", "launcher", V(s * 15.6, 1.1, z - event.count * 4.6 - 1), {
+        const launcher = g.entity("launcher", "launcher", V(s * (RIVER.bank + 3.4), 1.1, z - event.count * 4.6 - 1), {
           hp: 8,
           radius: 1.9,
           cooldown: 3,
@@ -184,10 +215,11 @@ export class RiverOperation {
     const deck = new THREE.Group();
     deck.position.set(0, 0, z);
     view.level.add(deck);
-    view.box(V(0, 3, 0), V(26, 0.6, 3.2), 0xc99f74, deck);
-    view.box(V(0, 3.55, -1.5), V(26, 0.5, 0.2), 0xe2704f, deck);
-    view.box(V(0, 3.55, 1.5), V(26, 0.5, 0.2), 0xe2704f, deck);
-    for (const x of [-9, -3, 3, 9]) view.box(V(x, 1.4, 0), V(0.9, 3, 1.4), 0x9a8f86, deck);
+    const span = RIVER.bank * 2 + 1.6;
+    view.box(V(0, 3, 0), V(span, 0.6, 3.2), 0xc99f74, deck);
+    view.box(V(0, 3.55, -1.5), V(span, 0.5, 0.2), 0xe2704f, deck);
+    view.box(V(0, 3.55, 1.5), V(span, 0.5, 0.2), 0xe2704f, deck);
+    for (const x of [-13, -4.5, 4.5, 13]) view.box(V(x, 1.4, 0), V(0.9, 3, 1.4), 0x9a8f86, deck);
     this.bridge = { deck, alive: true };
     const bridgeEntity = g.entity("bridge", null, V(0, 0, z), { scrolling: true, friendly: true });
     bridgeEntity.mesh.add(deck);
@@ -199,7 +231,7 @@ export class RiverOperation {
       bridge: bridgeEntity,
     });
     crate.halo = view.ring(V(0, 0.08, 0), 1.3, 0xffcc1f, 0.14, crate.mesh);
-    for (const x of [-7, -3.4, 3.4, 7.2]) {
+    for (const x of [-10, -4.8, 4.8, 10]) {
       const gunner = g.opponent(V(x, 3.3, z + 0.4), { scrolling: true, scale: 0.9, hp: 1, gunner: true, cooldown: 2 + Math.abs(x) * 0.2, aim: 0 });
       gunner.line = this.aimLine();
     }
@@ -218,10 +250,12 @@ export class RiverOperation {
       view.box(V(-4.5, 2.5, 0), V(9, 5, 1), 0x6d6a72, gate.mesh);
       view.box(V(4.5, 2.5, 0), V(9, 5, 1), 0x6d6a72, gate.mesh);
     }
+    // The gate was built for the old canal: scaled up evenly (so its doors swing true) it spans the wider one.
+    gate.mesh.scale.multiplyScalar(RIVER.bank / 12.2);
     gate.leaves = ["GateL", "GateR"].map((n) => gate.mesh.getObjectByName(n));
     const towers = [-1, 1].map((s) => {
       const model = view.assets.has("gate-tower") ? "gate-tower" : "launcher";
-      const tower = g.entity("tower", model, V(s * 14.2, 1.05, z), {
+      const tower = g.entity("tower", model, V(s * (RIVER.bank + 2), 1.05, z), {
         hp: cfg.towerHp,
         maxHp: cfg.towerHp,
         radius: 2.4,
@@ -298,6 +332,10 @@ export class RiverOperation {
     this.updateEntities(dt, flow);
     this.updateSkiffs(dt);
     if (this.boss) this.updateBoss(dt);
+    this.updateLaser(dt);
+    this.updateAirStrike(dt, flow);
+    this.updateGunship(dt);
+    this.updateEscort(dt);
     g.entities = g.entities.filter((e) => !e.dead || e.fallTime !== undefined);
     if (g.status !== "playing") return;
     if (!this.barges.some((b) => b.alive)) g.finish(false, "barges");
@@ -331,7 +369,7 @@ export class RiverOperation {
         if (barge.sink > 4) barge.mesh.visible = false;
         continue;
       }
-      const target = clamp(leader + (barge.index ? 2.4 : -2.4), -7.6, 7.6);
+      const target = clamp(leader + (barge.index ? RIVER.bargeSpread : -RIVER.bargeSpread), -RIVER.laneX + 2.5, RIVER.laneX - 2.5);
       const lag = RIVER.follow * (1 + barge.index * 0.6);
       barge.mesh.position.x = THREE.MathUtils.damp(barge.mesh.position.x, target, 1 / lag, dt);
       barge.mesh.position.y = 0.05 + Math.sin(g.time * 1.8 + barge.index) * 0.05;
@@ -663,6 +701,432 @@ export class RiverOperation {
     }
   }
 
+  // After the result is decided the scene keeps moving: the beam goes out, bombs still burst and
+  // the help flies on without firing.
+  settle(dt) {
+    this.beam.group.visible = this.beam.tip.visible = false;
+    this.updateAirStrike(dt, 0);
+    this.updateGunship(dt);
+    this.updateEscort(dt);
+  }
+
+  // ------------------------------------------------------------------ Marlin's weapons
+
+  muzzle() {
+    const g = this.game;
+    return g.boatParts.Muzzle ? g.boatParts.Muzzle.getWorldPosition(V()) : g.player.position.clone().add(V(0, 1.1, -1));
+  }
+
+  // The hostile nearest to a point (within `reach`), for rockets and help to lock on to.
+  hostileNear(point, reach) {
+    let best = null,
+      bestD = reach;
+    for (const e of this.game.entities) {
+      if (!isHostileEntity(e)) continue;
+      const d = Math.hypot(e.position.x - point.x, e.position.z - point.z);
+      if (d < bestD) {
+        best = e;
+        bestD = d;
+      }
+    }
+    return best;
+  }
+
+  // Rockets (key 2): a salvo of three from the rack, fanned a little, homing on what you aim at.
+  fireRockets(aim) {
+    const g = this.game,
+      spec = WEAPONS.rocket;
+    if (g.rocketCooldown > 0 || g.status !== "playing") return false;
+    if (this.rockets <= 0) {
+      g.rocketCooldown = 0.8;
+      g.notify("toast", "NO ROCKETS / FIND A CRATE");
+      return false;
+    }
+    const target = g.aimTarget || this.hostileNear(aim, 6);
+    const origin = this.muzzle().add(V(0, 0.3, 0));
+    const n = Math.min(spec.salvo, this.rockets);
+    g.aimBoatTurret(aim);
+    for (let i = 0; i < n; i++) {
+      const side = (i - (n - 1) / 2) * spec.spread;
+      g.spawnShot(origin.clone().add(V(side * 0.4, 0, 0)), aim.clone().add(V(side, 0, 0)), true, false, target);
+    }
+    this.rockets -= n;
+    g.rocketCooldown = spec.cooldown;
+    g.flash(origin, 0xffd47e, 1.1);
+    g.audio.play("shot");
+    return true;
+  }
+
+  createBeam() {
+    const view = this.game.view;
+    const group = new THREE.Group();
+    group.visible = false;
+    group.renderOrder = 6;
+    for (const layer of BEAM.layers) {
+      const mesh = new THREE.Mesh(
+        BEAM.geometry,
+        new THREE.MeshBasicMaterial({
+          color: layer.color,
+          transparent: true,
+          opacity: layer.opacity,
+          blending: THREE.AdditiveBlending,
+          depthWrite: false,
+          toneMapped: false,
+        }),
+      );
+      mesh.scale.set(layer.radius, 1, layer.radius);
+      mesh.userData.ownedMaterial = true;
+      mesh.frustumCulled = false;
+      group.add(mesh);
+    }
+    view.level.add(group);
+    const tip = view.fxSprite("glow", 0x9ff3ff, 1, true);
+    tip.visible = false;
+    return { group, tip, spark: 0, sound: 0 };
+  }
+
+  // Laser (key 3): a held beam that burns the first hostile it touches and knocks down enemy
+  // missiles. It overheats after a few seconds and must cool before it fires again.
+  updateLaser(dt) {
+    const g = this.game,
+      spec = WEAPONS.laser,
+      beam = this.beam;
+    const firing = g.input.fire && g.weapon === "laser" && g.status === "playing" && !g.paused;
+    const wasLocked = this.laser.locked;
+    this.laser = laserHeat(this.laser, firing, dt);
+    if (this.laser.locked && !wasLocked) {
+      g.notify("toast", "LASER OVERHEATED");
+      this.say("overheat");
+    }
+    beam.group.visible = beam.tip.visible = this.laser.beam;
+    if (!this.laser.beam || !g.aimPoint) return;
+    g.aimBoatTurret(g.aimPoint);
+    const origin = this.muzzle();
+    const dir = g.aimPoint.clone().sub(origin);
+    dir.y = Math.max(dir.y, -0.25 * Math.hypot(dir.x, dir.z));
+    dir.normalize();
+    const far = origin.clone().addScaledVector(dir, spec.range);
+    // First thing on the beam: an enemy missile (shot down) or a hostile (burned).
+    let hit = null;
+    for (const shot of g.projectiles) {
+      if (!shot.hostile || !shot.missile || shot.dead) continue;
+      const t = segmentSphere(origin, far, shot.position, 0.8);
+      if (t !== null && (!hit || t < hit.t)) hit = { t, missile: shot };
+    }
+    for (const e of g.entities) {
+      if (!isHostileEntity(e)) continue;
+      for (const lift of e.hitLifts || [null]) {
+        const centre = lift === null ? g.targetPosition(e) : e.position.clone().add(V(0, lift, 0));
+        const t = segmentSphere(origin, far, centre, (e.hitRadius ?? e.radius) + spec.width * 0.4);
+        if (t !== null && (!hit || t < hit.t)) hit = { t, entity: e };
+      }
+    }
+    const end = hit ? origin.clone().lerp(far, hit.t) : far;
+    if (hit?.missile) {
+      hit.missile.dead = true;
+      g.score += 90;
+      g.notify("toast", "INTERCEPT +90");
+      g.blast(hit.missile.position, 1.2, COLORS.gold);
+    } else if (hit?.entity) this.burn(hit.entity, spec.dps * dt);
+    // Stretch the beam from the muzzle to the hit.
+    const length = origin.distanceTo(end);
+    beam.group.position.copy(origin).lerp(end, 0.5);
+    beam.group.quaternion.setFromUnitVectors(UP, dir);
+    const flicker = 1 + Math.sin(g.time * 60) * 0.12;
+    beam.group.children.forEach((mesh, i) => mesh.scale.set(BEAM.layers[i].radius * flicker, length, BEAM.layers[i].radius * flicker));
+    beam.tip.position.copy(end);
+    beam.tip.scale.setScalar(hit ? 1.6 * flicker : 0.8);
+    beam.spark -= dt;
+    if (hit && beam.spark <= 0) {
+      beam.spark = 0.05;
+      g.ember(end.clone().add(V((Math.random() - 0.5) * 0.6, Math.random() * 0.5, (Math.random() - 0.5) * 0.6)), 0xfff1a8, 0.5, 0.3);
+    }
+    beam.sound -= dt;
+    if (beam.sound <= 0) {
+      beam.sound = 0.14;
+      g.audio.play("shot");
+    }
+  }
+
+  // Damage over time: whole points land as they add up, so kills and puffs stay ordinary.
+  burn(e, amount) {
+    e.burn = (e.burn || 0) + amount;
+    const whole = Math.floor(e.burn);
+    if (whole <= 0) return;
+    e.burn -= whole;
+    this.game.damage(e, whole);
+  }
+
+  // ------------------------------------------------------------------ air strike
+
+  // Q: Kestrel Two lays a line of bombs right across the canal where Marlin aims, ahead of the
+  // barges. A marked line shows where they will fall.
+  callAirStrike(z = this.game.aimPoint ? this.game.aimPoint.z : -20) {
+    const g = this.game;
+    if (g.status !== "playing" || this.airStrike) return false;
+    if (this.strikes <= 0) {
+      g.notify("toast", "NO AIR STRIKES / FIND A CRATE");
+      this.say("noStrike");
+      return false;
+    }
+    this.strikes--;
+    const points = strikeLine(z).map((p) => ({ ...p, marker: g.view.ring(V(p.x, 0.14, p.z), 1.6, 0xff8a1f, 0.22) }));
+    this.airStrike = { t: 0, points, bombers: [], bombs: [], dropped: 0, struck: new Set() };
+    this.said.delete("strikeIn");
+    this.say("strikeIn");
+    g.notify("toast", "AIR STRIKE INBOUND");
+    return true;
+  }
+
+  gainStrike() {
+    this.strikes++;
+    this.said.delete("strikeGain");
+    this.say("strikeGain");
+  }
+
+  updateAirStrike(dt, flow) {
+    const g = this.game,
+      a = this.airStrike;
+    if (!a) return;
+    a.t += dt;
+    // The line stays on the water it marked, which scrolls past with the convoy.
+    for (const p of a.points) {
+      p.z += flow * dt;
+      if (p.marker) {
+        p.marker.position.z = p.z;
+        p.marker.material.opacity = 0.45 + Math.sin(g.time * 14) * 0.35;
+        p.marker.scale.setScalar(1 + Math.max(0, AIR_STRIKE.warning - a.t) * 0.25);
+      }
+    }
+    // Two bombers cross the canal from the west, low and fast.
+    if (!a.bombers.length && a.t > AIR_STRIKE.warning - 1.1) {
+      for (const [i, dz] of [
+        [0, -2.2],
+        [1, 2.2],
+      ]) {
+        const model = g.view.assets.has("bomber") ? "bomber" : "boat";
+        const mesh = g.view.model(model, V(-52 - i * 6, 12 + i * 0.8, a.points[0].z + dz), 1);
+        mesh.rotation.y = -Math.PI / 2;
+        a.bombers.push({ mesh, dz, props: ["PropellerL", "PropellerR"].map((n) => mesh.getObjectByName(n)).filter(Boolean) });
+      }
+      g.audio.play("radio");
+    }
+    for (const b of a.bombers) {
+      b.mesh.position.x += 42 * dt;
+      b.mesh.position.z = a.points[0].z + b.dz;
+      b.mesh.rotation.z = Math.sin(g.time * 3) * 0.05;
+      for (const prop of b.props) prop.rotation.y += dt * 40;
+    }
+    // Each bomb falls as the lead bomber passes over its mark.
+    const lead = a.bombers[0];
+    if (lead)
+      while (a.dropped < a.points.length && lead.mesh.position.x >= a.points[a.dropped].x - 5) {
+        const p = a.points[a.dropped++];
+        const mesh = g.view.model(g.view.assets.has("bomb-blast") ? "bomb-blast" : "missile-friendly", V(p.x - 4, 11, p.z), 1.1);
+        mesh.rotation.x = Math.PI / 2;
+        a.bombs.push({ mesh, p, t: 0 });
+      }
+    for (const bomb of a.bombs) {
+      if (bomb.done) continue;
+      bomb.t += dt;
+      const u = Math.min(1, bomb.t / 0.6);
+      bomb.mesh.position.set(bomb.p.x - 4 * (1 - u), 11 * (1 - u * u), bomb.p.z);
+      if (u >= 1) {
+        bomb.done = true;
+        g.view.disposeObject(bomb.mesh);
+        if (bomb.p.marker) g.view.disposeObject(bomb.p.marker);
+        bomb.p.marker = null;
+        this.detonateStrike(bomb.p, a.struck);
+      }
+    }
+    const finished = a.dropped === a.points.length && a.bombs.every((b) => b.done) && a.bombers.every((b) => b.mesh.position.x > 60);
+    if (finished) {
+      for (const b of a.bombers) g.view.disposeObject(b.mesh);
+      this.airStrike = null;
+    }
+  }
+
+  // Each bomb's blast: the bombs overlap, but a strike hits any one target once, and the lock
+  // gate's hardened towers and generator only take a dent. Once the mission is decided the
+  // bombs still burst but change nothing.
+  detonateStrike(p, struck = new Set()) {
+    const g = this.game;
+    const at = V(p.x, 0.4, p.z);
+    g.blast(at, 3.4, 0xff8a2b);
+    const splash = g.view.ring(V(p.x, 0.12, p.z), 0.6, 0xdff9f2, 0.2);
+    g.effects.push({ mesh: splash, life: 1.1, maxLife: 1.1, ring: true, growth: 6 });
+    if (g.status !== "playing") return;
+    for (const e of g.entities) {
+      if (!isHostileEntity(e) || struck.has(e)) continue;
+      if (Math.hypot(e.position.x - p.x, e.position.z - p.z) >= AIR_STRIKE.radius + (e.radius || 0)) continue;
+      struck.add(e);
+      g.damage(e, e.type === "tower" || e.type === "generator" ? AIR_STRIKE.hardened : AIR_STRIKE.damage, true);
+    }
+    for (const shot of g.projectiles)
+      if (shot.hostile && !shot.dead && Math.hypot(shot.position.x - p.x, shot.position.z - p.z) < AIR_STRIKE.radius) shot.dead = true;
+  }
+
+  // ------------------------------------------------------------------ help from crates
+
+  // The Hornet gunship flies Marlin's wing: it shoots where Marlin shoots, or at the nearest
+  // threat when Marlin holds fire, and sends a rocket at the nearest target every few seconds.
+  callGunship() {
+    const g = this.game;
+    const heli = this.support.heli;
+    if (heli && heli.t > 0) {
+      heli.t = SUPPORT.heli.time;
+      return;
+    }
+    if (heli) g.view.disposeObject(heli.mesh);
+    const mesh = g.view.model("gunship", V(g.player.position.x + 8, 12, 34), 1);
+    this.support.heli = {
+      mesh,
+      t: SUPPORT.heli.time,
+      cooldown: 1,
+      rocket: 1.5,
+      rotor: mesh.getObjectByName("Rotor"),
+      tail: mesh.getObjectByName("TailRotor"),
+      muzzle: mesh.getObjectByName("HeliMuzzle"),
+      velocity: V(),
+    };
+    this.said.delete("heli");
+    this.say("heli");
+  }
+
+  updateGunship(dt) {
+    const g = this.game,
+      h = this.support.heli;
+    if (!h) return;
+    h.t -= dt;
+    const leaving = h.t <= 0;
+    if (leaving && !h.left) {
+      h.left = true;
+      this.said.delete("heliOut");
+      this.say("heliOut");
+    }
+    const side = g.player.position.x > 0 ? -1 : 1;
+    const station = leaving ? V(h.mesh.position.x, 18, -90) : V(clamp(g.player.position.x + side * 7, -RIVER.laneX, RIVER.laneX), 6.5, g.player.position.z - 4);
+    const before = h.mesh.position.clone();
+    const rate = leaving ? 0.7 : 1.8;
+    h.mesh.position.x = THREE.MathUtils.damp(h.mesh.position.x, station.x, rate, dt);
+    h.mesh.position.y = THREE.MathUtils.damp(h.mesh.position.y, station.y, rate, dt) + Math.sin(g.time * 2.2) * 0.01;
+    h.mesh.position.z = THREE.MathUtils.damp(h.mesh.position.z, station.z, rate, dt);
+    if (dt > 0) h.velocity.copy(h.mesh.position).sub(before).divideScalar(dt);
+    if (h.rotor) h.rotor.rotation.y += dt * 32;
+    if (h.tail) h.tail.rotation.x += dt * 40;
+    if (leaving) {
+      h.mesh.rotation.set(-0.25, 0, 0);
+      if (h.mesh.position.z < -70) {
+        g.view.disposeObject(h.mesh);
+        this.support.heli = null;
+      }
+      return;
+    }
+    // Marlin's fire direction first; otherwise the nearest threat ahead.
+    const threat = g.nearestTarget();
+    const aim = g.input.fire && g.aimPoint ? g.aimPoint.clone() : threat ? g.targetPosition(threat) : null;
+    const face = aim ? Math.atan2(-(aim.x - h.mesh.position.x), -(aim.z - h.mesh.position.z)) : 0;
+    h.mesh.rotation.set(-0.12 - clamp(h.velocity.z * 0.02, -0.2, 0.2), dampAngle(h.mesh.rotation.y, face, 4, dt), clamp(-h.velocity.x * 0.05, -0.35, 0.35));
+    h.cooldown -= dt;
+    h.rocket -= dt;
+    if (!aim || g.status !== "playing") return;
+    const origin = h.muzzle ? h.muzzle.getWorldPosition(V()) : h.mesh.position.clone().add(V(0, -0.5, -2));
+    if (h.cooldown <= 0) {
+      h.cooldown = SUPPORT.heli.every;
+      const jitter = V((Math.random() - 0.5) * 0.6, 0, (Math.random() - 0.5) * 0.6);
+      g.spawnShot(origin, aim.clone().add(jitter), false, false, null, null, { damage: SUPPORT.heli.damage, ally: true, color: 0x9ff3ff });
+      g.flash(origin, 0xfff1b8, 0.45);
+    }
+    if (h.rocket <= 0 && threat) {
+      h.rocket = SUPPORT.heli.rocketEvery;
+      g.spawnShot(h.mesh.position.clone().add(V(0, -0.6, 0)), g.targetPosition(threat), true, false, threat, null, { ally: true });
+    }
+  }
+
+  // Duarte's harbour launch rides beside the barges and shoots whatever comes closest to it.
+  callEscort() {
+    const g = this.game;
+    const ally = this.support.ally;
+    if (ally && ally.t > 0) {
+      ally.t = SUPPORT.ally.time;
+      return;
+    }
+    if (ally) g.view.disposeObject(ally.mesh);
+    const side = g.player.position.x > 0 ? -1 : 1;
+    const mesh = g.view.model("escort-boat", V(side * 9, 0.08, 34), 1);
+    this.support.ally = {
+      mesh,
+      side,
+      t: SUPPORT.ally.time,
+      cooldown: 1,
+      turret: mesh.getObjectByName("Turret"),
+      muzzle: mesh.getObjectByName("Muzzle"),
+      wake: 0,
+    };
+    this.said.delete("ally");
+    this.say("ally");
+  }
+
+  updateEscort(dt) {
+    const g = this.game,
+      a = this.support.ally;
+    if (!a) return;
+    a.t -= dt;
+    const leaving = a.t <= 0;
+    if (leaving && !a.left) {
+      a.left = true;
+      this.said.delete("allyOut");
+      this.say("allyOut");
+    }
+    // Abreast of the barges on the far side from Marlin.
+    if (!leaving) a.side = g.player.position.x > 3 ? -1 : g.player.position.x < -3 ? 1 : a.side;
+    const target = leaving ? V(a.side * (RIVER.laneX - 1), 0, 44) : V(a.side * (RIVER.laneX - 3.5), 0, 8);
+    const p = a.mesh.position;
+    const before = p.clone();
+    p.x = THREE.MathUtils.damp(p.x, target.x, 0.9, dt);
+    p.z = THREE.MathUtils.damp(p.z, target.z, leaving ? 0.6 : 1.1, dt);
+    p.y = 0.08 + Math.sin(g.time * 2.4 + 1) * 0.05;
+    const dx = p.x - before.x;
+    a.mesh.rotation.set(0, clamp(-dx * 4, -0.4, 0.4), clamp(-dx * 3, -0.15, 0.15));
+    a.wake -= dt;
+    if (a.wake <= 0) {
+      a.wake = 0.2;
+      const ring = g.view.ring(V(p.x, 0.11, p.z + 2), 0.5, 0xdff9f2, 0.07);
+      g.effects.push({ mesh: ring, life: 1.1, maxLife: 1.1, ring: true, growth: 1.3 });
+    }
+    if (leaving) {
+      if (p.z > 40) {
+        g.view.disposeObject(a.mesh);
+        this.support.ally = null;
+      }
+      return;
+    }
+    // The nearest threat within the launch's gun range: riding beside the barges, it guards
+    // that side of the convoy.
+    let best = null,
+      bestD = SUPPORT.ally.range;
+    for (const e of g.entities) {
+      if (!isHostileEntity(e)) continue;
+      const d = e.position.distanceTo(p);
+      if (d < bestD) {
+        best = e;
+        bestD = d;
+      }
+    }
+    if (a.turret && best) {
+      a.mesh.updateMatrixWorld(true);
+      const local = a.turret.parent.worldToLocal(g.targetPosition(best)).sub(a.turret.position);
+      a.turret.rotation.y = Math.atan2(-local.x, -local.z);
+    }
+    a.cooldown -= dt;
+    if (!best || a.cooldown > 0 || g.status !== "playing") return;
+    a.cooldown = SUPPORT.ally.every;
+    a.mesh.updateMatrixWorld(true);
+    const origin = a.muzzle ? a.muzzle.getWorldPosition(V()) : p.clone().add(V(0, 1, -1.5));
+    g.spawnShot(origin, g.targetPosition(best), false, false, null, null, { damage: SUPPORT.ally.damage, ally: true, color: 0x8fffc8 });
+    g.flash(origin, 0xfff1b8, 0.45);
+  }
+
   snapshot() {
     const labels = this.orders.map((o) => o.label).filter(Boolean);
     const boss = this.boss;
@@ -682,6 +1146,17 @@ export class RiverOperation {
           }
         : null,
       labels: labels.map((l, i) => ({ id: `pincer-${i}`, ...l })),
+      weapons: {
+        rockets: this.rockets,
+        heat: this.laser.heat,
+        overheated: this.laser.locked,
+        strikes: this.strikes,
+        striking: Boolean(this.airStrike),
+      },
+      help: {
+        heli: this.support.heli ? Math.max(0, this.support.heli.t) : 0,
+        ally: this.support.ally ? Math.max(0, this.support.ally.t) : 0,
+      },
     };
   }
 

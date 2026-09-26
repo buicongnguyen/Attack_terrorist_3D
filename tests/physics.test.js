@@ -65,17 +65,23 @@ test("mission records store bests instead of accumulating retry scores", () => {
   assert.deepEqual(records[0], { score: 600, stars: 3 });
   assert.deepEqual(
     [0, 1, 2].map((c) => MISSIONS.filter((m) => m.chapter === c).length),
-    [9, 3, 3],
+    [9, 6, 3],
   );
 });
 
-test("saves from before the harbour missions keep their records on the right missions", () => {
-  const v2 = { records: { 0: { score: 1, stars: 3 }, 5: { score: 2, stars: 2 }, 6: { score: 3, stars: 1 }, 11: { score: 4, stars: 3 } }, muted: true };
-  const v3 = migrateSave(v2);
-  assert.deepEqual(Object.keys(v3.records).map(Number), [0, 5, 9, 14]);
+test("saves from before the harbour and canal missions keep their records on the right missions", () => {
+  // v2: 0-5 city, 6-8 river (Lock Gate 8), 9-11 rescue.
+  const v2 = { records: { 0: { score: 1, stars: 3 }, 5: { score: 2, stars: 2 }, 6: { score: 3, stars: 1 }, 8: { score: 5, stars: 2 }, 11: { score: 4, stars: 3 } }, muted: true };
+  const v4 = migrateSave(v2, 2);
+  assert.deepEqual(Object.keys(v4.records).map(Number), [0, 5, 9, 14, 17]);
   assert.equal(MISSIONS[9].name, "Mangrove Mile");
-  assert.equal(v3.records[14].score, 4);
-  assert.equal(v3.muted, true);
+  assert.equal(MISSIONS[14].name, "Lock Gate");
+  assert.equal(MISSIONS[17].name, "Last Light");
+  assert.equal(v4.records[17].score, 4);
+  assert.equal(v4.muted, true);
+  // v3: 0-8 city and harbour, 9-11 river (Lock Gate 11), 12-14 rescue.
+  const v3 = { records: { 8: { score: 1, stars: 1 }, 10: { score: 2, stars: 2 }, 11: { score: 3, stars: 3 }, 12: { score: 4, stars: 1 } } };
+  assert.deepEqual(Object.keys(migrateSave(v3, 3).records).map(Number), [8, 10, 14, 15]);
   assert.deepEqual(migrateSave({}).records, {});
 });
 

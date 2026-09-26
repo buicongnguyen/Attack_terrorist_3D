@@ -457,3 +457,145 @@ def barge(k):
     k.box((-.45, -3.3, 2.22), (.5, .12, .09), 'white', .04, 1)
     k.torus((.86, -3.1, 1.3), .18, .06, 'orange', 'X', 14, 6)
     crew(k, (-.9, -2.0, .76), s=.64, vest='mint')
+
+
+
+# ------------------------------------------------------------------ Kestrel gunship (canal support)
+GUNSHIP = [  # y, half-width, upper half-height, zc, lower half-height
+    (2.62, 0, 0, -.16, 0),
+    (2.48, .2, .2, -.16, .2),
+    (2.1, .38, .36, -.1, .36),
+    (1.3, .48, .5, 0, .46),
+    (.4, .54, .6, .06, .5),
+    (-.5, .56, .64, .12, .5),
+    (-1.2, .44, .52, .2, .38),
+    (-1.72, .24, .3, .28, .2),
+]
+
+
+def gunship(k):
+    """A narrow tandem-seat attack helicopter in Kestrel navy and sky, with sunflower stripes:
+    stub wings with rocket pods and missile rails, a chin cannon, four-blade rotor."""
+    loft_body(k, GUNSHIP, 'navy', 0, math.pi, 16, cap=(False, False), n=2.3)
+    loft_body(k, GUNSHIP, 'sky', math.pi, math.tau, 16, cap=(False, False), n=2.3)
+    band(k, GUNSHIP, 1.55, 1.8, 'sun', 1.03, 1, 16, n=2.3)
+    band(k, GUNSHIP, -1.15, -.95, 'sun', 1.03, 1, 16, n=2.3)
+    # stepped tandem canopies: the gunner sits low in front, the pilot higher behind
+    k.sphere((0, 1.72, .3), (.36, .62, .36), 'glass', 16, 8)
+    k.sphere((0, .82, .58), (.4, .66, .42), 'glass', 16, 8)
+    for y, z, r in ((1.72, .3, .38), (.82, .58, .42)):
+        k.torus((0, y, z), r, .035, 'navy', 'Y', 20, 5, scale=(1, 1, .9))
+    k.box((0, 1.25, .56), (.06, .42, .05), 'navy', .02, 1, rot=(-20, 0, 0))
+    # engine nacelles either side of the spine, sunflower intakes and white exhausts
+    for side in (-1, 1):
+        x = side * .5
+        k.lathe([(0, -.9), (.2, -.85), (.26, -.5), (.27, .35), (.24, .5)], 'navy', (x, -.35, .66), 'Y', 12)
+        k.cyl((x, .16, .66), .2, .06, 'sun', 'Y', 12)
+        k.cyl((x, -1.28, .7), .14, .2, 'white', 'Y', 10, .02, rot=(0, 0, side * 12))
+    # rotor mast, hub and four blades with sunflower tips
+    k.cyl((0, -.3, 1.08), .1, .36, 'gunmetal', 'Z', 10)
+    rotor = k.joint('Rotor', (0, -.3, 1.3))
+    k.lathe([(0, 1.24), (.24, 1.24), (.22, 1.34), (.12, 1.42), (0, 1.44)], 'navy', parent=rotor, verts=12)
+    for i in range(4):
+        a = i * 90
+        blade(k, (0, -.3, 1.32), 2.9, .26, .06, a, 'charcoal', rotor, 'Z', 3, r0=.2)
+        blade(k, (0, -.3, 1.325), .4, .27, .065, a, 'sun', rotor, 'Z', 3, r0=3.0)
+    # tail boom, fin, stabiliser and a tail wheel
+    k.lathe([(0, -1.5), (.26, -1.6), (.22, -2.6), (.16, -3.8), (.12, -4.35), (0, -4.4)], 'navy',
+            (0, 0, .34), 'Y', 12, rot=(-3, 0, 0))
+    k.lathe([(.24, -2.3), (.26, -2.34), (.26, -2.6), (.23, -2.64)], 'sun', (0, 0, .34), 'Y', 12, rot=(-3, 0, 0))
+    k.prism([(-3.7, .45), (-4.3, .42), (-4.55, 1.5), (-4.2, 1.55), (-3.85, .9)], .14, 'navy', bevel=.04)
+    k.prism([(-4.24, 1.2), (-4.46, 1.22), (-4.52, 1.48), (-4.2, 1.53), (-4.12, 1.36)], .155, 'sun', bevel=.03)
+    wing(k, -.08, -1.1, -3.9, .42, .3, .08, .06, .5, .5, 'navy', .06, 2, 8)
+    wing(k, .08, 1.1, -3.9, .42, .3, .08, .06, .5, .5, 'navy', .06, 2, 8)
+    k.rod((0, -4.0, .3), (0, -4.05, -.2), .035, 'gunmetal', 6)
+    k.cyl((0, -4.05, -.26), .1, .07, 'rubber', 'X', 10)
+    tail = k.joint('TailRotor', (-.18, -4.3, 1.02))
+    k.cyl((-.18, -4.3, 1.02), .08, .1, 'gunmetal', 'X', 8, parent=tail)
+    for i in range(4):
+        blade(k, (-.22, -4.3, 1.02), .5, .12, .04, 45 + i * 90, 'white', tail, 'X', r0=.04)
+    # stub wings: a rocket pod inboard, a rail of four missiles outboard, tip lights
+    for side in (-1, 1):
+        wing(k, side * .5, side * 1.75, -.1, .7, .52, .12, .09, .02, .08, 'navy', .05, 2, 10)
+        k.box((side * 1.72, -.1, .1), (.08, .5, .1), 'sun', .03, 1)
+        x = side * 1.05
+        k.box((x, -.08, -.1), (.08, .28, .2), 'gunmetal', .03, 1)
+        k.lathe([(0, -.55), (.17, -.52), (.2, -.4), (.2, .38), (.17, .45)], 'sky', (x, -.1, -.32), 'Y', 12)
+        k.cyl((x, .33, -.32), .19, .06, 'sun', 'Y', 12)
+        for a in range(6):
+            aa = math.radians(a * 60)
+            k.cyl((x + math.cos(aa) * .1, .37, -.32 + math.sin(aa) * .1), .035, .04, 'rubber', 'Y', 6)
+        rail = side * 1.55
+        k.box((rail, -.1, -.08), (.07, .7, .06), 'gunmetal', .02, 1)
+        for dx in (-.09, .09):
+            for dz in (-.2, -.36):
+                k.lathe([(0, -.36), (.045, -.34), (.045, .26), (.03, .34), (0, .38)], 'white',
+                        (rail + dx, -.1, dz), 'Y', 8)
+                k.cyl((rail + dx, .26, dz), .046, .05, 'sun', 'Y', 8)
+        k.sphere((side * 1.76, .1, .1), .05, 'mint_glow' if side > 0 else 'lamp', 6, 4)
+        # main wheels on short struts
+        k.rod((side * .45, .5, -.35), (side * .62, .55, -.78), .04, 'gunmetal', 6)
+        k.cyl((side * .66, .55, -.86), .14, .08, 'rubber', 'X', 12)
+    # chin cannon in a turret under the gunner
+    chin = k.joint('ChinTurret', (0, 2.0, -.46))
+    k.sphere((0, 2.0, -.46), (.2, .22, .16), 'gunmetal', 12, 6, parent=chin)
+    k.rod((0, 2.12, -.48), (0, 2.78, -.48), .045, 'gunmetal', 8, parent=chin)
+    k.cyl((0, 2.62, -.48), .06, .14, 'charcoal', 'Y', 8, parent=chin)
+    k.joint('HeliMuzzle', (0, 2.84, -.48), chin)
+    # nose sensor turret
+    k.sphere((0, 2.46, -.12), (.17, .16, .15), 'charcoal', 12, 6)
+    k.cyl((0, 2.6, -.12), .07, .03, 'lamp', 'Y', 10)
+
+
+# ------------------------------------------------------------------ escort gunboat
+ESCORT = [  # y, half-width, deck z, keel z, chine z
+    (-1.95, .72, .52, -.08, .1),
+    (-1.6, .8, .5, -.18, .05),
+    (-.8, .84, .48, -.25, .02),
+    (.3, .84, .5, -.26, .02),
+    (1.0, .78, .55, -.22, .05),
+    (1.5, .62, .62, -.15, .1),
+    (1.8, .38, .68, -.04, .2),
+    (2.0, .1, .72, .18, .42),
+]
+
+
+def escort_boat(k):
+    """A small Kestrel escort launch: white hull with sky and sunflower stripes, sky cabin and a
+    twin gun on the foredeck. Smaller and paler than Marlin, so it never reads as the player."""
+    rings = [[(x, st[0], z) for x, z in hull_section(st[1], st[2], st[3], st[4])] for st in ESCORT]
+    k.skin(rings, 'white', None, True, True, wexp=1.0)
+    for side in (-1, 1):
+        side_strip(k, ESCORT[:-1], .18, .32, 'sky', side, .012)
+        side_strip(k, ESCORT[:-1], .34, .42, 'sun', side, .012)
+    deck = []
+    for st in ESCORT[:-1]:
+        y, w, top = st[0], st[1] * .985 - .12, st[2] + .02
+        deck.append([(x, y, z) for x, z in ((-w, top), (w, top), (w, top + .04), (-w, top + .04))])
+    k.skin(deck, 'cream', None, True, True, wexp=1.0)
+    fender = [(hull_x(st, st[2] - .02) + .03, st[0], st[2] - .02) for st in ESCORT[:-1]]
+    k.sweep([(-x, y, z) for x, y, z in fender] + [(0, 2.0, .7)] + list(reversed(fender)), .06, 'navy', 8)
+    # cabin with tinted glass, navy roof and a flag mast
+    k.tbox((0, -.55, .84), (.92, .9), (1.02, 1.08), .62, 'sky', .1, 2, shift=(0, -.06))
+    k.tbox((0, -.58, .98), (.95, .95), (1.0, 1.0), .24, 'glass_dark', .05, 2)
+    k.box((0, -.56, 1.2), (1.14, 1.2, .12), 'navy', .05, 2)
+    k.rod((.3, -.9, 1.25), (.3, -.9, 1.95), .03, 'navy', 6)
+    k.box((.46, -.9, 1.82), (.3, .02, .2), 'sun', .01, 1)
+    k.sphere((-.3, -.9, 1.32), .06, 'lamp', 8, 5)
+    for side in (-1, 1):
+        k.torus((side * .53, -.9, .82), .12, .04, 'orange', 'X', 14, 5)
+    # twin gun on the foredeck
+    k.cyl((0, .82, .6), .38, .1, 'navy', 'Z', 18, .03)
+    turret = k.joint('Turret', (0, .82, .64))
+    k.lathe([(0, .64), (.36, .64), (.38, .72), (.34, .86), (.24, .95), (0, .98)], 'sky', (0, .82, 0),
+            parent=turret, verts=18)
+    k.box((0, 1.1, .8), (.5, .14, .26), 'navy', .06, 2, parent=turret)
+    for side in (-1, 1):
+        k.rod((side * .12, 1.15, .8), (side * .12, 1.62, .8), .045, 'gunmetal', 8, parent=turret)
+        k.cyl((side * .12, 1.6, .8), .06, .08, 'sun', 'Y', 8, parent=turret)
+    k.joint('Muzzle', (0, 1.7, .8), turret)
+    # outboard and a crewman
+    k.box((0, -2.1, .5), (.36, .36, .38), 'white', .1, 2)
+    k.box((0, -2.1, .62), (.37, .37, .08), 'sky', .03, 1)
+    k.box((0, -2.08, .14), (.1, .16, .5), 'navy', .04, 1)
+    crew(k, (-.3, -1.45, .54), s=.56)

@@ -5,6 +5,7 @@ import { checkRescue } from "./rescue-browser.mjs";
 import { checkStrike } from "./strike-browser.mjs";
 import { checkRiver } from "./river-browser.mjs";
 import { checkHarbour } from "./harbour-browser.mjs";
+import { MODELS, MISSIONS } from "../src/data.js";
 
 const url = process.env.GAME_URL || "http://127.0.0.1:5183/";
 const executablePath =
@@ -50,7 +51,7 @@ try {
   // ---------------------------------------------------------------- story flow
   await page.goto(`${url}?qa=1&prologue=1&brief=1`);
   await ready(page);
-  check("all 49 Blender models loaded", await page.evaluate(() => __TIDELOCK__.view.assets.size === 49 && __TIDELOCK__.view.missing.size === 0));
+  check(`all ${MODELS.length} Blender models loaded`, await page.evaluate((n) => __TIDELOCK__.view.assets.size === n && __TIDELOCK__.view.missing.size === 0, MODELS.length));
   check("prologue opens the campaign", await page.evaluate(() => document.getElementById("prologue-dialog").open && __TIDELOCK__.game.paused));
   await page.getByRole("button", { name: /Begin Operation Breakwater/ }).click();
   check(
@@ -185,8 +186,8 @@ try {
     __TIDELOCK__.ui.menu();
   });
   check(
-    "mission control lists all fifteen missions by chapter",
-    await page.evaluate(() => document.querySelectorAll("#mission-list .mission-group button").length === 15),
+    `mission control lists all ${MISSIONS.length} missions by chapter`,
+    await page.evaluate((n) => document.querySelectorAll("#mission-list .mission-group button").length === n, MISSIONS.length),
   );
   const pause = await page.evaluate(() => {
     const g = __TIDELOCK__.game;
@@ -247,7 +248,7 @@ try {
   await checkStrike(page, check);
   await checkHarbour(page, check);
   await checkRiver(page, check);
-  for (const index of [0, 5, 7, 8, 9, 11, 12]) {
+  for (const index of [0, 5, 7, 8, 9, 11, 14, 15]) {
     await page.evaluate((i) => {
       const { ui, game: g } = __TIDELOCK__;
       ui.start(i);
@@ -271,7 +272,7 @@ try {
     watch(mobile);
     await mobile.goto(`${url}?qa=1`);
     await ready(mobile);
-    for (const index of [0, 5, 8, 9, 12]) {
+    for (const index of [0, 5, 8, 9, 13, 15]) {
       await mobile.evaluate((i) => {
         const { ui, game: g, view } = __TIDELOCK__;
         ui.start(i);
@@ -282,14 +283,14 @@ try {
       const layout = await mobile.evaluate((chapter) => {
         const ids = [
           ["#flight-panel", "#move-stick", ".mission-hud", "#ladder", "#comms", "#intel"],
-          ["#move-stick", "#fire-stick", "#shield-hud", ".mission-hud", "#convoy-hud", "#comms"],
+          ["#move-stick", "#fire-stick", "#shield-hud", ".mission-hud", "#convoy-hud", "#comms", ".weapon-bar", "#powerup"],
           ["#move-stick", "#fire-stick", "#shield-hud", ".mission-hud", "#rescue-hud", "#rescue-actions", ".weapon-bar", "#comms"],
         ][chapter];
         const rects = ids.map((s) => document.querySelector(s).getBoundingClientRect()).filter((r) => r.width > 0);
         const inside = rects.every((r) => r.width > 0 && r.left >= 0 && r.right <= innerWidth + 0.5 && r.top >= 0 && r.bottom <= innerHeight + 0.5);
         const apart = rects.every((a, i) => rects.every((b, j) => i === j || !(a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top)));
         return { inside, apart, scroll: document.documentElement.scrollWidth <= innerWidth };
-      }, index < 9 ? 0 : index < 12 ? 1 : 2);
+      }, index < 9 ? 0 : index < 15 ? 1 : 2);
       for (const [name, value] of Object.entries(layout)) check(`mobile ${size.width}x${size.height} mission ${index} ${name}`, value);
       await mobile.screenshot({ path: `test-results/mobile-${size.width}x${size.height}-${index}.png` });
     }

@@ -575,7 +575,12 @@ export class StrikeOperation {
 
   // Turn a pattern bomb by 45° steps (clockwise on screen for positive steps).
   rotate(steps = 1) {
-    this.patternStep = (((this.patternStep + steps) % 8) + 8) % 8;
+    this.setPatternStep(this.patternStep + steps);
+  }
+
+  // Point the pattern straight at one of the eight 45° steps (the angle buttons).
+  setPatternStep(step) {
+    this.patternStep = ((Math.round(step) % 8) + 8) % 8;
     this.rotated = true;
     this.forecastTimer = 0;
   }
@@ -594,7 +599,7 @@ export class StrikeOperation {
   // In the wide city, a flight with no marked drop turns round a little past the last live
   // target instead of crossing empty blocks to the far edge (a mark takes it anywhere).
   patrolEdge(dir) {
-    if (!this.layout.grid || this.aim) return Infinity;
+    if (!(this.layout.grid || this.layout.harbour?.wide) || this.aim) return Infinity;
     let edge = -Infinity;
     for (const t of this.targets()) edge = Math.max(edge, t.position.x * dir);
     for (const e of this.events) if (e.alive > 0) edge = Math.max(edge, e.centre.x * dir);
@@ -1645,7 +1650,7 @@ export class StrikeOperation {
 
   totalTargets() {
     const fixed = this.aa.filter((n) => !n.mounted).length;
-    return this.enemies.length + fixed + this.masts.length + this.trucks.length + (this.fleet ? this.fleet.hostile().length : 0);
+    return this.enemies.length + fixed + this.masts.length + this.trucks.length + (this.fleet ? this.fleet.needed() : 0);
   }
 
   checkOutcome(dt) {
@@ -1656,6 +1661,8 @@ export class StrikeOperation {
     if (total === 0) {
       if (this.bombs.length) return;
       this.closeCombo();
+      // A harbour is won at its quota: whatever still floats runs for the open sea.
+      if (this.fleet?.hostile().some((s) => !s.dead)) g.notify("toast", "THE REST RUN FOR THE OPEN SEA");
       this.say("success");
       g.finish(true);
       return;

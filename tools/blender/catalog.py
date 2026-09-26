@@ -49,6 +49,11 @@ SPECS = [
          {'PropellerL': None, 'PropellerR': None, 'PylonL': None, 'PylonR': None, 'PylonC': None},
          ('Livery',), ('city',), 'Strike bomber'),
     Spec('barge', F + ':barge', 'vehicle', {}, (), ('river',), 'Relief barge Harbor Mercy'),
+    Spec('gunship', F + ':gunship', 'vehicle',
+         {'Rotor': None, 'TailRotor': None, 'ChinTurret': None, 'HeliMuzzle': 'ChinTurret'}, (),
+         ('river',), 'Hornet gunship'),
+    Spec('escort-boat', F + ':escort_boat', 'vehicle', {'Turret': None, 'Muzzle': 'Turret'}, (), ('river',),
+         'Escort gunboat'),
     # hostile vehicles and emplacements
     Spec('cannon', H + ':cannon', 'vehicle', {'Turret': None, 'Muzzle': 'Turret'}, (), ('river',),
          'Bank gun'),
