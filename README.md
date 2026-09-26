@@ -20,8 +20,9 @@ Solace Harbor lies three metres below the tide. Only the Tidelock, a storm barri
 
 ### Chapter 1: city and harbour strikes
 
-- The flight sweeps slowly back and forth over the map and turns round at each edge. **Reverse** (F) turns it round whenever you like, and a mouse click releases a bomb, like Space.
-- A destructible grid of 2–7-storey towers. Glass south faces let you see which floors are occupied.
+- **Click or tap where the bomb should land.** The flight flies there by itself and releases when the pipper sits on the mark; a mark on a target follows it. A Drill marked on someone indoors sets its own floor. You can still steer by hand, drop at once with Space, or turn round with **Reverse** (F).
+- Early bombs hit harder and home a little onto a target they nearly hit (a gold ring shows which), so a near miss still counts. They never home onto a target beside the civilian shelter.
+- A destructible city of 2–7-storey towers, three times wider and four times deeper than each mission's district. The camera slides only when the flight goes far, and a map panel shows the whole city (click it to mark a drop). Glass south faces let you see which floors are occupied.
 - Four bombs with different jobs:
   - **Drill** punches through slabs and detonates on the floor you set;
   - **Scatter** bursts into eight bomblets over crowds;
@@ -55,7 +56,8 @@ Every mission opens with a briefing and ends with a story debrief and star crite
 | --- | --- | --- |
 | Steer formation (lane, speed) | W S, A D | Left stick |
 | Turn the flight round | F | Reverse |
-| Payload, release, salvo | 1–9, Space or mouse click, X | Payload chips, Release, Salvo |
+| Mark the drop point | Click the city or the map, right click cancels | Tap the city |
+| Payload, release now, salvo | 1–9, Space, X | Payload chips, Release, Salvo |
 | Drill floor or pattern angle, formation spacing | E / C or mouse wheel, Q | Floor ladder or the dial's arrows, spacing button |
 | Move boat or helicopter | WASD / arrows | Left stick |
 | Aim and fire | Pointer (hold), or Space | Right stick |

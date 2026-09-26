@@ -584,9 +584,69 @@ html[data-touch="true"] .touch-only {
 html[data-touch="true"] .keys-only {
   display: none !important;
 }
+/* Chapter 1 city map: bottom-right on desktop, tap or click to mark a drop point. */
+#radar {
+  position: absolute;
+  right: 20px;
+  bottom: 40px;
+  padding: 8px;
+  background: var(--panel);
+  border: 2px solid var(--line);
+  border-radius: 14px;
+  box-shadow: var(--lip);
+}
+.radar-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 6px;
+  font-size: 10px;
+  font-weight: 700;
+  color: #cfe0ff;
+  letter-spacing: 0.04em;
+}
+.radar-head svg {
+  width: 14px;
+  height: 14px;
+  color: var(--gold);
+}
+#radar-map {
+  display: block;
+  width: 176px;
+  height: 132px;
+  border-radius: 8px;
+  background: rgba(25, 185, 201, 0.35);
+  cursor: crosshair;
+  touch-action: none;
+}
+/* Narrower desktops: the map sits above the bomb tray, which can reach the right edge. */
+@media (min-width: 901px) and (max-width: 1560px) {
+  #radar {
+    bottom: 164px;
+  }
+}
+/* Tablets: top right, clear of the tray and the ladder (which moves to the bottom right). */
+@media (min-width: 701px) and (max-width: 900px) {
+  #radar {
+    top: 118px;
+    bottom: auto;
+    right: 16px;
+  }
+}
+/* Phones: tap the city itself to mark a drop; a mini map would cover the playfield. */
+@media (max-width: 700px), (orientation: landscape) and (max-height: 520px) {
+  #radar {
+    display: none;
+  }
+}
 /* Intel chips beyond the most urgent ones would crowd the top of the screen. */
 .intel-chip:nth-child(n + 3) {
   display: none;
+}
+@media (max-width: 1320px) {
+  .intel-chip:nth-child(n + 2) {
+    display: none;
+  }
 }
 @media (max-width: 700px), (orientation: landscape) and (max-height: 520px) {
   .intel-chip:nth-child(n + 2) {

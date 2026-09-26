@@ -1,5 +1,6 @@
 // Chapter 1 browser checks: mechanics plus a scripted pilot that flies every strike mission
-// with the same controls a player has (lane, throttle, payload, drill floor, release).
+// with the same controls a player has: it picks the payload and floor, marks the drop point
+// (as a click on the city does), lets the flight fly there, and releases or jinks by hand.
 
 export function autopilot() {
   const { game: g, ui } = window.__TIDELOCK__;
@@ -13,10 +14,11 @@ export function autopilot() {
     let task = null;
     let waitBombs = false;
     let jink = 0,
-      jinkDir = 1;
+      jinkDir = 1,
+      usedBefore = 0;
     for (let step = 0; step < 120 * 420 && g.status === "playing"; step++) {
       if (step % 6 === 0 && !waitBombs) task = choose();
-      steer(task);
+      steer(waitBombs ? null : task);
       // Flak counter, as the HUD teaches: break sideways as soon as a lock's solution freezes.
       const lockIn = Math.min(9, ...op.aa.filter((n) => !n.dead && n.state === "lock").map((n) => (n.solution ? 0 : n.lock)));
       if (lockIn < 0.05 && jink <= 0) {
@@ -28,6 +30,11 @@ export function autopilot() {
         g.input.z = jinkDir;
         // One bomb per task: wait for it to land before judging the next release.
       } else if (task && !waitBombs && tryRelease(task)) waitBombs = true;
+      if (op.used > usedBefore) {
+        usedBefore = op.used;
+        waitBombs = true;
+        op.clearAim();
+      }
       if (waitBombs && op.bombs.length === 0 && op.combo.timer <= 0) waitBombs = false;
       g.update(1 / 120);
     }
@@ -162,15 +169,19 @@ export function autopilot() {
     function steer(task) {
       g.input.x = 0;
       g.input.z = 0;
-      if (!task) return;
+      if (!task) return op.clearAim();
       op.select(task.kind);
       op.setFloor(task.floor);
-      const a = shooter(task.kind);
-      const f = a?.forecast;
-      if (!f || f.kind !== task.kind) return;
+      // Mark the task: a moving target is marked itself (the flight leads it), a group by its centre.
+      const mark = task.target?.position ? task.target : task.members?.find((m) => !m.dead) || null;
       const aim = task.aim();
-      const error = aim.z - f.impact.z;
-      g.input.z = Math.max(-1, Math.min(1, error * 0.9));
+      if (mark && op.aim?.target !== mark) op.setAim({ x: aim.x, z: aim.z }, mark);
+      else if (!mark && (!op.aim || Math.hypot(op.aim.x - aim.x, op.aim.z - aim.z) > 0.5)) {
+        op.clearAim();
+        op.setAim({ x: aim.x, z: aim.z });
+        // A bare point near a target snaps to it; the pilot wants the point itself.
+        if (op.aim?.target) op.aim = { x: aim.x, z: aim.z };
+      }
     }
     function tryRelease(task) {
       const a = shooter(task.kind);
@@ -203,7 +214,8 @@ export async function checkStrike(page, check) {
     ui.start(1);
     g.paused = false;
     const op = g.op;
-    out.threeDrills = op.aircraft[0].payload.drill === 3;
+    const drills = op.aircraft[0].payload.drill;
+    out.drillsLoaded = drills >= 3;
     op.setFloor(3);
     for (let i = 0; i < 20; i++) g.update(1 / 120);
     const forecast = op.aircraft[0].forecast;
@@ -218,7 +230,7 @@ export async function checkStrike(page, check) {
     g.input.x = 0;
     out.throttle = op.flight.speed > window.__TIDELOCK_STRIKE__.FLIGHT.speed + 0.5;
     const used = op.used;
-    out.release = op.release("drill") && op.used === used + 1 && op.aircraft[0].payload.drill === 2;
+    out.release = op.release("drill") && op.used === used + 1 && op.aircraft[0].payload.drill === drills - 1;
     out.cooldown = !op.release("drill");
     for (let i = 0; i < 400; i++) g.update(1 / 120);
     out.bombResolved = op.bombs.length === 0;
@@ -333,10 +345,11 @@ export async function checkStrike(page, check) {
     until(1200, () => g.status !== "playing");
     out.thenSucceeds = g.status === "success";
 
-    // A Drill detonates where its forecast said it would.
+    // A Drill detonates where its forecast said it would (with the homing assist off).
     ui.start(1);
     g.paused = false;
     const op = g.op;
+    op.assistRadius = 0;
     const tower = op.buildings.find((b) => b.id === "T1");
     op.flight.lane = tower.z;
     op.select("drill");
@@ -373,7 +386,7 @@ export async function checkStrike(page, check) {
     ui.start(0);
     ui.updateHUD(true);
     const coach = document.getElementById("coach");
-    out.coachTeachesTheFirstPass = !coach.hidden && /ring/.test(coach.textContent);
+    out.coachTeachesTheFirstPass = !coach.hidden && /Click the jammer mast/.test(coach.textContent);
     out.singleAircraftHidesFlightControls =
       document.getElementById("floor-control").hidden && document.getElementById("salvo").hidden && document.getElementById("formation").hidden;
     ui.start(5);

@@ -84,6 +84,11 @@
       <div id="toast" role="status" aria-live="polite"></div>
       <div id="combo" aria-live="polite"><strong id="combo-count"></strong><span id="combo-bonus"></span></div>
 
+      <aside id="radar" hidden>
+        <div class="radar-head"><i data-lucide="map"></i><span id="radar-title">CITY MAP / TAP TO MARK</span></div>
+        <canvas id="radar-map" width="176" height="132" aria-label="City map: tap to mark where the bomb should fall"></canvas>
+      </aside>
+
       <aside id="ladder" hidden aria-label="Target building floors">
         <div class="ladder-head"><i data-lucide="building-2"></i><span id="ladder-name">NO TARGET</span></div>
         <div id="ladder-floors"></div>
@@ -246,12 +251,14 @@
           <span>Steer formation / vehicle</span><b class="pad">LEFT STICK</b><span>Aim and fire</span><b class="pad">RIGHT STICK</b>
           <span>Payload / Drill floor</span><b class="pad">CARDS / LADDER</b><span>Winch / land</span><b class="pad">HOLD WINCH</b>
           <span>Turn the flight round</span><b class="pad">REVERSE</b><span>Turn a pattern bomb</span><b class="pad">ARROWS</b>
+          <span>Mark the drop (auto release)</span><b class="pad">TAP MAP</b>
           <span>Pause</span><b class="pad">PAUSE BUTTON</b>
         </div>
         <div class="control-reference keys-only">
           <span>Steer formation / vehicle</span><kbd>W A S D</kbd><span>Throttle (flight)</span><kbd>A / D</kbd>
-          <span>Payload select</span><kbd>1 – 9</kbd><span>Release / Salvo</span><kbd>Space or click / X</kbd>
+          <span>Payload select</span><kbd>1 – 9</kbd><span>Release now / Salvo</span><kbd>Space / X</kbd>
           <span>Reverse the flight</span><kbd>F</kbd><span>Turn a pattern bomb</span><kbd>E / C / wheel</kbd>
+          <span>Mark the drop (auto release)</span><kbd>Click</kbd><span>Cancel the mark</span><kbd>Right click</kbd>
           <span>Drill floor</span><kbd>E / C</kbd><span>Formation spacing</span><kbd>Q</kbd>
           <span>Fire (boat, helicopter)</span><kbd>Space / Pointer</kbd><span>Rockets / Guided</span><kbd>2 / 3</kbd>
           <span>Winch / land</span><kbd>Hold E</kbd><span>Flares</span><kbd>F</kbd>

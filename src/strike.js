@@ -38,6 +38,8 @@ import {
   resolvePlace,
   lerp3,
   turnPoint,
+  laneLimits,
+  cityBounds,
   isPattern,
   groundAt,
 } from "./strike-data.js";
@@ -104,14 +106,26 @@ function markerMaterial(kind) {
   return material;
 }
 
+// Every bomb (not just the Lance) homes gently onto a target near its impact point: this much
+// sideways acceleration, in m/s², is enough to pull a near miss onto the target.
+const ASSIST_STEER = 6;
+// How close the pipper must be to the aim point before the flight drops by itself.
+const AIM_TOLERANCE = 1.1;
+// A click this close to a target marks the target itself (and follows it if it moves).
+const AIM_SNAP = 3.5;
+// Seconds between the automatic turns a mark asks for.
+const AUTO_TURN_GAP = 5;
+// How far past the last live target a flight with no mark flies before it turns round.
+const PATROL_MARGIN = 18;
+
 // Steer a guided bomb toward `aim`: match the horizontal speed needed to arrive as it falls.
-function guide(s, aim, dt) {
+function guide(s, aim, dt, steer = BOMBS.lance.steer) {
   const dy = s.y - (aim.y + 0.5);
   const a = -GRAVITY / 2,
     disc = s.vy * s.vy + 4 * a * Math.max(0.1, dy);
   const t = Math.max(0.25, (s.vy + Math.sqrt(disc)) / (2 * a));
   const want = { x: (aim.x - s.x) / t, z: (aim.z - s.z) / t };
-  const max = BOMBS.lance.steer * dt;
+  const max = steer * dt;
   s.vx += clamp(want.x - s.vx, -max, max);
   s.vz += clamp(want.z - s.vz, -max, max);
 }
@@ -128,6 +142,12 @@ export class StrikeOperation {
     // Harbour layouts mark their quays; bombs anywhere else fall to sea level.
     this.land = this.layout.harbour?.land || null;
     this.turnX = turnPoint(this.layout);
+    this.lanes = laneLimits(this.layout);
+    this.bounds = cityBounds(this.layout);
+    // Early missions hit harder, and every bomb homes a little onto a target near its impact.
+    this.power = this.layout.power ?? 1;
+    this.assistRadius = this.layout.assist ?? 0;
+    this.aim = null;
     // Floor tiles by building, storey and grid cell: support checks are O(1) per person.
     this.tileSize = (CITY.half * 2) / CITY.tiles;
     this.slabs = new Map();
@@ -135,9 +155,10 @@ export class StrikeOperation {
       if (block.kind === "slab" || block.kind === "roof")
         this.slabs.set(this.tileKey(block.b, block.f, block.min[0] + 0.01, block.min[2] + 0.01), block);
     this.city = new CityView(view, this.layout, this.buildings, this.blocks, g.index);
-    // The flight enters from the west edge and sweeps back and forth; `dir` is +1 flying east.
+    // The flight starts just west of the mission's own blocks, heading east, and sweeps back and
+    // forth over the whole city; `dir` is +1 flying east.
     this.flight = {
-      x: -this.turnX + 2,
+      x: Math.max(-this.turnX + 2, -(this.layout.cols * CITY.pitch) / 2 - 10),
       dir: 1,
       lane: this.layout.startLane ?? 3,
       speed: FLIGHT.speed,
@@ -181,8 +202,18 @@ export class StrikeOperation {
     this.lockMarker.material.depthTest = false;
     this.lockMarker.renderOrder = 11;
     this.lockMarker.visible = false;
+    // The player's drop mark, and the gold ring on whatever the next bomb will home onto.
+    this.aimMarker = view.ring(V(), 1.4, 0xffd23f, 0.28);
+    this.aimMarker.material.depthTest = false;
+    this.aimMarker.renderOrder = 11;
+    this.aimMarker.visible = false;
+    this.assistMarker = view.ring(V(), 1.1, 0xffc62b, 0.18);
+    this.assistMarker.material.depthTest = false;
+    this.assistMarker.renderOrder = 11;
+    this.assistMarker.visible = false;
     // Place the flight before the first frame: a release must never start from the models' origin.
     this.updateFlight(0);
+    this.follow(0, true);
   }
 
   // ------------------------------------------------------------------ setup
@@ -429,6 +460,119 @@ export class StrikeOperation {
     this.forecastTimer = 0;
   }
 
+  // Aim where the player clicked or tapped: snap to a target near the point, then let the flight
+  // fly there and drop by itself. The point is { x, z }; `target` may be given directly.
+  setAim(point, target = null) {
+    if (this.game.status !== "playing") return false;
+    if (!target) {
+      const near = this.targets()
+        .map((t) => ({ t, d: Math.hypot(t.position.x - point.x, t.position.z - point.z) }))
+        .filter((c) => c.d < AIM_SNAP)
+        .sort((a, b) => a.d - b.d)[0];
+      target = near?.t || null;
+    }
+    this.aim = target ? { target } : { x: point.x, z: point.z };
+    this.aimUsed = true;
+    this.forecastTimer = 0;
+    return true;
+  }
+
+  clearAim() {
+    this.aim = null;
+  }
+
+  // Where the drop should land now: a marked target where it will be when the bomb lands.
+  aimPoint() {
+    const aim = this.aim;
+    if (!aim) return null;
+    if (!aim.target) return aim;
+    if (aim.target.dead) {
+      this.aim = null;
+      return null;
+    }
+    const f = this.shooterFor(this.selected)?.forecast;
+    const p = this.predict(aim.target, f ? f.time : 2);
+    return { x: p.x, z: p.z };
+  }
+
+  // Steering toward the aim point: slow over the target, fast on the way; turn round only once the
+  // point is far enough behind that a turn brings the pipper back over it.
+  autoPilot() {
+    const aim = this.aimPoint();
+    if (!aim) return null;
+    const f = this.flight;
+    const a = this.shooterFor(this.selected) || this.aircraft.find((x) => x.alive);
+    const impact = a?.forecast?.impact;
+    const pipperZ = impact ? impact.z : f.lane + (a?.slot.z || 0);
+    const dz = aim.z - pipperZ;
+    const lateral = clamp(dz * 1.4, -1, 1) * (Math.abs(dz) > 6 ? FLIGHT.lateralFast : FLIGHT.lateral);
+    let throttle = 0;
+    if (impact && a && f.phase === "pass") {
+      const lead = Math.abs(impact.x - a.mesh.position.x);
+      const ahead = (aim.x - impact.x) * f.dir;
+      const behindAircraft = (a.mesh.position.x - aim.x) * f.dir;
+      // A moving mark can swing behind and ahead again: one automatic turn per few seconds.
+      const settled = this.game.time - (this.autoTurnAt ?? -Infinity) > AUTO_TURN_GAP;
+      if (behindAircraft > lead + 1 && settled && this.canReverse()) {
+        this.reverse();
+        this.autoTurnAt = this.game.time;
+      } else throttle = Math.abs(dz) > 3 && ahead < 10 ? -1 : ahead > 18 ? 1 : ahead > 8 ? 0.35 : 0;
+    }
+    return { throttle, lateral };
+  }
+
+  // Drop by itself once the pipper sits on the aim point, unless the drop would touch a civilian.
+  autoRelease() {
+    const aim = this.aimPoint();
+    if (!aim || !this.canRelease()) return;
+    const a = this.shooterFor(this.selected);
+    const f = a?.forecast;
+    if (!a || !f || a.cooldown > 0 || f.shelter || f.prediction?.civilian) return;
+    const p = f.detonation || f.impact;
+    // A marked target that the Lance has locked, or that the bomb will home onto, is good enough.
+    const target = this.aim.target;
+    const locked = target && (f.lock === target || this.assistLock === target);
+    if (!locked && Math.hypot(p.x - aim.x, p.z - aim.z) > AIM_TOLERANCE) return;
+    // A Drill marked on someone indoors goes to their floor, and only into their building.
+    if (this.selected === "drill" && target?.cur?.b) {
+      if (f.building?.id !== target.cur.b) return;
+      const b = this.buildings.find((x) => x.id === target.cur.b);
+      const floor = target.cur.f >= b.floors ? b.floors + 1 : target.cur.f + 1;
+      if (this.floor !== floor) {
+        this.setFloor(floor);
+        return;
+      }
+    }
+    if (this.release(this.selected)) this.clearAim();
+  }
+
+  // Bombs home gently onto the nearest target within the mission's assist radius of their impact.
+  assistTarget(point, kind, time = 0) {
+    if (!point || kind === "lance" || isPattern(kind) || !this.assistRadius) return null;
+    return (
+      this.targets()
+        .map((t) => ({ t, d: Math.hypot(t.position.x - point.x, t.position.z - point.z) }))
+        .filter((c) => c.d < this.assistRadius)
+        .sort((a, b) => a.d - b.d)
+        .find((c) => this.assistSafe(c.t, kind, time))?.t || null
+    );
+  }
+
+  // Homing ends on the target, and the forecast only vouches for the unassisted impact: a target
+  // whose blast would reach the shelter or a civilian hull is never homed on.
+  assistSafe(target, kind, time) {
+    const at = this.predict(target, time);
+    const points = forecastPoints({ kind, impact: { x: at.x, y: at.y ?? target.position.y, z: at.z } });
+    if (points.some((p) => shelterStruck(this.blocks, this.buildings, p, p.kind, 0.6, this.power))) return false;
+    return !(this.fleet && predictHits(this.fleet.predicted(this.game.time + time), points, BOMBS[kind].radius * this.power).civilian);
+  }
+
+  // A bomb's blast: stronger early on (the mission's power), except pattern bomblets, whose size
+  // is the shape puzzle.
+  blastDef(def) {
+    return def.pattern ? def : { ...def, radius: def.radius * this.power };
+  }
+
   // Turn a pattern bomb by 45° steps (clockwise on screen for positive steps).
   rotate(steps = 1) {
     this.patternStep = (((this.patternStep + steps) % 8) + 8) % 8;
@@ -445,6 +589,16 @@ export class StrikeOperation {
   canReverse() {
     const f = this.flight;
     return f.phase === "pass" && this.game.status === "playing" && -f.x * f.dir < this.turnX - 1;
+  }
+
+  // In the wide city, a flight with no marked drop turns round a little past the last live
+  // target instead of crossing empty blocks to the far edge (a mark takes it anywhere).
+  patrolEdge(dir) {
+    if (!this.layout.grid || this.aim) return Infinity;
+    let edge = -Infinity;
+    for (const t of this.targets()) edge = Math.max(edge, t.position.x * dir);
+    for (const e of this.events) if (e.alive > 0) edge = Math.max(edge, e.centre.x * dir);
+    return edge === -Infinity ? Infinity : edge + PATROL_MARGIN;
   }
 
   // Turn the flight round now: a wingover back along the same lane.
@@ -551,6 +705,7 @@ export class StrikeOperation {
       trail: 0,
       owner: aircraft,
       target: kind === "lance" ? this.lockTarget(aircraft.forecast?.impact, state) : null,
+      assist: this.assistTarget(forecast.impact, kind, forecast.time),
       angle: this.patternAngle,
       dead: false,
     };
@@ -613,6 +768,7 @@ export class StrikeOperation {
     this.updateFlight(dt);
     this.updateEnemies(dt);
     this.checkSupport();
+    this.autoRelease();
     this.updateTrucks(dt);
     this.fleet?.update(dt);
     this.updateMasts(dt);
@@ -629,17 +785,37 @@ export class StrikeOperation {
       if (this.combo.timer <= 0) this.closeCombo();
     }
     this.checkOutcome(dt);
+    this.follow(dt);
     if (g.debrisActive) g.physics.world.step(dt);
+  }
+
+  // The camera slides after the flight: it keeps the pipper (or the flight) in its window and
+  // only moves when that point strays toward the window's edge.
+  follow(dt, snap = false) {
+    const a = this.shooterFor(this.selected) || this.aircraft.find((x) => x.alive);
+    const p = a?.forecast?.impact || (a ? { x: a.mesh.position.x, z: a.mesh.position.z } : null);
+    if (p) this.game.view.followStrike(p, dt, snap);
+    const aim = this.aimPoint();
+    this.aimMarker.visible = Boolean(aim);
+    if (aim) {
+      this.aimMarker.position.set(aim.x, (this.land ? 0.1 : CITY.ground) + 0.2, aim.z);
+      this.aimMarker.scale.setScalar(1 + Math.sin(this.game.time * 6) * 0.12);
+    }
   }
 
   updateFlight(dt) {
     const g = this.game,
       f = this.flight;
+    // With an aim point the flight steers itself; any held key or stick input takes over while held.
+    const auto = g.status === "playing" ? this.autoPilot() : null;
+    const manualX = Math.abs(g.input.x) > 0.05,
+      manualZ = Math.abs(g.input.z) > 0.05;
     // Speed is screen-relative: pushing toward the direction of flight speeds the flight up.
-    const targetSpeed = clamp(FLIGHT.speed + g.input.x * f.dir * FLIGHT.throttle, FLIGHT.minSpeed, FLIGHT.maxSpeed);
+    const throttle = auto && !manualX ? auto.throttle : g.input.x * f.dir;
+    const targetSpeed = clamp(FLIGHT.speed + throttle * FLIGHT.throttle, FLIGHT.minSpeed, FLIGHT.maxSpeed);
     f.speed += clamp(targetSpeed - f.speed, -FLIGHT.accel * dt, FLIGHT.accel * dt);
-    f.lateral = THREE.MathUtils.damp(f.lateral, g.input.z * FLIGHT.lateral, 5, dt);
-    f.lane = clamp(f.lane + f.lateral * dt, FLIGHT.laneMin, FLIGHT.laneMax);
+    f.lateral = THREE.MathUtils.damp(f.lateral, auto && !manualZ ? auto.lateral : g.input.z * FLIGHT.lateral, 5, dt);
+    f.lane = clamp(f.lane + f.lateral * dt, this.lanes.min, this.lanes.max);
     f.spacing = THREE.MathUtils.damp(f.spacing, f.wide ? FLIGHT.wide : FLIGHT.tight, 4, dt);
     // Turn progress: a wingover that climbs, swings out and comes back on the same lane.
     let u = 0,
@@ -647,7 +823,7 @@ export class StrikeOperation {
     if (f.phase === "pass") {
       f.x += f.speed * f.dir * dt;
       vx = f.speed * f.dir;
-      if (f.x * f.dir > this.turnX) this.reverse(true);
+      if (f.x * f.dir > Math.min(this.turnX, this.patrolEdge(f.dir))) this.reverse(true);
     } else {
       f.turn += dt;
       if (f.turn >= FLIGHT.turnTime) {
@@ -993,6 +1169,10 @@ export class StrikeOperation {
       const s = bomb.state;
       const a = { x: s.x, y: s.y, z: s.z };
       if (bomb.kind === "lance" && bomb.time > 0.3) this.steer(bomb, dt);
+      else if (bomb.assist && !bomb.assist.dead && bomb.time > 0.2) {
+        const t = this.predict(bomb.assist, Math.max(0, -s.vy / 9.81));
+        guide(s, { x: t.x, y: bomb.assist.position.y, z: t.z }, dt, ASSIST_STEER);
+      }
       stepBomb(s, dt);
       const b = { x: s.x, y: s.y, z: s.z };
       bomb.mesh.position.set(b.x, b.y, b.z);
@@ -1064,10 +1244,11 @@ export class StrikeOperation {
       const ground = groundAt(this.land, b.x, b.z);
       const end = hit ? lerp3(a, b, hit.t) : b.y <= ground ? lerp3(a, b, (a.y - ground) / (a.y - b.y)) : null;
       if (!end) continue;
-      if (target.type === "ship") return Math.hypot(end.x - aim.x, end.z - aim.z) < BOMBS.lance.radius + target.def.beam / 2 - 0.4;
+      const reach = BOMBS.lance.radius * this.power;
+      if (target.type === "ship") return Math.hypot(end.x - aim.x, end.z - aim.z) < reach + target.def.beam / 2 - 0.4;
       const chest = { x: aim.x, y: aim.y + lift, z: aim.z };
       return (
-        Math.hypot(end.x - chest.x, end.y - chest.y, end.z - chest.z) < BOMBS.lance.radius - 0.4 &&
+        Math.hypot(end.x - chest.x, end.y - chest.y, end.z - chest.z) < reach - 0.4 &&
         !lineBlocked(this.blocks, this.buildings, end, chest)
       );
     }
@@ -1140,7 +1321,7 @@ export class StrikeOperation {
     if (bomb.dead) return;
     bomb.dead = true;
     g.view.disposeObject(bomb.mesh);
-    const def = bomb.kind === "bomblet" ? bomb.def || BOMBS.scatter : BOMBS[bomb.kind];
+    const def = this.blastDef(bomb.kind === "bomblet" ? bomb.def || BOMBS.scatter : BOMBS[bomb.kind]);
     const radius = def.radius;
     const breakRadius = def.breakRadius;
     const p = V(point.x, point.y, point.z);
@@ -1155,7 +1336,7 @@ export class StrikeOperation {
       );
       if (d < limit) this.breakBlock(block, point);
     }
-    if (shelterStruck(this.blocks, this.buildings, point, bomb.kind)) this.abort();
+    if (shelterStruck(this.blocks, this.buildings, point, bomb.kind, 0, def.pattern ? 1 : this.power)) this.abort();
     let kills = 0;
     const exposed = (target, lift) => {
       const chest = { x: target.position.x, y: target.position.y + lift, z: target.position.z };
@@ -1334,14 +1515,14 @@ export class StrikeOperation {
       a.pipper.position.set(impact.x, impact.y + 0.12, impact.z);
       const ringRadius =
         kind === "scatter"
-          ? def.spread + def.radius * 0.6
+          ? def.spread + def.radius * this.power * 0.6
           : kind === "shockwave"
-            ? def.radius
+            ? def.radius * this.power
             : kind === "lance"
               ? 1.8
               : def.pattern
                 ? 0.7
-                : 1.3;
+                : 1.3 * this.power;
       for (const ring of a.pipperRings.outer) ring.scale.setScalar(ringRadius);
       for (const ring of a.pipperRings.inner) ring.scale.setScalar(primary ? 0.8 : 0.6);
       for (const child of a.pipper.children) {
@@ -1352,7 +1533,7 @@ export class StrikeOperation {
       const risk =
         forecast.crossesShelter ||
         Boolean(forecast.prediction?.civilian) ||
-        points.some((p) => shelterStruck(this.blocks, this.buildings, p, p.kind, 0.6));
+        points.some((p) => shelterStruck(this.blocks, this.buildings, p, p.kind, 0.6, def.pattern ? 1 : this.power));
       forecast.shelter = risk;
       this.drawCells(a, def.pattern ? points : null, risk ? 0x2f86e8 : def.color, primary);
       if (risk) {
@@ -1368,6 +1549,12 @@ export class StrikeOperation {
     this.city.showBand(drill?.building || null, drill ? drill.floor : 0, BOMBS.drill.color);
     if (shelterWarning) this.say(this.fleet ? "ferry" : "shelter", 25);
     this.updateLockMarker();
+    // The gold ring marks what the selected bomb will home onto.
+    const shooter = this.shooterFor(this.selected);
+    const assist = shooter?.forecast ? this.assistTarget(shooter.forecast.impact, this.selected, shooter.forecast.time) : null;
+    this.assistMarker.visible = Boolean(assist) && this.flight.phase === "pass";
+    if (assist) this.assistMarker.position.set(assist.position.x, assist.position.y + 0.12, assist.position.z);
+    this.assistLock = assist;
     this.shelterWarning = shelterWarning;
   }
 
@@ -1425,12 +1612,9 @@ export class StrikeOperation {
     const over = lead?.forecast?.building?.id;
     const index = g.index;
     const lesson = this.layout.lesson;
-    if (index === 0 && this.used === 0) {
-      const mast = this.masts[0];
-      return mast && over === mast.cur.b ? "release" : "steer";
-    }
+    if (index === 0 && this.used === 0) return this.aim ? "aiming" : "aim";
     if (index === 0 && !this.reversed && this.flight.pass <= 2 && this.left().total > 0) return "reverse";
-    if (index === 1 && !this.floorTouched) return "floor";
+    if (index === 1 && !this.floorTouched && !this.aimUsed) return "floor";
     if (index === 2 && this.events.some((e) => e.alive && !e.status?.active && e.status?.next < 14)) return "rally";
     if (index === 3 && !this.salvoUsed && this.flight.pass <= 2) return "salvo";
     if (index === 4 && g.time < 14) return "shelter";
@@ -1545,6 +1729,8 @@ export class StrikeOperation {
       pass: this.flight.pass,
       harbour: Boolean(this.fleet),
       reversible: this.canReverse(),
+      aim: this.aim ? { ...this.aimPoint(), marked: Boolean(this.aim?.target) } : null,
+      radar: this.radar(),
       pattern: this.patternInfo(),
       events: [
         ...this.events.map((e) => ({
@@ -1567,6 +1753,25 @@ export class StrikeOperation {
       shelter: this.shelterWarning,
       progress: total ? 1 - (left.enemies + left.aa + left.masts + left.trucks + left.ships) / total : 1,
       labels: [...this.patternLabels(), ...(this.fleet ? this.fleet.labels() : []), ...this.rallyLabels()],
+    };
+  }
+
+  // What the minimap shows: the city, the flight, its pipper, the aim, and everything to hit.
+  radar() {
+    const a = this.shooterFor(this.selected) || this.aircraft.find((x) => x.alive);
+    const dot = (t, kind) => ({ x: t.position.x, z: t.position.z, kind });
+    return {
+      bounds: this.bounds,
+      flight: a ? { x: a.mesh.position.x, z: a.mesh.position.z, dir: this.flight.dir } : null,
+      pipper: a?.forecast ? { x: a.forecast.impact.x, z: a.forecast.impact.z } : null,
+      targets: [
+        ...this.enemies.filter((e) => !e.dead).map((e) => dot(e, e.officer ? "officer" : "enemy")),
+        ...this.aa.filter((n) => !n.dead && !n.mounted).map((n) => dot(n, "flak")),
+        ...this.masts.filter((m) => !m.dead).map((m) => dot(m, "mast")),
+        ...this.trucks.filter((t) => !t.dead).map((t) => dot(t, "truck")),
+        ...(this.fleet ? this.fleet.ships.filter((s) => !s.dead).map((s) => dot(s, s.civilian ? "civilian" : "ship")) : []),
+      ],
+      rallies: this.events.filter((e) => e.alive > 0).map((e) => ({ x: e.centre.x, z: e.centre.z, active: Boolean(e.status?.active) })),
     };
   }
 

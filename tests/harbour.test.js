@@ -250,7 +250,9 @@ test("labelled stations count down, and permanent ones are always on", () => {
 
 test("harbour missions sit in Chapter 1 with enough payload, their own lessons and sea-level bombs", () => {
   assert.equal(STRIKE_MISSIONS.length, 9);
-  assert.deepEqual(STRIKE_MISSIONS.slice(6), HARBOUR_MISSIONS);
+  assert.deepEqual(STRIKE_MISSIONS.slice(6).map((m) => m.lesson), HARBOUR_MISSIONS.map((m) => m.lesson));
+  // Pattern bomblets keep their size: a harbour mission's power is 1.
+  assert.ok(STRIKE_MISSIONS.slice(6).every((m) => m.power === 1));
   assert.deepEqual(HARBOUR_MISSIONS.map((m) => m.lesson), ["stick", "shapes", "ring"]);
   for (const m of HARBOUR_MISSIONS) {
     assert.ok(m.par <= payloadTotal(m.aircraft));

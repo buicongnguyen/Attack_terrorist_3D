@@ -261,13 +261,43 @@ Smaller notes from the same review were fixed too:
 - the save migration has a test;
 - a pen tap no longer releases a bomb.
 
-## 11. Controls
+## 11. Tidelock 2.3: mark the drop, a wider city
+
+### The brief
+
+Make the city strikes easier. Fly even slower and make the drop point easy to control. Early bombs hit harder, so a near miss still destroys the target, and bombs home a little onto a target they nearly hit. Make the city three times wider and four times deeper. Let the camera follow a large area and slide only when the flight goes far. Then: more bombs and a shorter wait between releases.
+
+### What changed
+
+| Ask | Change |
+| --- | --- |
+| Easier control of the drop | **Mark the drop.** Click or tap the city (or the new map panel) and the flight steers there by itself: lane, speed and turning round. It releases when the pipper sits on the mark. A mark on a target within 3.5 m snaps to it and follows it. A Drill marked on someone indoors sets its own floor and only enters their building. Holding any steering input takes over; a right click cancels; Space still drops at once. The auto-release refuses whenever the pipper is blue (shelter or civilian). |
+| Slower flight | 3.4 → 2.4 m/s; the throttle still reaches 6.5 m/s for the long way round. |
+| Stronger early bombs | Each city mission has a **power** that scales blast radius: 1.6× on 1.1 down to 1.2× on 1.6. The pipper ring and the shelter check use the same radius. The harbour's pattern bomblets keep their size, because fitting the shape is the puzzle there. |
+| Bombs that track | **Homing assist.** A bomb homes gently (6 m/s²) onto the nearest target within the mission's assist radius of its forecast impact: 4.5 m on 1.1 down to 2.5 m on 1.6 and the harbour. A gold ring shows what it will home onto. The Lance keeps its own guidance, and pattern bombs don't home. **The assist never homes onto a target whose blast would reach the shelter or a civilian hull,** because the forecast only vouches for the unassisted impact. |
+| 3× wider, 4× deeper city | The authored district sits in the middle of a grid 3× its width and 4× its depth. Every other lot holds a generated tower (2–6 storeys) or a pocket park, the same every time. That's 60–95 buildings and up to 11,700 destructible blocks. A spatial index (buildings by grid cell, blocks by building) keeps a forecast under a millisecond. |
+| Track a large area | The camera frames a window of about four by three blocks. **It only slides when the pipper strays past the middle 70 % of it**, smoothly, never past the city's edge; the sun and its shadows travel with it. A map panel shows the whole city, the window, targets, gatherings, the flight and the mark, and a click on it marks a drop there. On phones the map is hidden (tap the city itself). |
+| More bombs, shorter reload | City payloads roughly doubled (1.1 carries 4 Shockwaves instead of 2, the Glass Tower's lead aircraft 8 Drills and 2 Lances) and the harbour's raised by half or more. An aircraft is ready to release again after 0.25 s instead of 0.6 s. |
+
+Also:
+- **The flight stays over the action.** With no mark, it turns round 18 m past the last live target instead of crossing empty blocks to the far edge (57 s each way at the new speed).
+- **The outer city is quieter.** Cars, street lamps, trees and roof plant thin out more than a block from the mission's own district, keeping the scene at 180–450 draw calls and 0.7–1.1 M triangles (shadow pass included). On the test GPU a frame costs less than 2.2's did.
+
+### Found while building
+
+- **A moving mark made the flight turn back and forth.** A truck circling the Glass Tower block swung behind the flight and ahead again; each time the autopilot reversed. Automatic turns are now at least 5 s apart, and a mark that the Lance has locked, or that the homing assist has, releases without waiting for the pipper to sit exactly on it.
+- **Homing onto the shelter.** On 1.5 an assisted bomb bent onto a fighter beside the civilian shelter. See the assist rule above.
+- **Right-to-left segments lost their search margin** in the new building index, so a segment could miss a building it clipped. Both directions now search the same box, and a Node test compares the index with a search of every building for 600 random points and segments.
+- **The scripted pilot re-marked its target while the first bomb was falling** and dropped extra bombs. It now waits for the bomb, like the release rule it tests.
+
+## 12. Controls
 
 | Action | Desktop | Touch |
 | --- | --- | --- |
 | Steer formation (lane / speed) | W S / A D | Left stick (portrait: the camera looks along the flight path) |
 | Turn the flight round | F | Reverse |
-| Payload, release, salvo | 1–9, Space or a mouse click, X | Payload chips, Release, Salvo |
+| Mark the drop (the flight flies there and releases) | Click the city or the map; right click cancels | Tap the city |
+| Payload, release now, salvo | 1–9, Space, X | Payload chips, Release, Salvo |
 | Drill floor or pattern angle, formation spacing | E / C or the mouse wheel, Q | Floor ladder or the dial's arrows, spacing button |
 | Gunboat and helicopter | WASD, pointer aim and fire, 1/2/3 weapons, F flares, hold E winch | Two sticks, weapon and flare buttons, hold Winch |
 | Pause, retry | Esc, R | Top bar |

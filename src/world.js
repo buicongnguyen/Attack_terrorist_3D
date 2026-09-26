@@ -3,7 +3,7 @@ import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { MODELS, ASSET_REVISION } from "./data.js";
 import { createPickupBadgeMaterial, badgeWorldSize } from "./pickups.js";
 import { createRescueScenery } from "./rescue-world.js";
-import { STRIKE_MISSIONS, CITY, FLIGHT } from "./strike-data.js";
+import { STRIKE_MISSIONS, CITY, FLIGHT, cityBounds } from "./strike-data.js";
 import { consolidate } from "./consolidate.js";
 
 const materialCache = new Map();
@@ -454,6 +454,7 @@ export class WorldView {
     this.missionIndex = index;
     this.applyMood(chapter);
     this.strikeLayout = chapter === 0 ? STRIKE_MISSIONS[index] : null;
+    this.strikeFollow = { x: 0, z: 0 };
     if (chapter === 0) this.createHarbour();
     else if (chapter === 1) this.createRiver();
     else createRescueScenery(this, mission);
@@ -463,7 +464,8 @@ export class WorldView {
   createHarbour() {
     const V = (x, y, z) => new THREE.Vector3(x, y, z);
     const layout = this.strikeLayout;
-    const south = (layout.rows * CITY.pitch) / 2 + 7;
+    const bounds = cityBounds(layout);
+    const south = bounds.maxZ + 7;
     // Moored boats along the quay and islands on the horizon give the district a place in the world.
     // (Not in a harbour mission, where a boat past the quay could be mistaken for a target.)
     for (let i = 0; i < (layout.harbour ? 0 : 4); i++) {
@@ -472,9 +474,10 @@ export class WorldView {
     }
     const distant = new THREE.Group();
     this.level.add(distant);
+    const span = bounds.maxX - bounds.minX + 80;
     for (let i = 0; i < 5; i++) {
-      const x = -80 + i * 40,
-        z = -72 - (i % 2) * 14;
+      const x = bounds.minX - 40 + (i * span) / 4,
+        z = bounds.minZ - 48 - (i % 2) * 14;
       this.island(x, z, 22 + (i % 3) * 8, 16, 2 + (i % 2), distant);
       this.model("rock", V(x - 3, 2, z), 3 + (i % 2) * 1.5, distant);
       for (let p = 0; p < 2; p++) this.model("palm", V(x + 4 + p * 3, 2.6, z + 3 - p * 2), 1.2, distant);
@@ -514,6 +517,7 @@ export class WorldView {
       mobile = width < 700;
     if (this.chapter === 0 && this.strikeLayout) this.frameCity(aspect, mobile);
     else {
+      this.strikeWindow = null;
       const heightWorld = Math.max(43, 38 / aspect);
       this.camera.left = (-heightWorld * aspect) / 2;
       this.camera.right = (heightWorld * aspect) / 2;
@@ -533,6 +537,7 @@ export class WorldView {
     if (this.distant) this.distant.visible = !mobile;
     this.baseCamera.copy(this.camera.position);
     if (this.chapter === 2 && this.followPlayerPosition) this.followPlayer(this.followPlayerPosition, 0, true);
+    else if (this.strikeWindow) this.applyStrikeCamera();
     else {
       this.sun.position.copy(this.sunOffset || new THREE.Vector3(-26, 44, 30));
       this.sun.target.position.set(0, 0, 0);
@@ -543,11 +548,14 @@ export class WorldView {
     this.needsRender = true;
   }
 
-  // Fit the district and the formation's flight band inside the HUD-free part of the screen.
+  // Fit a window of the city and the formation's flight band inside the HUD-free part of the
+  // screen. A harbour's window is the whole basin; a big city's is about the old district's size,
+  // and the camera slides it after the flight (followStrike).
   frameCity(aspect, mobile) {
     const layout = this.strikeLayout;
-    const w = (layout.cols * CITY.pitch) / 2 + 4,
-      d = (layout.rows * CITY.pitch) / 2 + 5;
+    const w = layout.grid ? 1.75 * CITY.pitch + 4 : (layout.cols * CITY.pitch) / 2 + 4,
+      d = layout.grid ? 1.5 * CITY.pitch + 5 : (layout.rows * CITY.pitch) / 2 + 5;
+    this.strikeWindow = { w, d, bounds: cityBounds(layout) };
     this.target.set(0, 4, 0);
     // Portrait phones look along the flight path so the district fills the screen width:
     // the formation then flies down the screen instead of across it.
@@ -568,7 +576,7 @@ export class WorldView {
     // Keep the formation in view once it is over the district (portrait: from its first third).
     // Landscape frames the whole sweep, turns included, so the wingover at either edge stays in
     // view. Portrait looks along the flight path and keeps the district large instead.
-    const sweep = (layout.cols * CITY.pitch) / 2 + FLIGHT.turnMargin + FLIGHT.turnReach * 0.5;
+    const sweep = layout.grid ? w + 2 : (layout.cols * CITY.pitch) / 2 + FLIGHT.turnMargin + FLIGHT.turnReach * 0.5;
     const band = this.strikePortrait ? [-w * 0.3, w] : [-sweep, sweep];
     for (const x of band) for (const z of [-d + 3, d - 3]) include(x, FLIGHT.altitude, z);
     // HUD bands the district must avoid: top bar, flight panel, and (landscape phones) the side panel.
@@ -596,6 +604,66 @@ export class WorldView {
     this.camera.top = cy + spanY / 2;
     this.camera.bottom = cy - spanY / 2;
     this.camera.updateProjectionMatrix();
+    // The camera's pose for a window centred on the origin; following only translates it.
+    this.strikeCameraBase = this.camera.position.clone();
+  }
+
+  // Slide the strike window after `point` (the pipper): it may wander around the middle of the
+  // window freely; only near the edge does the window move, smoothly, and never past the city.
+  followStrike(point, dt, snap = false) {
+    const win = this.strikeWindow;
+    if (!win) return;
+    const f = this.strikeFollow;
+    const hx = win.w * 0.35,
+      hz = win.d * 0.3;
+    const keep = (value, lo, hi) => (lo > hi ? (lo + hi) / 2 : Math.min(hi, Math.max(lo, value)));
+    let tx = keep(f.x, point.x - hx, point.x + hx),
+      tz = keep(f.z, point.z - hz, point.z + hz);
+    tx = keep(tx, win.bounds.minX + win.w - 6, win.bounds.maxX - win.w + 6);
+    tz = keep(tz, win.bounds.minZ + win.d - 6, win.bounds.maxZ - win.d + 6);
+    if (snap) {
+      f.x = tx;
+      f.z = tz;
+    } else {
+      const k = 1 - Math.exp(-dt * 2.5);
+      f.x += (tx - f.x) * k;
+      f.z += (tz - f.z) * k;
+    }
+    this.applyStrikeCamera();
+  }
+
+  applyStrikeCamera() {
+    if (!this.strikeCameraBase) return;
+    const f = this.strikeFollow;
+    this.camera.position.copy(this.strikeCameraBase).add(new THREE.Vector3(f.x, 0, f.z));
+    this.camera.updateMatrixWorld();
+    this.baseCamera.copy(this.camera.position);
+    // The sun and its shadow map travel with the window.
+    this.sun.position.set(f.x, 0, f.z).add(this.sunOffset || new THREE.Vector3(-26, 44, 30));
+    this.sun.target.position.set(f.x, 0, f.z);
+    this.sun.target.updateMatrixWorld();
+    this.needsRender = true;
+  }
+
+  // The rooftop or ground point under a screen position in the strike view.
+  pickStrike(clientX, clientY, buildings, groundY) {
+    const rect = this.canvasRect || this.canvas.getBoundingClientRect();
+    const pointer = new THREE.Vector2(((clientX - rect.left) / rect.width) * 2 - 1, (-(clientY - rect.top) / rect.height) * 2 + 1);
+    this.ray.setFromCamera(pointer, this.camera);
+    const ray = this.ray.ray,
+      box = new THREE.Box3(),
+      hit = new THREE.Vector3();
+    let best = null;
+    for (const b of buildings) {
+      box.min.set(b.min[0], b.min[1], b.min[2]);
+      box.max.set(b.max[0], b.max[1], b.max[2]);
+      if (!ray.intersectBox(box, hit)) continue;
+      const d = hit.distanceTo(ray.origin);
+      if (!best || d < best.d) best = { d, x: hit.x, y: hit.y, z: hit.z, building: b.id };
+    }
+    if (best) return best;
+    const p = ray.intersectPlane(new THREE.Plane(new THREE.Vector3(0, 1, 0), -groundY), new THREE.Vector3());
+    return p ? { x: p.x, y: groundY, z: p.z, building: null } : null;
   }
 
   followPlayer(position, dt, snap = false) {

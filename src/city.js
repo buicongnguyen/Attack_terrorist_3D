@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { CITY, storyY, lotCenter } from "./strike-data.js";
+import { CITY, storyY, lotCenter, cityBounds } from "./strike-data.js";
 import { material } from "./world.js";
 
 const V = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
@@ -183,9 +183,8 @@ export class CityView {
   }
 
   extent() {
-    const w = this.layout.cols * CITY.pitch,
-      d = this.layout.rows * CITY.pitch;
-    return { w, d, minX: -w / 2 - 4, maxX: w / 2 + 4, minZ: -d / 2 - 4, maxZ: d / 2 + 6 };
+    const b = cityBounds(this.layout);
+    return { w: b.maxX - b.minX, d: b.maxZ - b.minZ, minX: b.minX - 4, maxX: b.maxX + 4, minZ: b.minZ - 4, maxZ: b.maxZ + 6 };
   }
 
   buildGround() {
@@ -219,6 +218,7 @@ export class CityView {
           this.box(V(x + 2.6, CITY.ground + 0.07, z + i * 0.7), V(1.1, 0.02, 0.4), 0xf7f1e1);
         }
     for (const plaza of this.layout.plazas || []) this.buildPlaza(plaza);
+    for (const park of this.layout.parks || []) this.buildPark(park);
   }
 
   buildHarbour(harbour) {
@@ -274,12 +274,28 @@ export class CityView {
         if (z1 - z0 > 5 && this.random() < 0.6) this.prop("streetlight", V(x, top, z1 - 1.2), 0.85, 0);
   }
 
+  // Street lines between every lot of the whole grid (the mission's blocks and the wider city).
   lines() {
+    const g = this.layout.grid || { minCol: 0, maxCol: this.layout.cols - 1, minRow: 0, maxRow: this.layout.rows - 1 };
     const avenues = [],
       streets = [];
-    for (let c = 0; c <= this.layout.cols; c++) avenues.push((c - this.layout.cols / 2) * CITY.pitch);
-    for (let r = 0; r <= this.layout.rows; r++) streets.push((r - this.layout.rows / 2) * CITY.pitch);
+    for (let c = g.minCol; c <= g.maxCol + 1; c++) avenues.push((c - this.layout.cols / 2) * CITY.pitch);
+    for (let r = g.minRow; r <= g.maxRow + 1; r++) streets.push((r - this.layout.rows / 2) * CITY.pitch);
     return { avenues, streets };
+  }
+
+  // A pocket park on an empty lot: lawn, a path and a few trees.
+  buildPark(park) {
+    const c = lotCenter(this.layout, park.col, park.row);
+    this.box(V(c.x, CITY.ground + 0.03, c.z), V(8.6, 0.08, 8.6), 0x5cbf45);
+    this.box(V(c.x, CITY.ground + 0.07, c.z), V(8.6, 0.02, 1.4), 0xf2d19a);
+    for (const [dx, dz] of [
+      [-2.6, -2.4],
+      [2.8, -2.2],
+      [-2.2, 2.6],
+      [2.4, 2.8],
+    ])
+      this.prop("street-tree", V(c.x + dx, CITY.ground, c.z + dz), 0.85 + this.random() * 0.25, this.random() * 6);
   }
 
   buildPlaza(plaza) {
@@ -442,23 +458,32 @@ export class CityView {
     }
   }
 
+  // More than a lot away from the mission's own blocks, the wider city is quieter: fewer cars,
+  // lamps and trees keep the twelve-times-larger district within the old triangle budget.
+  quiet(x, z) {
+    const { cols, rows } = this.layout;
+    const margin = CITY.pitch * 1.5;
+    return Math.abs(x) > (cols * CITY.pitch) / 2 + margin || Math.abs(z) > (rows * CITY.pitch) / 2 + margin;
+  }
+
   buildStreetLife() {
     const lines = this.lines();
     const e = this.extent();
     const palette = ["#ff4b2b", "#ffc62b", "#2f86e8", "#33d69f", "#f7f1e1", "#b04cff", "#ff8a6b"];
+    const skip = (x, z, keep) => this.random() > (this.quiet(x, z) ? keep * 0.3 : keep);
     for (const z of lines.streets)
       for (let i = 0; i < lines.avenues.length - 1; i++) {
-        if (this.random() < 0.35) continue;
+        if (skip((lines.avenues[i] + lines.avenues[i + 1]) / 2, z, 0.65)) continue;
         const x = (lines.avenues[i] + lines.avenues[i + 1]) / 2 + (this.random() - 0.5) * 4;
         const lane = this.random() < 0.5 ? -1.2 : 1.2;
         this.prop("car", V(x, CITY.ground, z + lane), 0.72, Math.PI / 2, palette[Math.floor(this.random() * palette.length)]);
       }
     for (const x of lines.avenues)
       for (const z of lines.streets) {
-        if (this.random() < 0.5) this.prop("streetlight", V(x + 2.3, CITY.ground, z - 2.3), 0.85, Math.PI / 4);
+        if (!skip(x, z, 0.5)) this.prop("streetlight", V(x + 2.3, CITY.ground, z - 2.3), 0.85, Math.PI / 4);
       }
     for (const b of this.buildings) {
-      if (this.random() < 0.55)
+      if (!skip(b.x, b.z, 0.55))
         this.prop("street-tree", V(b.x + (this.random() < 0.5 ? -5.2 : 5.2), CITY.ground, b.z + 5.3), 0.72, this.random() * 6);
     }
     for (let x = e.minX + 3; x < e.maxX - 2; x += 7 + this.random() * 4)

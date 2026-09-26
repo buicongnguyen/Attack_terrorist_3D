@@ -13,31 +13,50 @@ export const CITY = Object.freeze({
   wall: 0.26,
 });
 
-// The flight sweeps back and forth over the district at a third of its old speed: it turns
-// round a short way past each edge (or whenever the player reverses) and never leaves the map.
+// The flight sweeps back and forth over the city: it turns round a short way past each edge (or
+// whenever the player reverses) and never leaves the map. Over targets it flies slowly (`speed`);
+// flying to a far aim point it cruises at up to `maxSpeed`, and steers faster sideways.
 export const FLIGHT = Object.freeze({
   altitude: 24,
-  speed: 3.4,
-  minSpeed: 2.2,
-  maxSpeed: 5,
-  throttle: 1.4,
-  accel: 2.4,
+  speed: 2.4,
+  minSpeed: 1.6,
+  maxSpeed: 6.5,
+  throttle: 4.1,
+  accel: 3,
   lateral: 6,
+  lateralFast: 11,
   turnMargin: 8,
   turnTime: 2.6,
   turnReach: 4,
   turnClimb: 3,
-  laneMin: -24,
-  laneMax: 24,
   tight: 3.4,
   wide: 7,
   trail: 3.4,
-  release: 0.6,
+  // Seconds before an aircraft can release again.
+  release: 0.25,
 });
 
-// Where the flight turns round for a layout: past the district edge by the turn margin.
+// The playable city in world metres: lot edges of the whole grid.
+export function cityBounds(layout) {
+  const g = layout.grid || { minCol: 0, maxCol: layout.cols - 1, minRow: 0, maxRow: layout.rows - 1 };
+  return {
+    minX: (g.minCol - layout.cols / 2) * CITY.pitch,
+    maxX: (g.maxCol + 1 - layout.cols / 2) * CITY.pitch,
+    minZ: (g.minRow - layout.rows / 2) * CITY.pitch,
+    maxZ: (g.maxRow + 1 - layout.rows / 2) * CITY.pitch,
+  };
+}
+
+// Where the flight turns round for a layout: past the city edge by the turn margin.
 export function turnPoint(layout) {
-  return (layout.cols * CITY.pitch) / 2 + FLIGHT.turnMargin;
+  const b = cityBounds(layout);
+  return Math.max(-b.minX, b.maxX) + FLIGHT.turnMargin;
+}
+
+// How far north and south the flight's lane can go.
+export function laneLimits(layout) {
+  const b = cityBounds(layout);
+  return { min: b.minZ + 2, max: b.maxZ - 2 };
 }
 
 export const WALK = Object.freeze({ speed: 3, run: 4.4, stair: 1 });
@@ -163,19 +182,20 @@ const S = (x, z) => ({ x, z });
 // Palette for facades: warm, saturated, and never beige.
 const HUES = ["#e2704f", "#2fb3a6", "#f2b441", "#ff8a6b", "#6ec3f0", "#8fd64a"];
 const GENERIC = ["Harbour Offices", "Ferry Flats", "Chandlery", "Net Lofts", "Pilot House", "Salt Store"];
+const wrap = (n, m) => ((n % m) + m) % m;
 const tower = (id, col, row, floors, opts = {}) => ({
   id,
   col,
   row,
   floors,
-  name: GENERIC[(col + row * 3) % GENERIC.length],
+  name: GENERIC[wrap(col + row * 3, GENERIC.length)],
   kind: "tower",
-  color: HUES[(col * 2 + row * 3 + floors) % HUES.length],
+  color: HUES[wrap(col * 2 + row * 3 + floors, HUES.length)],
   roof: [],
   ...opts,
 });
 
-export const STRIKE_MISSIONS = [
+const CITY_MISSIONS = [
   {
     // 1.1 Wake-Up Call: a single jammer with three guards. Teaches the pipper.
     cols: 3,
@@ -195,7 +215,7 @@ export const STRIKE_MISSIONS = [
       { kind: "post", at: P("T1", 4, 2.2, 1.2) },
       { kind: "post", at: P("T1", 4, 1.6, -2.4) },
     ],
-    aircraft: [{ callsign: "Kestrel One", crew: "iona", payload: { shockwave: 2 } }],
+    aircraft: [{ callsign: "Kestrel One", crew: "iona", payload: { shockwave: 4 } }],
     par: 1,
     alert: 0,
   },
@@ -222,7 +242,7 @@ export const STRIKE_MISSIONS = [
       },
       { kind: "post", at: P("T2", 1, 0.6, 0.8) },
     ],
-    aircraft: [{ callsign: "Kestrel One", crew: "iona", payload: { drill: 3 } }],
+    aircraft: [{ callsign: "Kestrel One", crew: "iona", payload: { drill: 6 } }],
     par: 2,
     alert: 0,
   },
@@ -263,8 +283,8 @@ export const STRIKE_MISSIONS = [
       { kind: "post", at: P("T4", 2, 0.5, 0.5) },
     ],
     aircraft: [
-      { callsign: "Kestrel One", crew: "iona", payload: { drill: 1, shockwave: 1 } },
-      { callsign: "Kestrel Two", crew: "piper", payload: { scatter: 2 } },
+      { callsign: "Kestrel One", crew: "iona", payload: { drill: 2, shockwave: 2 } },
+      { callsign: "Kestrel Two", crew: "piper", payload: { scatter: 4 } },
     ],
     par: 3,
     alert: 0,
@@ -310,9 +330,9 @@ export const STRIKE_MISSIONS = [
       { kind: "post", at: P("T5", 1, 0.2, 0.2) },
     ],
     aircraft: [
-      { callsign: "Kestrel One", crew: "iona", payload: { drill: 4 } },
-      { callsign: "Kestrel Two", crew: "piper", payload: { scatter: 2 } },
-      { callsign: "Kestrel Three", crew: "bram", payload: { shockwave: 2 } },
+      { callsign: "Kestrel One", crew: "iona", payload: { drill: 6 } },
+      { callsign: "Kestrel Two", crew: "piper", payload: { scatter: 4 } },
+      { callsign: "Kestrel Three", crew: "bram", payload: { shockwave: 4 } },
     ],
     par: 5,
     alert: 0,
@@ -362,9 +382,9 @@ export const STRIKE_MISSIONS = [
       { kind: "post", at: P("T2", 4, -1.8, -1.4) },
     ],
     aircraft: [
-      { callsign: "Kestrel One", crew: "iona", payload: { drill: 4 } },
-      { callsign: "Kestrel Two", crew: "piper", payload: { scatter: 2 } },
-      { callsign: "Kestrel Three", crew: "bram", payload: { shockwave: 2 } },
+      { callsign: "Kestrel One", crew: "iona", payload: { drill: 6 } },
+      { callsign: "Kestrel Two", crew: "piper", payload: { scatter: 4 } },
+      { callsign: "Kestrel Three", crew: "bram", payload: { shockwave: 4 } },
     ],
     par: 6,
     alert: 16,
@@ -426,16 +446,67 @@ export const STRIKE_MISSIONS = [
       {
         callsign: "Kestrel One",
         crew: "iona",
-        payload: { drill: 5, lance: 1 },
+        payload: { drill: 8, lance: 2 },
       },
-      { callsign: "Kestrel Two", crew: "piper", payload: { scatter: 3 } },
-      { callsign: "Kestrel Three", crew: "bram", payload: { shockwave: 3 } },
+      { callsign: "Kestrel Two", crew: "piper", payload: { scatter: 5 } },
+      { callsign: "Kestrel Three", crew: "bram", payload: { shockwave: 5 } },
     ],
     par: 8,
     alert: 14,
   },
+];
+
+// ------------------------------------------------------------------ the wider city
+
+// Each city mission's authored blocks sit in the middle of a district with three times as many
+// buildings along a row and four times as many along a column. The rest is generated: ordinary
+// towers of 2-6 storeys and small parks, the same every time for a given mission.
+export const CITY_GROWTH = Object.freeze({ cols: 3, rows: 4 });
+// Early missions hit harder (blast radius) and their bombs home further onto a nearby target.
+const POWER = [1.6, 1.5, 1.4, 1.3, 1.25, 1.2];
+const ASSIST = [4.5, 4, 3.5, 3, 3, 2.5];
+
+function seeded(seed) {
+  let a = seed >>> 0;
+  return () => {
+    a = (a + 0x6d2b79f5) >>> 0;
+    let t = a;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+export function expandCity(layout, index) {
+  const extraCols = layout.cols * (CITY_GROWTH.cols - 1),
+    extraRows = layout.rows * (CITY_GROWTH.rows - 1);
+  const grid = {
+    minCol: -Math.floor(extraCols / 2),
+    maxCol: layout.cols - 1 + Math.ceil(extraCols / 2),
+    minRow: -Math.floor(extraRows / 2),
+    maxRow: layout.rows - 1 + Math.ceil(extraRows / 2),
+  };
+  const random = seeded(4099 + index * 977);
+  const buildings = [...layout.buildings],
+    parks = [];
+  for (let row = grid.minRow; row <= grid.maxRow; row++)
+    for (let col = grid.minCol; col <= grid.maxCol; col++) {
+      if (col >= 0 && col < layout.cols && row >= 0 && row < layout.rows) continue;
+      if (random() < 0.14) {
+        parks.push({ col, row });
+        continue;
+      }
+      const floors = 2 + Math.floor(random() * 5);
+      const roof = random() < 0.25 ? [random() < 0.5 ? "hvac" : "tank"] : [];
+      buildings.push(tower(`C${col}_${row}`, col, row, floors, { roof }));
+    }
+  return { ...layout, grid, buildings, parks, power: POWER[index] ?? 1.2, assist: ASSIST[index] ?? 2.5 };
+}
+
+export const STRIKE_MISSIONS = [
+  ...CITY_MISSIONS.map((layout, i) => expandCity(layout, i)),
   // 1.7–1.9: the harbour strikes on the Front's flotilla.
-  ...HARBOUR_MISSIONS,
+  ...HARBOUR_MISSIONS.map((layout) => ({ ...layout, power: 1, assist: 2.5 })),
 ];
 
 // ------------------------------------------------------------------ geometry
@@ -451,8 +522,35 @@ export function storyY(f) {
   return CITY.ground + CITY.plinth + f * CITY.floorH;
 }
 
+// Buildings are indexed by grid cell and carry their own blocks, so lookups in a big city only
+// look at the buildings a point or segment can touch.
+function indexBuildings(buildings) {
+  const cells = new Map();
+  for (const b of buildings)
+    for (let cx = Math.floor(b.min[0] / CITY.pitch); cx <= Math.floor(b.max[0] / CITY.pitch); cx++)
+      for (let cz = Math.floor(b.min[2] / CITY.pitch); cz <= Math.floor(b.max[2] / CITY.pitch); cz++) {
+        const key = `${cx},${cz}`;
+        if (!cells.has(key)) cells.set(key, []);
+        cells.get(key).push(b);
+      }
+  buildings.cells = cells;
+  return buildings;
+}
+
+// Buildings whose cells overlap the box [x0, x1] × [z0, z1] (all of them for an unindexed list).
+export function buildingsNear(buildings, x0, z0, x1, z1) {
+  if (!buildings.cells) return buildings;
+  const found = new Set();
+  for (let cx = Math.floor(Math.min(x0, x1) / CITY.pitch); cx <= Math.floor(Math.max(x0, x1) / CITY.pitch); cx++)
+    for (let cz = Math.floor(Math.min(z0, z1) / CITY.pitch); cz <= Math.floor(Math.max(z0, z1) / CITY.pitch); cz++)
+      for (const b of buildings.cells.get(`${cx},${cz}`) || []) found.add(b);
+  return [...found];
+}
+
+const blocksOf = (blocks, building) => building.blocks || blocks.filter((block) => block.b === building.index);
+
 export function resolveBuildings(layout) {
-  return layout.buildings.map((b, index) => {
+  return indexBuildings(layout.buildings.map((b, index) => {
     // Harbour warehouses sit on the quays at explicit positions rather than on the lot grid.
     const c = b.x !== undefined ? { x: b.x, z: b.z } : lotCenter(layout, b.col, b.row);
     return {
@@ -464,7 +562,7 @@ export function resolveBuildings(layout) {
       min: [c.x - CITY.half, CITY.ground, c.z - CITY.half],
       max: [c.x + CITY.half, storyY(b.floors) + 0.05, c.z + CITY.half],
     };
-  });
+  }));
 }
 
 export function buildingById(buildings, id) {
@@ -483,7 +581,7 @@ export function resolvePlace(buildings, place) {
 
 export function buildingAt(buildings, x, z, margin = 0) {
   return (
-    buildings.find(
+    buildingsNear(buildings, x - margin, z - margin, x + margin, z + margin).find(
       (b) =>
         x >= b.min[0] - margin &&
         x <= b.max[0] + margin &&
@@ -544,6 +642,8 @@ export function buildBlocks(buildings) {
     block.id = id;
     block.alive = true;
   });
+  for (const b of buildings) b.blocks = [];
+  for (const block of blocks) buildings[block.b].blocks.push(block);
   return blocks;
 }
 
@@ -585,10 +685,10 @@ export function blocksNear(blocks, p, radius) {
 // All live blocks crossed by a segment, nearest first. Buildings prefilter the search.
 export function blockHits(blocks, buildings, a, b) {
   const hits = [];
-  for (const building of buildings) {
+  for (const building of buildingsNear(buildings, Math.min(a.x, b.x) - 0.1, Math.min(a.z, b.z) - 0.1, Math.max(a.x, b.x) + 0.1, Math.max(a.z, b.z) + 0.1)) {
     if (segmentBox(a, b, building.min, building.max, 0.1) === null) continue;
-    for (const block of blocks) {
-      if (block.b !== building.index || !block.alive) continue;
+    for (const block of blocksOf(blocks, building)) {
+      if (!block.alive) continue;
       const t = segmentBox(a, b, block.min, block.max);
       if (t !== null) hits.push({ t, block });
     }
@@ -603,10 +703,10 @@ const holds = (block, p, e = 1e-3) =>
   p.z >= block.min[2] - e && p.z <= block.max[2] + e;
 
 export function lineBlocked(blocks, buildings, a, b) {
-  for (const building of buildings) {
+  for (const building of buildingsNear(buildings, Math.min(a.x, b.x) - 0.1, Math.min(a.z, b.z) - 0.1, Math.max(a.x, b.x) + 0.1, Math.max(a.z, b.z) + 0.1)) {
     if (segmentBox(a, b, building.min, building.max, 0.1) === null) continue;
-    for (const block of blocks) {
-      if (block.b !== building.index || !block.alive || holds(block, a) || holds(block, b)) continue;
+    for (const block of blocksOf(blocks, building)) {
+      if (!block.alive || holds(block, a) || holds(block, b)) continue;
       const t = segmentBox(a, b, block.min, block.max);
       if (t !== null && t < 0.999) return true;
     }
@@ -1006,10 +1106,9 @@ export function surfaceBelow(buildings, blocks, x, z, land = null) {
   const building = buildingAt(buildings, x, z);
   if (!building) return groundAt(land, x, z);
   let top = storyY(0);
-  for (const block of blocks) {
+  for (const block of blocksOf(blocks, building)) {
     if (
       block.alive &&
-      block.b === building.index &&
       (block.kind === "roof" || block.kind === "slab") &&
       x >= block.min[0] &&
       x <= block.max[0] &&
@@ -1046,13 +1145,13 @@ const aabbDistance = (min, max, p) =>
 
 // One rule for both the pipper warning and the abort: a detonation breaks a shelter
 // block, or lands within 45% of its blast radius of the shelter.
-export function shelterStruck(blocks, buildings, point, kind, margin = 0) {
+export function shelterStruck(blocks, buildings, point, kind, margin = 0, power = 1) {
   const def = kind === "bomblet" ? BOMBS.scatter : BOMBS[kind] || BOMBS.scatter;
   for (const b of buildings) {
     if (b.kind !== "shelter") continue;
-    if (aabbDistance(b.min, b.max, point) < def.radius * 0.45 + margin) return true;
-    for (const block of blocks) {
-      if (block.b !== b.index || !block.alive) continue;
+    if (aabbDistance(b.min, b.max, point) < def.radius * power * 0.45 + margin) return true;
+    for (const block of blocksOf(blocks, b)) {
+      if (!block.alive) continue;
       const limit = (block.kind === "glass" ? def.breakRadius * 1.5 : def.breakRadius) + margin;
       if (aabbDistance(block.min, block.max, point) < limit) return true;
     }

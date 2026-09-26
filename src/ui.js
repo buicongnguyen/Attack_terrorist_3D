@@ -44,9 +44,10 @@ import {
   CircleDashed,
   Grid2x2,
   ArrowLeftRight,
+  Map as MapIcon,
 } from "lucide";
 import { CHAPTERS, MISSIONS, missionNumber, chapterSize, saveResult, migrateSave } from "./data.js";
-import { BOMBS, BOMB_ORDER, FLIGHT, isPattern } from "./strike-data.js";
+import { BOMBS, BOMB_ORDER, FLIGHT, STRIKE_MISSIONS, isPattern } from "./strike-data.js";
 import { CAST, PROLOGUE, CHAPTER_STORY, MISSION_STORY, FINALE, speaker } from "./story.js";
 import { activeBonuses } from "./pickups.js";
 import { RescueHUD } from "./rescue-hud.js";
@@ -97,6 +98,7 @@ const iconSet = {
   CircleDashed,
   Grid2x2,
   ArrowLeftRight,
+  Map: MapIcon,
 };
 const BOMB_ICON = {
   drill: "drill",
@@ -156,9 +158,18 @@ const GAME_KEYS = new Set(["Space", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowR
 
 // Coach lines for the teaching missions: [keyboard, touch].
 const COACH = {
-  steer: ["Steer with W / S until the ring covers the jammer mast", "Drag the stick until the ring covers the jammer mast"],
-  release: ["The ring is on the mast. Release with SPACE", "The ring is on the mast. Tap Release"],
-  floor: ["Set the Drill floor: E / C, or click a floor on the ladder", "Tap a floor on the ladder to set the Drill"],
+  aim: [
+    "Click the jammer mast: the flight flies there and drops the bomb by itself",
+    "Tap the jammer mast: the flight flies there and drops the bomb by itself",
+  ],
+  aiming: [
+    "Flying to your mark. It drops by itself; SPACE drops now, right-click cancels",
+    "Flying to your mark. It drops by itself; Release drops now",
+  ],
+  floor: [
+    "Click a spotter in the tower: the Drill sets its own floor. E / C set it by hand",
+    "Tap a spotter in the tower: the Drill sets its own floor",
+  ],
   rally: ["A crowd gathers soon. Line up the ring before the countdown ends", "A crowd gathers soon. Line up the ring before the countdown ends"],
   salvo: ["Salvo (X) drops from every aircraft at once", "Tap Salvo to drop from every aircraft at once"],
   shelter: ["The blue roof is the civilian shelter. Keep every ring off it", "The blue roof is the civilian shelter. Keep every ring off it"],
@@ -396,11 +407,10 @@ export class UI {
     this.view.canvas.addEventListener("pointerdown", (e) => {
       if (e.button !== 0 || this.game.paused) return;
       if (this.game.chapter === 0) {
-        // A mouse click releases. Touch and pen drop with the Release button, so a stray tap on
-        // the map never wastes a bomb.
-        if (e.pointerType !== "mouse" || this.game.status !== "playing") return;
+        // A click or tap marks where the bomb should land: the flight flies there and drops.
+        if (this.game.status !== "playing") return;
         this.game.audio.unlock();
-        this.strike?.release();
+        this.markDrop(e.clientX, e.clientY);
         return;
       }
       this.game.audio.unlock();
@@ -423,6 +433,20 @@ export class UI {
       },
       { passive: false },
     );
+    // Right-click cancels the drop mark.
+    this.view.canvas.addEventListener("contextmenu", (e) => {
+      if (!this.strike) return;
+      e.preventDefault();
+      this.strike.clearAim();
+    });
+    // The minimap: tap or click anywhere on it to mark a drop point there.
+    $("radar-map").addEventListener("pointerdown", (e) => {
+      if (!this.strike || this.game.paused || this.game.status !== "playing") return;
+      e.preventDefault();
+      this.game.audio.unlock();
+      const point = this.radarToWorld(e.offsetX, e.offsetY);
+      if (point) this.strike.setAim(point);
+    });
     const release = () => (this.pointerFire = false);
     this.view.canvas.addEventListener("pointerup", release);
     this.view.canvas.addEventListener("pointercancel", release);
@@ -462,6 +486,124 @@ export class UI {
     for (const a of strike.aircraft)
       for (const kind of BOMB_ORDER) if (a.payload[kind] !== undefined && !kinds.includes(kind)) kinds.push(kind);
     return kinds;
+  }
+
+  markDrop(clientX, clientY) {
+    const strike = this.strike;
+    if (!strike) return;
+    const point = this.view.pickStrike(clientX, clientY, strike.buildings, strike.land ? 0.05 : 1);
+    if (point) strike.setAim(point);
+  }
+
+  // Minimap transform: world metres to canvas pixels, turned like the camera in portrait.
+  radarFrame() {
+    const canvas = $("radar-map");
+    const b = this.game.op?.bounds;
+    if (!b) return null;
+    const portrait = this.view.strikePortrait;
+    const spanX = b.maxX - b.minX + 8,
+      spanZ = b.maxZ - b.minZ + 8;
+    const across = portrait ? spanZ : spanX,
+      down = portrait ? spanX : spanZ;
+    const scale = Math.min(canvas.width / across, canvas.height / down);
+    const cx = (b.minX + b.maxX) / 2,
+      cz = (b.minZ + b.maxZ) / 2;
+    return { canvas, portrait, scale, cx, cz };
+  }
+
+  worldToRadar(f, x, z) {
+    const u = f.portrait ? -(z - f.cz) : x - f.cx,
+      v = f.portrait ? x - f.cx : z - f.cz;
+    return [f.canvas.width / 2 + u * f.scale, f.canvas.height / 2 + v * f.scale];
+  }
+
+  radarToWorld(px, py) {
+    const f = this.radarFrame();
+    if (!f) return null;
+    const canvas = f.canvas,
+      r = canvas.getBoundingClientRect();
+    const u = ((px * canvas.width) / r.width - canvas.width / 2) / f.scale,
+      v = ((py * canvas.height) / r.height - canvas.height / 2) / f.scale;
+    return f.portrait ? { x: f.cx + v, z: f.cz - u } : { x: f.cx + u, z: f.cz + v };
+  }
+
+  drawRadar(op) {
+    const f = this.radarFrame();
+    if (!f || !op.radar) return;
+    const c = f.canvas.getContext("2d");
+    const at = (x, z) => this.worldToRadar(f, x, z);
+    c.clearRect(0, 0, f.canvas.width, f.canvas.height);
+    const b = op.radar.bounds;
+    // City plate, then every building as a block; the shelter in blue.
+    const corners = [at(b.minX, b.minZ), at(b.maxX, b.maxZ)];
+    c.fillStyle = "rgba(240, 215, 170, 0.22)";
+    c.fillRect(Math.min(corners[0][0], corners[1][0]), Math.min(corners[0][1], corners[1][1]), Math.abs(corners[1][0] - corners[0][0]), Math.abs(corners[1][1] - corners[0][1]));
+    for (const building of this.game.op.buildings) {
+      const [x0, y0] = at(building.min[0], building.min[2]),
+        [x1, y1] = at(building.max[0], building.max[2]);
+      c.fillStyle = building.kind === "shelter" ? "#2f86e8" : "rgba(255, 255, 255, 0.28)";
+      c.fillRect(Math.min(x0, x1), Math.min(y0, y1), Math.abs(x1 - x0), Math.abs(y1 - y0));
+    }
+    // The camera's window.
+    const win = this.view.strikeWindow,
+      follow = this.view.strikeFollow;
+    if (win && follow) {
+      const [x0, y0] = at(follow.x - win.w, follow.z - win.d),
+        [x1, y1] = at(follow.x + win.w, follow.z + win.d);
+      c.strokeStyle = "rgba(255, 255, 255, 0.7)";
+      c.lineWidth = 1;
+      c.strokeRect(Math.min(x0, x1), Math.min(y0, y1), Math.abs(x1 - x0), Math.abs(y1 - y0));
+    }
+    for (const r of op.radar.rallies) {
+      const [x, y] = at(r.x, r.z);
+      c.strokeStyle = r.active ? "#ff4b2b" : "#ffc62b";
+      c.lineWidth = 2;
+      c.beginPath();
+      c.arc(x, y, 5, 0, Math.PI * 2);
+      c.stroke();
+    }
+    const colors = { enemy: "#ff4b2b", officer: "#ffc62b", flak: "#ff3b3b", mast: "#ff8a2b", truck: "#ff4b2b", ship: "#ff4b2b", civilian: "#7fd8ff" };
+    for (const t of op.radar.targets) {
+      const [x, y] = at(t.x, t.z);
+      c.fillStyle = colors[t.kind] || "#ff4b2b";
+      const size = t.kind === "enemy" || t.kind === "officer" ? 2.2 : 3.2;
+      c.fillRect(x - size, y - size, size * 2, size * 2);
+    }
+    if (op.radar.pipper) {
+      const [x, y] = at(op.radar.pipper.x, op.radar.pipper.z);
+      c.strokeStyle = BOMBS[op.selected]?.css || "#ffffff";
+      c.lineWidth = 2;
+      c.beginPath();
+      c.arc(x, y, 4, 0, Math.PI * 2);
+      c.stroke();
+    }
+    if (op.aim) {
+      const [x, y] = at(op.aim.x, op.aim.z);
+      c.strokeStyle = "#ffd23f";
+      c.lineWidth = 2;
+      c.beginPath();
+      c.moveTo(x - 6, y);
+      c.lineTo(x + 6, y);
+      c.moveTo(x, y - 6);
+      c.lineTo(x, y + 6);
+      c.stroke();
+    }
+    if (op.radar.flight) {
+      const [x, y] = at(op.radar.flight.x, op.radar.flight.z);
+      const heading = f.portrait ? (op.radar.flight.dir > 0 ? Math.PI / 2 : -Math.PI / 2) : op.radar.flight.dir > 0 ? 0 : Math.PI;
+      c.save();
+      c.translate(x, y);
+      c.rotate(heading);
+      c.fillStyle = "#ffc62b";
+      c.beginPath();
+      c.moveTo(7, 0);
+      c.lineTo(-5, -5);
+      c.lineTo(-2, 0);
+      c.lineTo(-5, 5);
+      c.closePath();
+      c.fill();
+      c.restore();
+    }
   }
 
   anyDialog() {
@@ -676,7 +818,9 @@ export class UI {
         ["A / D", "Speed"],
         ["F", "Reverse"],
         kinds.size > 1 && [`1-${kinds.size}`, "Payload"],
-        ["SPACE / CLICK", "Release"],
+        ["CLICK", "Mark the drop: the flight flies there and drops"],
+        ["SPACE", "Drop now"],
+        ["RIGHT CLICK", "Cancel the mark"],
         flight && ["X", "Salvo"],
         flight && ["Q", "Formation spacing"],
         drill && ["E / C", "Drill floor"],
@@ -700,7 +844,8 @@ export class UI {
         ["STICK", "Steer and speed"],
         ["REVERSE", "Turn the flight round"],
         kinds.size > 1 && ["CARDS", "Tap a payload"],
-        ["RELEASE", "Drop the payload"],
+        ["TAP", "Mark the drop: the flight flies there and drops"],
+        ["RELEASE", "Drop now"],
         flight && ["SALVO", "Every aircraft at once"],
         drill && ["LADDER", "Tap a floor for the Drill"],
         pattern && ["ARROWS", "Turn the pattern"],
@@ -817,7 +962,8 @@ export class UI {
     $("objective").textContent = story.goals[0];
     $("mission-index").textContent = `MISSION ${String(missionNumber(data.index)).padStart(2, "0")} / ${String(chapterSize(c)).padStart(2, "0")}`;
     $("footer-mode").textContent = [`${story.place} / AIRBORNE`, `${story.place} / UPRIVER`, `${story.place} / EXTRACTION`][c];
-    $("flight-panel").hidden = $("ladder").hidden = $("intel").hidden = c !== 0;
+    $("flight-panel").hidden = $("ladder").hidden = $("intel").hidden = $("radar").hidden = c !== 0;
+    if (c === 0) $("radar-title").textContent = `${STRIKE_MISSIONS[data.index].harbour ? "HARBOUR" : "CITY"} MAP / ${this.touch ? "TAP" : "CLICK"} TO MARK`;
     $("combat-controls").hidden = c === 0;
     $("shield-hud").hidden = c === 0;
     $("convoy-hud").hidden = c !== 1;
@@ -1002,6 +1148,7 @@ export class UI {
   }
 
   updateStrike(op) {
+    this.drawRadar(op);
     const left = op.left.enemies + op.left.aa + op.left.masts + op.left.trucks + (op.left.ships || 0);
     $("objective-count").textContent = String(left).padStart(2, "0");
     const parts = [

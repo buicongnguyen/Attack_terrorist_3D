@@ -103,7 +103,7 @@ try {
     return held === -1 && g.input.z === 0;
   });
   check("keys follow the physical layout (AZERTY Z steers like W)", azerty);
-  // F turns the flight round; a mouse click on the map releases like Space.
+  // F turns the flight round; a click on the city marks a drop that the flight flies to and drops on.
   await page.evaluate(() => {
     __TIDELOCK__.ui.start(0);
     __TIDELOCK__.game.paused = false;
@@ -115,8 +115,30 @@ try {
     const g = __TIDELOCK__.game;
     for (let i = 0; i < 600 && g.op.flight.phase !== "pass"; i++) g.update(1 / 120);
   });
+  const mast = await page.evaluate(() => {
+    const { game: g, view } = __TIDELOCK__;
+    const m = g.op.masts[0];
+    view.render(0);
+    const p = m.position.clone().project(view.camera);
+    const r = view.canvas.getBoundingClientRect();
+    return { x: r.left + ((p.x + 1) / 2) * r.width, y: r.top + ((1 - p.y) / 2) * r.height };
+  });
+  await page.mouse.click(mast.x, mast.y);
+  check("a click on the mast marks it", await page.evaluate(() => __TIDELOCK__.game.op.aim?.target === __TIDELOCK__.game.op.masts[0]));
+  const marked = await page.evaluate(() => {
+    const g = __TIDELOCK__.game;
+    for (let i = 0; i < 120 * 90 && g.op.used === 0 && g.status === "playing"; i++) g.update(1 / 120);
+    for (let i = 0; i < 120 * 6 && g.status === "playing"; i++) g.update(1 / 120);
+    return { used: g.op.used, status: g.status };
+  });
+  check("the flight flies to the mark and its bomb takes the mast", marked.used === 1 && marked.status === "success");
+  await page.evaluate(() => {
+    __TIDELOCK__.ui.start(0);
+    __TIDELOCK__.game.paused = false;
+  });
   await page.mouse.click(720, 450);
-  check("a mouse click on the map releases a bomb", await page.evaluate(() => __TIDELOCK__.game.op.used === 1));
+  await page.mouse.click(720, 450, { button: "right" });
+  check("right click cancels a mark", await page.evaluate(() => __TIDELOCK__.game.op.aim === null));
 
   // ---------------------------------------------------------------- results and debrief
   const debrief = await page.evaluate(() => {

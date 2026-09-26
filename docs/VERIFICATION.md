@@ -1,5 +1,28 @@
 # Release Verification
 
+## Tidelock 2.3 (mark the drop, a wider city)
+
+Aim marks, homing assist, mission power, the 3 × 4 city and the sliding camera ([REDESIGN.md §11](REDESIGN.md#11-tidelock-23-mark-the-drop-a-wider-city)) were verified on 2026-09-26 against the production build (`vite preview`, GPU rendering).
+
+- **59 Node tests.** New:
+  - every city grid is exactly three times wider and four times deeper, with each outer lot holding one tower or one park, generated the same way every time;
+  - bounds, flight lanes and turn points cover the whole grid;
+  - mission power and assist fall from 1.1 to 1.6, and the harbour keeps power 1;
+  - the building index agrees with a search of every building for 400 random points and 200 random segments in every direction.
+- **217 browser checks**, zero runtime or resource errors. New or changed:
+  - a click on the jammer mast marks it, the flight flies there by itself, and its bomb wins 1.1;
+  - a right click cancels a mark;
+  - the Drill still lands where its forecast says (checked with the assist off).
+- **Scripted pilots** now fly the city by marking targets, as a player would:
+
+  | Missions | Bombs used against par | Time |
+  | --- | --- | --- |
+  | Strike 1.1–1.6 | 1/1, 2/2, 3/3, 7/5, 4/6, 9/8 | 9–105 s (2.2's manual pilot needed up to 420 s on the bigger map) |
+  | Harbour 1.7–1.9 | 3/2, 4/4, 6/6 | 22–28 s |
+  | River and rescue | unchanged | |
+- **Layout audit** at 320×568, 390×844, 844×390, 568×320, 768×1024, 1024×768, 1280×800 and 1440×900 with the map panel: no overlaps and nothing off-screen. On phones the map is hidden.
+- **Rendering:** 180–450 draw calls and 0.7–1.1 M triangles (shadow pass included) across the city missions; a frame of the Glass Tower costs 1.4 ms on the test GPU, against 2.9 ms for 2.2's smaller district.
+
 ## Tidelock 2.2 (slow flight and harbour strikes)
 
 The slower back-and-forth flight and the three harbour missions ([REDESIGN.md §10](REDESIGN.md#10-tidelock-22-the-slow-flight-and-the-harbour-strikes)) were verified on 2026-09-25 against the production build (`vite preview`, GPU rendering).
