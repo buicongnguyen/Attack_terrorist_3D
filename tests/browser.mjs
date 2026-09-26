@@ -212,12 +212,27 @@ try {
   await page.evaluate(() => {
     const { ui, game: g } = __TIDELOCK__;
     ui.start(1);
-    g.op.flight.lane = g.op.buildings.find((b) => b.id === "T1").z;
-    g.op.select("drill");
+    g.paused = false;
+    const op = g.op;
+    const tower = op.buildings.find((b) => b.id === "T1");
+    op.flight.lane = tower.z;
+    op.select("drill");
+    // Put the pipper over the tower in simulation time (software-rendered CI runs at a few
+    // frames a second), then freeze it there so the ladder under the pointer stays put.
+    // (Each step recomputes the forecast, so the correction is never made twice on a stale one.)
+    for (let k = 0; k < 10; k++) {
+      op.forecastTimer = 0;
+      g.update(1 / 120);
+      const f = op.aircraft[0].forecast;
+      if (f) op.flight.x += tower.x - f.impact.x;
+    }
+    op.forecastTimer = 0;
+    g.update(1 / 120);
+    g.paused = true;
+    ui.updateHUD(true);
+    return op.ladder()?.floors.length;
   });
   await page.waitForFunction(() => document.querySelectorAll("#ladder-floors [data-floor]").length > 3, null, { timeout: 20000 });
-  // Freeze the pipper over the tower so the ladder under the pointer stays put.
-  await page.evaluate(() => (__TIDELOCK__.game.paused = true));
   const row = page.locator('#ladder-floors [data-floor="2"]');
   const box = await row.boundingBox();
   await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
