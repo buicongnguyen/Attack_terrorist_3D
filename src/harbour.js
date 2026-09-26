@@ -63,8 +63,10 @@ export class Fleet {
     ship.guns = ["TurretF", "TurretA"].map((n) => ship.mesh.getObjectByName(n)).filter(Boolean);
     // Children of a scaled-down model (the pilot launch) are scaled back to full size.
     const k = def.scale || 1;
-    ship.marker = new THREE.Sprite(this.op.marker(ship.civilian ? "civilian" : `ship${def.hp}`));
-    ship.marker.scale.setScalar((ship.civilian ? 1.3 : 1.1) / k);
+    ship.marker = new THREE.Sprite(ship.civilian ? this.op.marker("civilian") : this.op.shipMarker(ship));
+    // Health bars are wide and short; the civilian mark stays a square.
+    if (ship.civilian) ship.marker.scale.setScalar(1.3 / k);
+    else ship.marker.scale.set((def.hp > 1 || this.op.layout.required?.includes(group.data.id) ? 3.2 : 1.9) / k, 1.2 / k, 1);
     ship.marker.position.set(0, (3.1 + def.beam * 0.4) / k, 0);
     ship.marker.renderOrder = 12;
     ship.mesh.add(ship.marker);
@@ -249,7 +251,7 @@ export class Fleet {
       if (ship.hp <= 0) {
         this.sinkShip(ship);
         sunk.push(ship);
-      } else ship.marker.material = this.op.marker(`ship${ship.hp}`);
+      } else ship.marker.material = this.op.shipMarker(ship);
     }
     return sunk;
   }
@@ -305,31 +307,29 @@ export class Fleet {
     return out;
   }
 
-  // World labels: every labelled station, placed over the group while it is there.
+  // World badges (2.5): one short tag over each group on station, a symbol for its weight (a red
+  // star for a key group, a gold star for warships, a dot for small boats) and how many are
+  // left, plus the seconds while it waits to move. Names and timetables live in the intel strip.
   labels() {
     const out = [];
     for (const group of this.groups) {
-      const alive = group.ships.filter((s) => !s.dead);
-      if (!alive.length || alive.every((s) => s.civilian)) continue;
+      const alive = group.ships.filter((s) => !s.dead && !s.civilian);
+      if (!alive.length) continue;
+      const key = this.op.layout.required?.includes(group.data.id);
+      const big = group.ships.some((s) => s.def.hp >= 3);
       group.data.stations.forEach((station, i) => {
-        if (!station.label) return;
         const status = stationStatus(group.data, i, this.game.time, group.plan);
-        if (!status.active && status.next > 12) return;
-        const c = status.active
-          ? alive.reduce((a, s) => ({ x: a.x + s.position.x / alive.length, z: a.z + s.position.z / alive.length }), { x: 0, z: 0 })
-          : { x: station.x, z: station.z };
-        const count = alive.filter((s) => !s.civilian).length;
+        if (!status.active) return;
+        const c = alive.reduce((a, s) => ({ x: a.x + s.position.x / alive.length, z: a.z + s.position.z / alive.length }), { x: 0, z: 0 });
+        const symbol = key || big ? "★" : "●";
+        const time = isFinite(status.remaining) && status.remaining < 30 ? ` · ${Math.ceil(status.remaining)}s` : "";
         out.push({
-          id: `fleet-${group.data.id}-${i}`,
+          id: `fleet-${group.data.id}`,
           x: c.x,
           y: 4.2,
           z: c.z,
-          text: status.active
-            ? isFinite(status.remaining)
-              ? `${station.label} / ${Math.ceil(status.remaining)}s`
-              : `${station.label} / ${count}`
-            : `${station.label} / ${Math.ceil(status.next)}s`,
-          hot: status.active,
+          text: `${symbol} ${alive.length}${time}`,
+          kind: key ? "key" : big ? "big" : "small",
         });
       });
     }

@@ -519,8 +519,9 @@ export class RescueOperation {
 
   stars(success) {
     if (!success) return 0;
-    const damage = this.game.damageTaken;
-    return damage === 0 ? 3 : damage <= 1 ? 2 : 1;
+    // Hits taken, not damage points (harder modes make a hit cost more).
+    const hits = this.game.hitsTaken;
+    return hits === 0 ? 3 : hits <= 1 ? 2 : 1;
   }
 
   finishBonus() {

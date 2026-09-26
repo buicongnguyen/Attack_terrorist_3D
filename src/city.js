@@ -219,6 +219,7 @@ export class CityView {
         }
     for (const plaza of this.layout.plazas || []) this.buildPlaza(plaza);
     for (const park of this.layout.parks || []) this.buildPark(park);
+    for (const yard of this.layout.yards || []) this.buildYard(yard);
   }
 
   buildHarbour(harbour) {
@@ -282,6 +283,19 @@ export class CityView {
     for (let c = g.minCol; c <= g.maxCol + 1; c++) avenues.push((c - this.layout.cols / 2) * CITY.pitch);
     for (let r = g.minRow; r <= g.maxRow + 1; r++) streets.push((r - this.layout.rows / 2) * CITY.pitch);
     return { avenues, streets };
+  }
+
+  // A Front vehicle yard on an open lot: a hard stand with parking lines, containers and barriers.
+  // (A tunnel yard's entrance is drawn by the strike, which can collapse it.)
+  buildYard(yard) {
+    const c = lotCenter(this.layout, yard.col, yard.row);
+    this.box(V(c.x, CITY.ground + 0.02, c.z), V(8.8, 0.06, 8.8), 0x5b5f66);
+    for (let i = -1; i <= 1; i++) this.box(V(c.x + i * 2.8, CITY.ground + 0.06, c.z - 2.4), V(0.12, 0.02, 3), 0xf7f1e1);
+    if (!yard.tunnel) {
+      this.prop("container-stack", V(c.x - 2.2, CITY.ground, c.z + 2), 0.55, (yard.col + yard.row) % 2 ? 0 : Math.PI / 2);
+      this.prop("barricade", V(c.x + 2.6, CITY.ground, c.z + 2.8), 0.9, 0.3);
+    }
+    for (const dx of [-4.2, 4.2]) this.box(V(c.x + dx, CITY.ground + 0.35, c.z), V(0.3, 0.7, 8.4), 0xc9b98f);
   }
 
   // A pocket park on an empty lot: lawn, a path and a few trees.

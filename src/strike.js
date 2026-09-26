@@ -48,6 +48,8 @@ import { Fleet, dampAngle } from "./harbour.js";
 import { CityView } from "./city.js";
 import { MISSION_STORY, STRIKE_RADIO } from "./story.js";
 import { clamp } from "./physics.js";
+import { scalePayload } from "./difficulty.js";
+import { Ripples, healthMaterial } from "./ripples.js";
 
 const V = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
 const forward = V(0, 0, -1);
@@ -61,18 +63,13 @@ const FLAK = { range: 13, lock: 2, solution: 0.8, speed: 34, burst: 2.1, cooldow
 const yawFor = (dir) => -dir * (Math.PI / 2);
 
 const markerCache = new Map();
+
 function markerMaterial(kind) {
   if (markerCache.has(kind)) return markerCache.get(kind);
   const canvas = document.createElement("canvas");
   canvas.width = canvas.height = 64;
   const c = canvas.getContext("2d");
-  // Ship markers carry their hit points; "target" marks ships under the current pattern.
-  const ship = /^(ship|target)(\d)$/.exec(kind);
-  const fill = ship
-    ? ship[1] === "target"
-      ? "#ffd23f"
-      : "#ff4b2b"
-    : { enemy: "#ff4b2b", officer: "#ffc62b", hidden: "#ff9f1c", truck: "#ff4b2b", civilian: "#2f86e8" }[kind];
+  const fill = { enemy: "#ff4b2b", officer: "#ffc62b", hidden: "#ff9f1c", truck: "#ff4b2b", civilian: "#2f86e8" }[kind];
   c.translate(32, 32);
   c.rotate(Math.PI / 4);
   c.fillStyle = "#1a1420";
@@ -86,7 +83,6 @@ function markerMaterial(kind) {
   c.textBaseline = "middle";
   if (kind === "officer") c.fillText("★", 0, 1);
   if (kind === "hidden") c.fillText("!", 0, 1);
-  if (ship && +ship[2] > 1) c.fillText(ship[2], 0, 1);
   if (kind === "civilian") {
     c.fillStyle = "#ffffff";
     c.beginPath();
@@ -113,8 +109,8 @@ const ASSIST_STEER = 6;
 const AIM_TOLERANCE = 1.1;
 // A click this close to a target marks the target itself (and follows it if it moves).
 const AIM_SNAP = 3.5;
-// Seconds between the automatic turns a mark asks for.
-const AUTO_TURN_GAP = 5;
+// The autopilot's correction per metre of pipper error (m/s per m).
+const AUTO_GAIN = 0.55;
 // How far past the last live target a flight with no mark flies before it turns round.
 const PATROL_MARGIN = 18;
 
@@ -145,8 +141,9 @@ export class StrikeOperation {
     this.lanes = laneLimits(this.layout);
     this.bounds = cityBounds(this.layout);
     // Early missions hit harder, and every bomb homes a little onto a target near its impact.
-    this.power = this.layout.power ?? 1;
-    this.assistRadius = this.layout.assist ?? 0;
+    // Blast power and homing scale with the difficulty (pattern bomblets never grow: blastDef).
+    this.power = (this.layout.power ?? 1) * g.mode.power;
+    this.assistRadius = (this.layout.assist ?? 0) * g.mode.assist;
     this.aim = null;
     // Floor tiles by building, storey and grid cell: support checks are O(1) per person.
     this.tileSize = (CITY.half * 2) / CITY.tiles;
@@ -155,13 +152,15 @@ export class StrikeOperation {
       if (block.kind === "slab" || block.kind === "roof")
         this.slabs.set(this.tileKey(block.b, block.f, block.min[0] + 0.01, block.min[2] + 0.01), block);
     this.city = new CityView(view, this.layout, this.buildings, this.blocks, g.index);
-    // The flight starts just west of the mission's own blocks, heading east, and sweeps back and
-    // forth over the whole city; `dir` is +1 flying east.
+    // The flight starts just west of the mission's own blocks, heading east. It flies freely in
+    // the safe airspace over the whole city; `dir` is +1 facing east, `vx` its speed along x.
     this.flight = {
-      x: Math.max(-this.turnX + 2, -(this.layout.cols * CITY.pitch) / 2 - 10),
+      // (A harbour is long: its flight starts just west of the middle basin.)
+      x: this.layout.harbour ? -40 : Math.max(-this.turnX + 2, -(this.layout.cols * CITY.pitch) / 2 - 10),
       dir: 1,
       lane: this.layout.startLane ?? 3,
       speed: FLIGHT.speed,
+      vx: FLIGHT.speed,
       lateral: 0,
       phase: "pass",
       turn: 0,
@@ -187,9 +186,23 @@ export class StrikeOperation {
     // Harbour missions open on the pattern they teach.
     const loaded = (kind) => this.aircraft.some((a) => a.payload[kind] > 0);
     this.selected = loaded(this.layout.select) ? this.layout.select : BOMB_ORDER.find(loaded);
+    // Tunnel entrances (2.5): fighters take cover underground here, out of reach of ordinary
+    // blasts. A bomb bursting on an entrance collapses it on whoever is inside.
+    this.tunnels = (this.layout.tunnels || []).map((t) => this.createTunnel(t));
     const { plans, events } = planEnemies(this.layout, this.buildings);
+    const garrisons = [];
+    for (const tunnel of this.tunnels)
+      for (let i = 0; i < (tunnel.garrison || 0); i++) {
+        const here = { t: 0, x: tunnel.x, y: CITY.ground, z: tunnel.z, b: null, f: 0 };
+        garrisons.push({ tunnel, plan: { route: { keys: [here, { ...here, t: 1 }], period: 1, offset: 0 }, group: `tunnel:${tunnel.id}` } });
+      }
     this.events = events.map((e) => ({ ...e, fired: false, ring: null }));
     this.enemies = plans.map((plan) => this.createEnemy(plan));
+    for (const { tunnel, plan } of garrisons) {
+      const e = this.createEnemy(plan);
+      this.enterTunnel(e, tunnel, Infinity);
+      this.enemies.push(e);
+    }
     this.aa = this.layout.aa.map((place, i) => this.createFlak(place, i));
     this.masts = this.layout.masts.map((place) => this.createMast(place));
     this.trucks = this.createConvoy();
@@ -211,9 +224,67 @@ export class StrikeOperation {
     this.assistMarker.material.depthTest = false;
     this.assistMarker.renderOrder = 11;
     this.assistMarker.visible = false;
+    this.ripples = this.createRipples();
+    this.airspace = this.createAirspace();
     // Place the flight before the first frame: a release must never start from the models' origin.
     this.updateFlight(0);
     this.follow(0, true);
+  }
+
+  // Ripples under every live target (key targets wide and gold); see ripples.js.
+  createRipples() {
+    const count = this.enemies.length + this.aa.length + this.masts.length + this.trucks.length + (this.fleet?.ships.length || 0);
+    return new Ripples(this.game.view, count);
+  }
+
+  rippleStyle(t) {
+    const key = this.layout.required?.includes(t.group?.data.id);
+    if (t.type === "ship")
+      return { size: 1 + t.def.length * 0.45, color: key ? 0xffc62b : 0xff4b2b, gain: key ? 1 : t.def.hp > 1 ? 0.7 : 0.4 };
+    if (this.masts.includes(t)) return { size: 3, color: 0xffc62b, gain: 1 };
+    if (this.aa.includes(t)) return { size: 2.6, color: 0xff6a2b, gain: 0.9 };
+    if (this.trucks.includes(t)) return { size: 2.6, color: 0xff4b2b, gain: 0.9 };
+    if (t.officer) return { size: 2, color: 0xffc62b, gain: 1 };
+    return { size: 1.5, color: 0xff4b2b, gain: 0.75 };
+  }
+
+  updateRipples() {
+    // Ripples change slowly: once per rendered frame is plenty.
+    if (this.game.time - (this.rippledAt ?? -1) < 1 / 60) return;
+    this.rippledAt = this.game.time;
+    const items = [];
+    const tunnels = new Set();
+    for (const t of this.targets()) {
+      if (t.inTunnel) {
+        if (tunnels.has(t.inTunnel)) continue;
+        tunnels.add(t.inTunnel);
+      }
+      const style = this.rippleStyle(t);
+      let y = t.position.y + 0.12;
+      // Someone indoors ripples on the roof above them, where the eye can see it.
+      if (t.cur?.b && !t.inTunnel) {
+        const b = buildingById(this.buildings, t.cur.b);
+        if (t.cur.f < b.floors) y = b.top + 0.15;
+      }
+      items.push({ x: t.position.x, y, z: t.position.z, ...style });
+    }
+    this.ripples.update(this.game.time, items);
+  }
+
+  // The safe airspace: a dashed outline on the ground where the flight can go.
+  createAirspace() {
+    const y = (this.land ? 0.1 : CITY.ground) + 0.3;
+    const x = this.turnX,
+      { min, max } = this.lanes;
+    const line = new THREE.LineLoop(
+      new THREE.BufferGeometry().setFromPoints([V(-x, y, min), V(x, y, min), V(x, y, max), V(-x, y, max)]),
+      new THREE.LineDashedMaterial({ color: 0x7fd8ff, dashSize: 2.4, gapSize: 1.6, transparent: true, opacity: 0.55, depthWrite: false }),
+    );
+    line.computeLineDistances();
+    line.renderOrder = 4;
+    line.userData.disposable = true;
+    this.game.view.level.add(line);
+    return line;
   }
 
   // ------------------------------------------------------------------ setup
@@ -284,7 +355,7 @@ export class StrikeOperation {
     view.level.add(cells);
     return {
       ...data,
-      payload: { ...data.payload },
+      payload: scalePayload(data.payload, this.game.difficulty),
       index: i,
       slot: { ...slot },
       hp: 3,
@@ -307,6 +378,62 @@ export class StrikeOperation {
     };
   }
 
+  createTunnel(t) {
+    const view = this.game.view;
+    const group = new THREE.Group();
+    group.position.set(t.x, CITY.ground, t.z);
+    view.level.add(group);
+    // A sandbagged concrete mouth with a dark opening and hazard stripes.
+    view.box(V(0, 0.45, 0), V(3.4, 0.9, 2.6), 0x9c9489, group);
+    view.box(V(0, 0.42, 0.35), V(2.2, 0.8, 1.9), 0x1a1420, group);
+    view.box(V(0, 0.95, -0.9), V(3.4, 0.16, 0.5), 0xffcc1f, group);
+    for (const [x, z] of [
+      [-2.2, -0.6],
+      [2.2, -0.6],
+      [-2, 1.2],
+      [2, 1.2],
+    ])
+      view.box(V(x, 0.3, z), V(1.1, 0.6, 0.8), 0xc9b98f, group);
+    return { ...t, mesh: group, position: V(t.x, CITY.ground, t.z), occupants: new Set(), dead: false };
+  }
+
+  // Put a fighter underground in a tunnel (a garrison from the start, or someone who fled there).
+  enterTunnel(e, tunnel, until) {
+    e.state = "tunnel";
+    e.inTunnel = tunnel;
+    e.hidden = true;
+    e.mesh.visible = false;
+    e.position.set(tunnel.position.x, tunnel.position.y, tunnel.position.z);
+    e.cur = { b: null, f: 0 };
+    e.hideUntil = until;
+    tunnel.occupants.add(e);
+  }
+
+  // A bomb on the entrance brings the tunnel down on everyone inside.
+  collapseTunnel(tunnel) {
+    const g = this.game;
+    tunnel.dead = true;
+    g.blast(tunnel.position.clone().add(V(0, 0.8, 0)), 2.4, 0xff8a2b);
+    for (let i = 0; i < 4; i++) g.puff(tunnel.position.clone().add(V((i - 1.5) * 0.8, 0.6, 0)), 0x8d8791, 0.8, 1.6);
+    tunnel.mesh.children.forEach((part, i) => {
+      part.scale.y *= 0.35;
+      part.position.y *= 0.35;
+      part.rotation.z = (i % 2 ? 1 : -1) * 0.2;
+    });
+    let kills = 0;
+    for (const e of tunnel.occupants) {
+      if (e.dead) continue;
+      e.mesh.visible = true;
+      g.kill(e, false);
+      e.marker.visible = false;
+      g.score += 100;
+      kills++;
+    }
+    tunnel.occupants.clear();
+    if (kills) g.notify("toast", `TUNNEL COLLAPSED / ${kills} INSIDE`);
+    return kills;
+  }
+
   createEnemy(plan) {
     const g = this.game;
     const p = sampleRoute(plan.route, 0);
@@ -324,8 +451,8 @@ export class StrikeOperation {
         }
       });
     e.marker = new THREE.Sprite(markerMaterial(e.officer ? "officer" : "enemy"));
-    e.marker.scale.setScalar(0.85);
-    e.marker.position.set(0, 2.25, 0);
+    e.marker.scale.setScalar(1.6);
+    e.marker.position.set(0, 2.6, 0);
     e.marker.renderOrder = 12;
     e.mesh.add(e.marker);
     e.hidden = false;
@@ -381,7 +508,7 @@ export class StrikeOperation {
       truck.route = route;
       truck.turret = truck.mesh.getObjectByName("Turret") || truck.mesh.getObjectByName("TruckTurret");
       truck.marker = new THREE.Sprite(markerMaterial("truck"));
-      truck.marker.scale.setScalar(1.1);
+      truck.marker.scale.setScalar(1.8);
       truck.marker.position.set(0, 3, 0);
       truck.marker.renderOrder = 12;
       truck.mesh.add(truck.marker);
@@ -391,6 +518,11 @@ export class StrikeOperation {
 
   marker(kind) {
     return markerMaterial(kind);
+  }
+
+  // A ship's marker: its health bar (yellow under the pattern, starred if it is a key ship).
+  shipMarker(ship, marked = false) {
+    return healthMaterial(Math.max(0, ship.hp), ship.maxHp, marked, this.layout.required?.includes(ship.group.data.id));
   }
 
   // Flak on a ship: a nest that rides the hull and dies with it.
@@ -471,7 +603,8 @@ export class StrikeOperation {
         .sort((a, b) => a.d - b.d)[0];
       target = near?.t || null;
     }
-    this.aim = target ? { target } : { x: point.x, z: point.z };
+    // A point beyond the safe airspace is brought back to its edge, where the flight can reach it.
+    this.aim = target ? { target } : { x: clamp(point.x, -this.turnX, this.turnX), z: clamp(point.z, this.lanes.min - 3, this.lanes.max + 3) };
     this.aimUsed = true;
     this.forecastTimer = 0;
     return true;
@@ -495,8 +628,8 @@ export class StrikeOperation {
     return { x: p.x, z: p.z };
   }
 
-  // Steering toward the aim point: slow over the target, fast on the way; turn round only once the
-  // point is far enough behind that a turn brings the pipper back over it.
+  // Steering toward the aim point: fast on the way, then a hover with the pipper on the mark (a
+  // mark just behind is crept back to; one well behind turns the flight round).
   autoPilot() {
     const aim = this.aimPoint();
     if (!aim) return null;
@@ -504,21 +637,28 @@ export class StrikeOperation {
     const a = this.shooterFor(this.selected) || this.aircraft.find((x) => x.alive);
     const impact = a?.forecast?.impact;
     const pipperZ = impact ? impact.z : f.lane + (a?.slot.z || 0);
+    // The pipper already leads by the flight's own speed times the fall (about 2 s), so the gains
+    // stay under one per fall time: the pipper settles on the mark instead of swinging across it.
+    // A moving mark: fly along with it as well as toward it, or the pipper trails it for ever.
+    const drift = this.markVelocity();
     const dz = aim.z - pipperZ;
-    const lateral = clamp(dz * 1.4, -1, 1) * (Math.abs(dz) > 6 ? FLIGHT.lateralFast : FLIGHT.lateral);
-    let throttle = 0;
-    if (impact && a && f.phase === "pass") {
-      const lead = Math.abs(impact.x - a.mesh.position.x);
-      const ahead = (aim.x - impact.x) * f.dir;
-      const behindAircraft = (a.mesh.position.x - aim.x) * f.dir;
-      // A moving mark can swing behind and ahead again: one automatic turn per few seconds.
-      const settled = this.game.time - (this.autoTurnAt ?? -Infinity) > AUTO_TURN_GAP;
-      if (behindAircraft > lead + 1 && settled && this.canReverse()) {
-        this.reverse();
-        this.autoTurnAt = this.game.time;
-      } else throttle = Math.abs(dz) > 3 && ahead < 10 ? -1 : ahead > 18 ? 1 : ahead > 8 ? 0.35 : 0;
-    }
-    return { throttle, lateral };
+    const lateral = clamp(drift.z + dz * AUTO_GAIN, -FLIGHT.lateralFast, FLIGHT.lateralFast);
+    // Along the line: fast while far, easing to a hover as the pipper reaches the mark. A mark
+    // just behind (a moving target drifting back) is waited for rather than turned round for.
+    const pipperX = impact ? impact.x : a ? a.mesh.position.x : f.x;
+    const dx = aim.x - pipperX;
+    const vx = clamp(drift.x + dx * AUTO_GAIN, -FLIGHT.maxSpeed, FLIGHT.maxSpeed);
+    return { vx, lateral };
+  }
+
+  // How fast a marked target is moving (zero for a fixed point or a standing target).
+  markVelocity() {
+    const target = this.aim?.target;
+    if (!target) return { x: 0, z: 0 };
+    const t = this.shooterFor(this.selected)?.forecast?.time ?? 2;
+    const a = this.predict(target, t),
+      b = this.predict(target, t + 0.25);
+    return { x: (b.x - a.x) / 0.25, z: (b.z - a.z) / 0.25 };
   }
 
   // Drop by itself once the pipper sits on the aim point, unless the drop would touch a civilian.
@@ -532,7 +672,9 @@ export class StrikeOperation {
     // A marked target that the Lance has locked, or that the bomb will home onto, is good enough.
     const target = this.aim.target;
     const locked = target && (f.lock === target || this.assistLock === target);
-    if (!locked && Math.hypot(p.x - aim.x, p.z - aim.z) > AIM_TOLERANCE) return;
+    // A moving target gets a little allowance for its own speed.
+    const v = this.markVelocity();
+    if (!locked && Math.hypot(p.x - aim.x, p.z - aim.z) > AIM_TOLERANCE + 0.4 * Math.hypot(v.x, v.z)) return;
     // A Drill marked on someone indoors goes to their floor, and only into their building.
     if (this.selected === "drill" && target?.cur?.b) {
       if (f.building?.id !== target.cur.b) return;
@@ -610,6 +752,7 @@ export class StrikeOperation {
   reverse(auto = false) {
     const f = this.flight;
     if (!auto && !this.canReverse()) return false;
+    if (!auto) this.clearAim();
     if (f.phase !== "pass" || this.game.status !== "playing") return false;
     f.phase = "turn";
     f.turn = 0;
@@ -806,6 +949,7 @@ export class StrikeOperation {
       this.aimMarker.position.set(aim.x, (this.land ? 0.1 : CITY.ground) + 0.2, aim.z);
       this.aimMarker.scale.setScalar(1 + Math.sin(this.game.time * 6) * 0.12);
     }
+    this.updateRipples();
   }
 
   updateFlight(dt) {
@@ -815,34 +959,55 @@ export class StrikeOperation {
     const auto = g.status === "playing" ? this.autoPilot() : null;
     const manualX = Math.abs(g.input.x) > 0.05,
       manualZ = Math.abs(g.input.z) > 0.05;
-    // Speed is screen-relative: pushing toward the direction of flight speeds the flight up.
-    const throttle = auto && !manualX ? auto.throttle : g.input.x * f.dir;
-    const targetSpeed = clamp(FLIGHT.speed + throttle * FLIGHT.throttle, FLIGHT.minSpeed, FLIGHT.maxSpeed);
-    f.speed += clamp(targetSpeed - f.speed, -FLIGHT.accel * dt, FLIGHT.accel * dt);
+    // Free flight in the safe airspace: the stick sets the velocity along the line (screen
+    // relative, either way); with nothing held the flight drifts on slowly the way it faces.
+    const want = auto && !manualX ? auto.vx : manualX ? g.input.x * FLIGHT.maxSpeed : FLIGHT.speed * f.dir;
     f.lateral = THREE.MathUtils.damp(f.lateral, auto && !manualZ ? auto.lateral : g.input.z * FLIGHT.lateral, 5, dt);
     f.lane = clamp(f.lane + f.lateral * dt, this.lanes.min, this.lanes.max);
     f.spacing = THREE.MathUtils.damp(f.spacing, f.wide ? FLIGHT.wide : FLIGHT.tight, 4, dt);
-    // Turn progress: a wingover that climbs, swings out and comes back on the same lane.
+    // Turn progress: a short pivot that climbs a little and comes back on the same lane.
     let u = 0,
       vx = 0;
     if (f.phase === "pass") {
-      f.x += f.speed * f.dir * dt;
-      vx = f.speed * f.dir;
-      if (f.x * f.dir > Math.min(this.turnX, this.patrolEdge(f.dir))) this.reverse(true);
+      // Wanting to fly the other way: a light touch creeps backwards for as long as it is held, and
+      // so does a short tap of a key (a nudge); a full push held past backHold, or the autopilot
+      // wanting to go faster than a creep, slows the flight to a stop and pivots it round.
+      const backward = want * f.dir < -0.3;
+      const hard = want * f.dir < -FLIGHT.creep;
+      f.backHeld = hard ? (f.backHeld || 0) + dt : 0;
+      const back = hard && (auto && !manualX ? true : f.backHeld > FLIGHT.backHold);
+      const target = back ? 0 : backward ? -FLIGHT.creep * f.dir * Math.min(1, Math.abs(want) / FLIGHT.creep) : want;
+      f.vx += clamp(target - f.vx, -FLIGHT.accel * dt, FLIGHT.accel * dt);
+      f.x += f.vx * dt;
+      // The edge of the safe airspace holds the flight; a drifting flight turns round there
+      // (or, in the wide city and harbour, a little past the last live target).
+      const edge = Math.min(this.turnX, this.patrolEdge(f.dir));
+      if (Math.abs(f.x) > this.turnX) {
+        f.x = clamp(f.x, -this.turnX, this.turnX);
+        f.vx = 0;
+      }
+      vx = f.vx;
+      if (back && f.vx * f.dir <= 0.05) {
+        this.reverse(true);
+        if (manualX) this.reversed = true;
+      }
+      else if (!manualX && !auto && f.x * f.dir >= edge - 1e-6) this.reverse(true);
     } else {
       f.turn += dt;
       if (f.turn >= FLIGHT.turnTime) {
         f.phase = "pass";
         f.pass++;
         f.x = f.turnX0;
-        // Release is allowed again this tick, so the aircraft must already carry the new speed.
-        vx = f.speed * f.dir;
+        // The flight comes out of the pivot at rest; release is allowed again this tick.
+        f.vx = 0;
+        vx = 0;
       } else {
         u = f.turn / FLIGHT.turnTime;
         f.x = f.turnX0 + f.turnFrom * FLIGHT.turnReach * Math.sin(Math.PI * u);
         vx = ((f.turnFrom * FLIGHT.turnReach * Math.PI) / FLIGHT.turnTime) * Math.cos(Math.PI * u);
       }
     }
+    f.speed = Math.abs(f.phase === "pass" ? f.vx : 0);
     const turning = f.phase === "turn";
     const swing = turning ? Math.sin(Math.PI * u) : 0;
     // Trailing wingmen swap sides through the turn so they end up behind the lead again.
@@ -921,9 +1086,28 @@ export class StrikeOperation {
     for (const e of this.enemies) {
       if (e.dead) continue;
       let p = null;
+      if (e.state === "tunnel") {
+        // Underground until the tunnel falls in, or until the scare is over and they come out.
+        if (t >= e.hideUntil) {
+          e.inTunnel.occupants.delete(e);
+          e.inTunnel = null;
+          e.mesh.visible = true;
+          this.rejoin(e);
+        }
+        continue;
+      }
       if (e.state === "route") p = sampleRoute(e.plan.route, t);
       else if (e.state === "hide" || e.state === "rejoin") {
         p = samplePath(e.path, t);
+        if (p.done && e.state === "hide" && e.goTunnel) {
+          const tunnel = e.goTunnel;
+          e.goTunnel = null;
+          if (!tunnel.dead) {
+            this.enterTunnel(e, tunnel, t + HIDE_SECONDS * 1.5);
+            continue;
+          }
+          e.hideUntil = t;
+        }
         if (p.done) {
           if (e.state === "hide" && t >= e.hideUntil) this.rejoin(e);
           else if (e.state === "rejoin") {
@@ -983,6 +1167,20 @@ export class StrikeOperation {
             (a, b) =>
               Math.hypot(a.x - from.x, a.z - from.z) - Math.hypot(b.x - from.x, b.z - from.z),
           )[0];
+    // Out in the street, a tunnel nearer than any building is where they run.
+    if (!from.b) {
+      const near = (p) => Math.hypot(p.x - from.x, p.z - from.z);
+      const tunnel = this.tunnels.filter((x) => !x.dead).sort((a, b) => near(a.position) - near(b.position))[0];
+      if (tunnel && near(tunnel.position) < near(building) && near(tunnel.position) < 40) {
+        e.path = timeline(pathBetween(this.layout, this.buildings, from, { x: tunnel.x, y: storyY(0), z: tunnel.z, b: null, f: 0 }), WALK.run, g.time);
+        e.state = "hide";
+        e.hidden = true;
+        e.goTunnel = tunnel;
+        e.hideUntil = Infinity;
+        e.marker.material = markerMaterial("hidden");
+        return;
+      }
+    }
     const slot = (e.id ?? this.enemies.indexOf(e)) % 4;
     const spot = {
       x: building.x + [-2, 2, -1.6, 1.8][slot],
@@ -1090,7 +1288,7 @@ export class StrikeOperation {
           nest.lock -= dt;
           if (!nest.solution && nest.lock <= FLAK.solution)
             nest.solution = { position: target.mesh.position.clone(), velocity: target.velocity.clone(), ahead: Math.max(0, nest.lock) };
-          this.flakLocks.push({ callsign: nest.target.callsign, in: nest.lock, solved: Boolean(nest.solution) });
+          this.flakLocks.push({ callsign: nest.target.callsign, in: nest.lock, solved: Boolean(nest.solution), chance: g.hitChance });
           const positions = nest.beam.geometry.attributes.position;
           positions.setXYZ(0, nest.position.x, nest.position.y + 1.2, nest.position.z);
           positions.setXYZ(1, nest.target.mesh.position.x, nest.target.mesh.position.y, nest.target.mesh.position.z);
@@ -1113,7 +1311,9 @@ export class StrikeOperation {
         for (const a of this.aircraft)
           if (a === shell.volley.target && a.alive && !shell.volley.hit.has(a) && a.mesh.position.distanceTo(shell.mesh.position) < FLAK.burst) {
             shell.volley.hit.add(a);
-            this.hitAircraft(a);
+            // A held course only costs armour with the mission's hit chance.
+            if (shell.volley.harm) this.hitAircraft(a);
+            else g.glance(a.mesh.position);
           }
       }
     }
@@ -1132,7 +1332,7 @@ export class StrikeOperation {
     const tof = origin.distanceTo(target) / FLAK.speed;
     const lead = target.addScaledVector(s.velocity, tof);
     // A volley threatens only the aircraft its lock line named, so the HUD's warning is the whole story.
-    const volley = { hit: new Set(), target: nest.target };
+    const volley = { hit: new Set(), target: nest.target, harm: g.hitRoll() };
     for (let i = 0; i < 3; i++) {
       const aim = lead.clone().add(V((i - 1) * 1.8, (i % 2) * 0.8, (i - 1) * 0.9));
       const mesh = g.view.sphere(origin.clone(), V(0.22, 0.22, 0.22), 0xffcc1f);
@@ -1350,8 +1550,11 @@ export class StrikeOperation {
         !lineBlocked(this.blocks, this.buildings, point, chest)
       );
     };
+    // A burst on a tunnel entrance brings it down; anyone underground is safe from anything else.
+    for (const tunnel of this.tunnels)
+      if (!tunnel.dead && point.y < CITY.ground + 3 && Math.hypot(tunnel.x - point.x, tunnel.z - point.z) < radius + 1.5) kills += this.collapseTunnel(tunnel);
     for (const e of this.enemies) {
-      if (e.dead || !exposed(e, 0.8)) continue;
+      if (e.dead || e.inTunnel || !exposed(e, 0.8)) continue;
       g.kill(e, false);
       e.marker.visible = false;
       kills++;
@@ -1387,7 +1590,7 @@ export class StrikeOperation {
     if (this.layout.alert) {
       let fled = 0;
       for (const e of this.enemies) {
-        if (e.dead || e.state === "hide") continue;
+        if (e.dead || e.state === "hide" || e.inTunnel) continue;
         if (Math.hypot(e.position.x - point.x, e.position.z - point.z) < this.layout.alert) {
           this.hide(e);
           fled++;
@@ -1594,7 +1797,7 @@ export class StrikeOperation {
     const marked = new Set((lead?.forecast?.prediction?.ships || []).map((s) => s.ship.ship));
     for (const ship of this.fleet.ships) {
       if (ship.dead || ship.civilian) continue;
-      ship.marker.material = markerMaterial(`${marked.has(ship) ? "target" : "ship"}${Math.max(1, ship.hp)}`);
+      ship.marker.material = this.shipMarker(ship, marked.has(ship));
     }
   }
 
@@ -1683,7 +1886,7 @@ export class StrikeOperation {
       (sum, a) => sum + (a.alive ? Object.values(a.payload).reduce((x, y) => x + y, 0) : 0),
       0,
     );
-    return 300 + left * 150 + this.aircraft.filter((a) => a.alive).length * 100;
+    return 300 + Math.round((left * 150) / this.game.mode.bombs) + this.aircraft.filter((a) => a.alive).length * 100;
   }
 
   stars(success) {
@@ -1759,7 +1962,7 @@ export class StrikeOperation {
       hint: this.hint(),
       shelter: this.shelterWarning,
       progress: total ? 1 - (left.enemies + left.aa + left.masts + left.trucks + left.ships) / total : 1,
-      labels: [...this.patternLabels(), ...(this.fleet ? this.fleet.labels() : []), ...this.rallyLabels()],
+      labels: [...this.patternLabels(), ...(this.fleet ? this.fleet.labels() : []), ...this.rallyLabels(), ...this.tunnelLabels()],
     };
   }
 
@@ -1779,7 +1982,16 @@ export class StrikeOperation {
         ...(this.fleet ? this.fleet.ships.filter((s) => !s.dead).map((s) => dot(s, s.civilian ? "civilian" : "ship")) : []),
       ],
       rallies: this.events.filter((e) => e.alive > 0).map((e) => ({ x: e.centre.x, z: e.centre.z, active: Boolean(e.status?.active) })),
+      tunnels: this.tunnels.filter((t) => !t.dead).map((t) => ({ x: t.x, z: t.z, inside: t.occupants.size })),
+      airspace: { x: this.turnX, min: this.lanes.min, max: this.lanes.max },
     };
+  }
+
+  // A short badge over an occupied tunnel: how many are hiding in it.
+  tunnelLabels() {
+    return this.tunnels
+      .filter((t) => !t.dead && t.occupants.size)
+      .map((t) => ({ id: `tunnel-${t.id}`, x: t.x, y: CITY.ground + 2.6, z: t.z, text: `TUNNEL / ${t.occupants.size}`, hot: true }));
   }
 
   // What the pattern panel shows: the selected shape, its angle and what it would hit.

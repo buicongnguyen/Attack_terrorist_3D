@@ -20,9 +20,11 @@ Solace Harbor lies three metres below the tide. Only the Tidelock, a storm barri
 
 ### Chapter 1: city and harbour strikes
 
-- **Click or tap where the bomb should land.** The flight flies there by itself and releases when the pipper sits on the mark; a mark on a target follows it. A Drill marked on someone indoors sets its own floor. You can still steer by hand, drop at once with Space, or turn round with **Reverse** (F).
+- **Click or tap where the bomb should land.** The flight flies there, holds over the mark and releases; a mark on a target follows it. A Drill marked on someone indoors sets its own floor. Or fly by hand: inside the dashed **safe airspace** the stick moves the flight freely, across and along its line, with a gentle creep backwards and a quick pivot to turn round.
+- **Easy, Normal, Hard or Crazy** (Mission Control, Easy by default). Easy means half as many bombs again, bigger blasts and enemy fire that can't hit in a chapter's first two missions; a banner always states the hit chance ("5% IF HELD"), and evading always wins.
+- Every live target ripples on the ground, gold for the key ones, so you can find them from anywhere on screen.
 - Early bombs hit harder and home a little onto a target they nearly hit (a gold ring shows which), so a near miss still counts. They never home onto a target beside the civilian shelter.
-- A destructible city of 2–7-storey towers, three times wider and four times deeper than each mission's district. The camera slides only when the flight goes far, and a map panel shows the whole city (click it to mark a drop). Glass south faces let you see which floors are occupied.
+- A destructible city with wide streets: towers of 2–7 storeys, low barracks, vehicle yards and parks, and **tunnels** where fighters hide (a bomb on the entrance collapses it on them), three times wider and four times deeper than each mission's district. The camera slides only when the flight goes far, and a map panel shows the whole city (click it to mark a drop). Glass south faces let you see which floors are occupied.
 - Four bombs with different jobs:
   - **Drill** punches through slabs and detonates on the floor you set;
   - **Scatter** bursts into eight bomblets over crowds;
@@ -30,13 +32,13 @@ Solace Harbor lies three metres below the tide. Only the Tidelock, a storm barri
   - **Lance** is a guided bomb for moving trucks.
 - The pipper forecasts each aircraft's impact exactly, including the floor a Drill will reach. It stays solid where the impact is visible and turns faint behind buildings. **Salvo** drops one bomb from every aircraft at once.
 - Enemies walk scheduled routes through doors, stairs and streets. The intel strip counts down to shift changes, musters and the lieutenants' meeting, when a whole cell stands together. Labels count who is actually at a gathering. Late missions add hiding after the first blast, flak locks you break away from when the HUD says BREAK, a technical convoy, and a civilian shelter that must never be hit. Coach hints guide the teaching missions.
-- **The harbour** (missions 1.7–1.9): sink the Front's flotilla, 32 to 41 boats across three basins, with pattern bombs that burst into a line, an L, a U, a ring or a box. The angle buttons point the pattern across, down or on either diagonal. Fit it to a column, a row of raiders, a pier corner, a dry dock, escorts circling a ferry, or boats rafted together. The pipper counts what it will hit and sink. Sink the quota, key ships included, and the rest run. Ships sidestep falling bombs, and the civilian ferry and launch must never be hit.
+- **The harbour** (missions 1.7–1.9): sink the Front's flotilla, about a hundred boats across five basins and the outer roads, each group marked by a symbol and a count and each ship by a health bar, with pattern bombs that burst into a line, an L, a U, a ring or a box. The angle buttons point the pattern across, down or on either diagonal. Fit it to a column, a row of raiders, a pier corner, a dry dock, escorts circling a ferry, or boats rafted together. The pipper counts what it will hit and sink. Sink the quota, key ships included, and the rest run. Ships sidestep falling bombs, and the civilian ferry and launch must never be hit.
 
 ![The O-Ring over eight raiders circling the west basin: eight on target, eight sink](docs/chapter1-crowd.png)
 
 ### Chapter 2: river convoy
 
-- The barges follow Marlin's wake down a wide canal. Guns and skiffs show a red aim line before they fire, and you can block shots with the gunboat.
+- The barges follow Marlin's wake down a wide canal. Guns and skiffs show a red aim line before they fire (a banner states the chance a round will hurt), wear health pips, and ripple on the water; you can block shots with the gunboat.
 - Three weapons: the deck gun, rocket salvos that burst, and a laser that burns through gun lines until it overheats. **Q calls an air strike**: Kestrel Two lays a line of bombs across the canal where you aim.
 - Crates on the water bring help: the **Hornet gunship** flies your wing and shoots where you shoot, **Duarte's escort launch** guards the barges, and crates of rockets and air strikes restock you.
 - Fuel drums and a bridge ammunition crate chain-detonate whole crews. Skiff pincers meet at a marked point, where one hit sets off the rest.
@@ -58,7 +60,7 @@ Every mission opens with a briefing and ends with a story debrief and star crite
 
 | Action | Desktop | Touch |
 | --- | --- | --- |
-| Steer formation (lane, speed) | W S, A D | Left stick |
+| Fly the formation (safe airspace) | W S across, A D along its line | Left stick |
 | Turn the flight round | F | Reverse |
 | Mark the drop point | Click the city or the map, right click cancels | Tap the city |
 | Payload, release now, salvo | 1–9, Space, X | Payload chips, Release, Salvo |

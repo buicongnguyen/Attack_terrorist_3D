@@ -87,8 +87,10 @@ export async function checkRiver(page, check) {
     const d0 = op.distance;
     for (let i = 0; i < 120; i++) g.update(1 / 120);
     out.convoyAdvances = op.distance > d0 + 3;
-    // A hostile round aimed at a barge is absorbed by Marlin when she sits in the way.
+    // A hostile round aimed at a barge is absorbed by Marlin when she sits in the way (at a
+    // certain hit; the difficulty's chance is checked separately).
     g.projectiles.forEach((s) => (s.dead = true));
+    g.hitChance = 1;
     const barge = op.barges[0];
     g.player.position.set(barge.position.x, g.player.position.y, barge.position.z - 5);
     const from = barge.position.clone().add({ x: 0, y: 1, z: -14 });
@@ -145,7 +147,7 @@ export async function checkRiver(page, check) {
     const before = { hp: rammed.hp, score: g.score, kills: g.kills };
     for (let i = 0; i < 120 * 5 && !ram.dead; i++) g.update(1 / 120);
     out.ramKillsTheSkiffWithoutReward =
-      ram.dead && rammed.hp === before.hp - 3 && g.score === before.score && g.kills === before.kills;
+      ram.dead && Math.abs(rammed.hp - (before.hp - 3 * g.mode.enemyDamage)) < 1e-9 && g.score === before.score && g.kills === before.kills;
     // The gate towers take hits from base to top, and the medal floats out once the gate opens.
     ui.start(14);
     g.paused = false;
@@ -285,6 +287,18 @@ export async function checkRiver(page, check) {
     delete g.hurtPlayer;
     out.gunshipFiresWhereMarlinFires = helped > 5 && toward / helped > 0.5;
     out.helpIsNotMarlinsAccuracy = g.shots === shots;
+    // The top banner names the hit chance while a gun has the convoy in its sights.
+    ui.start(11);
+    g.paused = false;
+    g.op.spawn({ d: 0, type: "guns", side: 1, count: 1 });
+    const aimer = g.entities.find((e) => e.type === "cannon");
+    aimer.position.z = -12;
+    aimer.cooldown = 0;
+    for (let i = 0; i < 30 && !(aimer.aim > 0); i++) g.update(1 / 120);
+    ui.updateHUD(true);
+    const banner = document.getElementById("flak-warning");
+    out.bannerNamesTheHitChance = !banner.hidden && /HIT CHANCE|CAN'T HIT YOU YET/.test(banner.textContent);
+    out.gunsWearHealthPips = Boolean(aimer.hpBar);
     return out;
   });
   for (const [name, value] of Object.entries(mechanics)) check(`river ${name}`, value);

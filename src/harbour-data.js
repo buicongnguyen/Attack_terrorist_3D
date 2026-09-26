@@ -309,20 +309,47 @@ function widen(harbour, extra = {}) {
   return {
     ...harbour,
     wide: true,
+    // The basins in metres (the lot pitch is the city's business). 2.5: five inner basins along a
+    // 270 m quay, and the outer roads south of the moles, twice the old length and width.
+    bounds: { minX: -135, maxX: 135, minZ: -20.25, maxZ: 74 },
     land: [
-      [-67, -27, 67, -16],
+      [-135, -27, 135, -16],
       ...harbour.land.filter((l) => l !== NORTH_QUAY),
       [-30, -16, -27, 2],
       [27, -16, 30, 2],
-      [-74, -27, -67, 27],
-      [67, -27, 74, 27],
+      [-70, -16, -67, 2],
+      [67, -16, 70, 2],
+      [-142, -27, -135, 81],
+      [135, -27, 142, 81],
       [-67, 21, -27, 27],
       [27, 21, 67, 27],
+      [-135, 21, -67, 27],
+      [67, 21, 135, 27],
+      [-135, 75, 135, 81],
+      // Fuel-depot pontoons in the far-west basin.
+      [-126, -5.6, -107, -4.4],
+      [-126, 2.4, -107, 3.6],
       ...(extra.land || []),
     ],
-    cranes: [...(harbour.cranes || []), { x: -48, z: -18.5, heading: 90 }, { x: 46, z: -18.5, heading: 90 }],
-    containers: [...(harbour.containers || []), { x: -60, z: -21 }, { x: -38, z: -22 }, { x: 36, z: -22 }, { x: 58, z: -20.5 }],
-    buoys: [...(harbour.buoys || []), ...(extra.buoys || [])],
+    cranes: [
+      ...(harbour.cranes || []),
+      { x: -48, z: -18.5, heading: 90 },
+      { x: 46, z: -18.5, heading: 90 },
+      { x: -100, z: -18.5, heading: 90 },
+      { x: 104, z: -18.5, heading: 90 },
+    ],
+    containers: [
+      ...(harbour.containers || []),
+      { x: -60, z: -21 },
+      { x: -38, z: -22 },
+      { x: 36, z: -22 },
+      { x: 58, z: -20.5 },
+      { x: -118, z: -21.5 },
+      { x: -84, z: -22 },
+      { x: 88, z: -21 },
+      { x: 124, z: -22 },
+    ],
+    buoys: [...(harbour.buoys || []), { x: -90, z: 40 }, { x: 30, z: 38 }, { x: 110, z: 70 }, ...(extra.buoys || [])],
   };
 }
 const quayShed = (id, x, name, color, floors = 1) => warehouse(id, x, -21.5, floors, name, color);
@@ -330,6 +357,102 @@ const quayShed = (id, x, name, color, floors = 1) => warehouse(id, x, -21.5, flo
 const berths = (list) => list.map(([x, z, heading]) => ({ x, z, heading }));
 const moor = (x, z, label, place, slots) => ({ x, z, moored: true, hold: 1e6, label, place, slots: berths(slots) });
 const raiders = (n) => Array(n).fill("raider");
+
+// The rest of the Front's flotilla (2.5), in every harbour mission: the far-west fuel depot and
+// far-east repair yard, and the outer roads beyond the moles.
+const OUTER_FLEET = [
+  {
+    // Three rows of five raiders at the depot pontoons: a Stick across a row sinks all five.
+    id: "depotRows",
+    ships: raiders(15),
+    stations: [
+      moor(-116, -1, "FUEL DEPOT", "FAR WEST BASIN", [
+        [-122, -9, 90], [-119.2, -9, 90], [-116.4, -9, 90], [-113.6, -9, 90], [-110.8, -9, 90],
+        [-122, -1, 90], [-119.2, -1, 90], [-116.4, -1, 90], [-113.6, -1, 90], [-110.8, -1, 90],
+        [-122, 7, 90], [-119.2, 7, 90], [-116.4, 7, 90], [-113.6, 7, 90], [-110.8, 7, 90],
+      ]),
+    ],
+  },
+  {
+    id: "depotColumn",
+    ships: ["patrol", "patrol", "patrol", "patrol"],
+    speed: 1.1,
+    start: 5,
+    stations: [
+      { x: -92, z: 0, heading: 90, formation: "column", hold: 20, label: "DEPOT PATROL", place: "FAR WEST BASIN" },
+      { x: -92, z: 6, heading: 45, formation: "column", hold: 16 },
+    ],
+  },
+  {
+    id: "yardRaftA",
+    ships: raiders(5),
+    stations: [{ x: 84, z: -8, heading: 90, formation: "raft", moored: true, hold: 1e6, label: "REPAIR YARD", place: "FAR EAST BASIN" }],
+  },
+  {
+    id: "yardRaftB",
+    ships: raiders(5),
+    stations: [{ x: 84, z: 6, heading: 90, formation: "raft", moored: true, hold: 1e6 }],
+  },
+  {
+    // Two frigates at anchor: a Stick laid along each hull.
+    id: "yardFrigates",
+    ships: ["frigate", "frigate"],
+    stations: [
+      {
+        x: 112,
+        z: 1,
+        hold: 1e6,
+        label: "FRIGATES AT ANCHOR",
+        place: "FAR EAST BASIN",
+        slots: berths([
+          [112, -6, 0],
+          [112, 8, 0],
+        ]),
+      },
+    ],
+  },
+  {
+    id: "yardLine",
+    ships: raiders(5),
+    stations: [{ x: 100, z: 14, heading: 0, formation: "line", hold: 1e6 }],
+  },
+  {
+    // A missile-boat convoy steaming up and down the outer roads.
+    id: "convoy",
+    ships: ["missile", "missile", "missile", "missile", "missile"],
+    speed: 1.2,
+    start: 0,
+    stations: [
+      { x: -100, z: 45, heading: 0, formation: "column", hold: 18, label: "CONVOY", place: "OUTER ROADS" },
+      { x: -60, z: 45, heading: 0, formation: "column", hold: 18 },
+    ],
+  },
+  {
+    id: "roadsLine",
+    ships: raiders(5),
+    stations: [{ x: -60, z: 64, heading: 0, formation: "line", hold: 1e6 }],
+  },
+  {
+    id: "roadsEchelon",
+    ships: ["missile", "missile", "missile", "missile"],
+    stations: [{ x: 0, z: 52, heading: 0, formation: "echelon", hold: 1e6, label: "MISSILE BOATS", place: "OUTER ROADS" }],
+  },
+  {
+    id: "roadsRing",
+    ships: raiders(8),
+    stations: [{ x: 70, z: 50, formation: "ring", orbit: 0.9, hold: 1e6, label: "RAIDER RING", place: "OUTER ROADS" }],
+  },
+  {
+    id: "roadsRaft",
+    ships: raiders(5),
+    stations: [{ x: 104, z: 38, heading: 90, formation: "raft", moored: true, hold: 1e6 }],
+  },
+  {
+    id: "roadsPatrol",
+    ships: ["patrol", "patrol", "patrol", "patrol"],
+    stations: [{ x: 104, z: 62, heading: 90, formation: "line", hold: 1e6 }],
+  },
+];
 
 export const HARBOUR_MISSIONS = [
   {
@@ -451,13 +574,14 @@ export const HARBOUR_MISSIONS = [
         ships: ["patrol", "patrol", "patrol", "patrol"],
         stations: [{ x: 62, z: 12, heading: 90, formation: "echelon", hold: 1e6, label: "PATROL ECHELON", place: "EAST MOLE" }],
       },
+      ...OUTER_FLEET,
     ],
     aircraft: [
       { callsign: "Kestrel One", crew: "iona", payload: { stick: 9 } },
       { callsign: "Kestrel Two", crew: "piper", payload: { stick: 8 } },
     ],
-    // Sink 30 of the 36 boats, the channel column among them; the rest run for the open sea.
-    quota: 30,
+    // Sink 40 of the 103 boats, the channel column among them; the rest run for the open sea.
+    quota: 40,
     required: ["column"],
     par: 8,
     alert: 0,
@@ -625,12 +749,13 @@ export const HARBOUR_MISSIONS = [
         ships: raiders(5),
         stations: [{ x: 38, z: 10, heading: 0, formation: "line", hold: 1e6, label: "RAIDERS ABREAST", place: "EAST ROADS" }],
       },
+      ...OUTER_FLEET,
     ],
     aircraft: [
       { callsign: "Kestrel One", crew: "iona", payload: { ell: 5, stick: 4 } },
       { callsign: "Kestrel Two", crew: "piper", payload: { yoke: 4, stick: 3 } },
     ],
-    quota: 27,
+    quota: 36,
     required: ["frigate"],
     par: 7,
     alert: 0,
@@ -768,14 +893,15 @@ export const HARBOUR_MISSIONS = [
         ships: ["patrol", "patrol", "patrol", "patrol"],
         stations: [{ x: 58, z: 12, heading: 90, formation: "line", hold: 1e6, label: "PATROL LINE", place: "EAST MOLE" }],
       },
+      ...OUTER_FLEET,
     ],
     aircraft: [
       { callsign: "Kestrel One", crew: "iona", payload: { ring: 4, stick: 3 } },
       { callsign: "Kestrel Two", crew: "piper", payload: { box: 5, stick: 3 } },
       { callsign: "Kestrel Three", crew: "bram", payload: { stick: 4, shockwave: 3 } },
     ],
-    // The escort ring and Cinder must go; 34 of the 41 boats in all.
-    quota: 34,
+    // The escort ring and Cinder must go; 45 of the 108 boats in all.
+    quota: 45,
     required: ["ring", "cinder"],
     par: 9,
     alert: 0,

@@ -71,7 +71,7 @@
           <i data-lucide="scan"></i><strong id="objective-count">03</strong><span id="objective-unit">TARGETS LEFT</span>
         </div>
         <div class="mission-progress"><span id="mission-progress"></span></div>
-        <div class="mission-meta"><span id="mission-index">MISSION 01 / 06</span><span id="mission-percent">0%</span></div>
+        <div class="mission-meta"><span id="mission-index">MISSION 01 / 06</span><span id="difficulty-chip" class="mode-chip">EASY</span><span id="mission-percent">0%</span></div>
       </aside>
 
       <section id="comms" aria-live="polite" aria-label="Radio"></section>
@@ -251,6 +251,11 @@
         ><button id="skip" class="secondary-button"><i data-lucide="skip-forward"></i>Skip</button
         ><button id="story" class="secondary-button"><i data-lucide="book-open"></i>Story</button>
       </div>
+      <div class="difficulty-picker">
+        <span class="picker-title">Difficulty</span>
+        <div id="difficulty-options" role="radiogroup" aria-label="Difficulty"></div>
+        <p id="difficulty-blurb"></p>
+      </div>
       <h3>Campaign</h3>
       <div id="mission-list"></div>
       <div class="preferences">
@@ -267,7 +272,7 @@
           <span>Boat weapons / air strike</span><b class="pad">WEAPON ICONS</b><span>Pause</span><b class="pad">PAUSE BUTTON</b>
         </div>
         <div class="control-reference keys-only">
-          <span>Steer formation / vehicle</span><kbd>W A S D</kbd><span>Throttle (flight)</span><kbd>A / D</kbd>
+          <span>Steer formation / vehicle</span><kbd>W A S D</kbd><span>Fly along the line</span><kbd>A / D</kbd>
           <span>Payload select</span><kbd>1 – 9</kbd><span>Release now / Salvo</span><kbd>Space / X</kbd>
           <span>Reverse the flight</span><kbd>F</kbd><span>Turn a pattern bomb</span><kbd>E / C / wheel / angle buttons</kbd>
           <span>Mark the drop (auto release)</span><kbd>Click</kbd><span>Cancel the mark</span><kbd>Right click</kbd>

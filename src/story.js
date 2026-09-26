@@ -299,7 +299,7 @@ export const MISSION_STORY = [
     place: "SOLACE HARBOR / MAIN CHANNEL",
     clock: "10:30",
     goals: [
-      "Sink 30 of the 36 boats, the channel column among them",
+      "Sink 40 of the 103 boats, the channel column among them",
       "Lay the Stick across the boatyard rows and along the raider lines",
     ],
     brief: [
@@ -313,7 +313,7 @@ export const MISSION_STORY = [
       ),
       line(
         "ines",
-        "And that's only the middle basin. Raiders are moored in rows at the west boatyard and lined up abreast in the east anchorage. Thirty-six boats in all.",
+        "And that's only the middle basin. Raiders are moored in rows at the west boatyard and the fuel depot, lined up in the east anchorage, and the outer roads are full. A hundred boats. Sink forty and the rest will run.",
       ),
       line(
         "piper",
@@ -334,7 +334,7 @@ export const MISSION_STORY = [
     place: "SOLACE HARBOR / DRY DOCK",
     clock: "11:20",
     goals: [
-      "Sink 27 of the 32 boats: piers, slipways and the dry dock",
+      "Sink 36 of the 99 boats: piers, slipways, the dry dock and the outer roads",
       "Sink the flak frigate",
       "Never hit the Island Belle ferry",
     ],
@@ -374,7 +374,7 @@ export const MISSION_STORY = [
     goals: [
       "Break the escort ring without touching the Island Belle",
       "Sink the destroyer Cinder",
-      "Sink 34 of the 41 boats: rafts, the raider ring and the columns",
+      "Sink 45 of the 108 boats: rafts, the raider rings and the convoy",
     ],
     brief: [
       line(
@@ -483,7 +483,7 @@ export const MISSION_STORY = [
     clock: "15:50",
     goals: [
       "Escort both barges across the flooded fields",
-      "Break skiff swarms with rockets (2) and the air strike (Q)",
+      "Break skiff swarms with rockets and the air strike",
     ],
     brief: [
       line(
@@ -518,7 +518,7 @@ export const MISSION_STORY = [
     clock: "16:05",
     goals: [
       "Get the convoy past the sawmill camp",
-      "Burn the gun lines down with the laser (3)",
+      "Burn the gun lines down with the laser",
     ],
     brief: [
       line(

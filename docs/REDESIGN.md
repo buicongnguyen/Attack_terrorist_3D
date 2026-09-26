@@ -353,11 +353,68 @@ Smaller findings, also fixed:
 
 Kills by the gunship, the escort and the air strike count towards the score and combos, as the flight's own help; they don't count towards Marlin's accuracy.
 
-## 13. Controls
+## 13. Tidelock 2.5: easy by default, free flight, an airier city and a harbour four times the size
+
+### The brief
+
+Let the aircraft move freely, up and down and back and forth, within a safe range. Make enemy markers bigger or ripple around targets so the player knows where to look. Enemy fire should not be able to hit in the first missions, then hit with a small chance that a warning states ("5% if you don't evade"). More bombs, so Easy is easy. Add Normal, Hard and Crazy, with Easy the default. Double the space between buildings; leave some lots open, with low barracks or tunnels where enemies hide; halve the buildings in each row and add a row. In the harbour, replace the long text with numbers, health bars or symbols, and make the harbour twice as long and twice as wide. Then apply the same principles to the canal.
+
+### Evaluation and what changed
+
+| Idea | Kept | Changed, and why |
+| --- | --- | --- |
+| Free movement in a safe range | Yes | "Up and down" is read as up and down the screen. Inside the **safe airspace** (dashed on the ground and on the map), the stick moves the flight directly: across its line at up to 6 m/s, along it either way at up to 7.5 m/s. A light touch backwards is a creep (fine adjustment over a mark); a real "go back" is a quick 1.2 s pivot rather than the old wingover. Let go and the flight drifts on at 1.4 m/s. A mark now means "fly there and hold": the autopilot eases the pipper onto it and hovers until the drop. |
+| Bigger dots, ripples | Both | Enemy markers are twice the size. **Every live target ripples**: two rings spread from under it, gold and wide for key targets (jammers, officers, flagships, launchers), red for the rest, faint for small boats, on the roof above anyone indoors. One instanced mesh draws them all. |
+| No hits early, a small stated chance later | Yes, with a refinement | Each mission has a hit chance: 0 % in the first two of each chapter on Easy, rising to 10 %. **Evading always wins**: flak that you break away from misses whatever the chance, and a round that reaches you but doesn't hit glances off with a spark. The banner says it plainly: "FLAK LOCK / KESTREL ONE / BREAK! / 5% IF HELD" over the city, "ENEMY FIRE / 2 AIMING / 5% HIT CHANCE" on the canal, "SAFE FOR NOW" when the chance is zero. |
+| More bombs; Easy, Normal, Hard, Crazy | Yes | A difficulty picker at the top of Mission Control, saved with your preferences, shown on the mission panel. **Easy (default)**: bombs and rockets ×1.5, blasts ×1.15, homing ×1.3, three air strikes, barges ×1.5 armour, enemy fire slower and softer. **Normal** is the designed game with a little risk; **Hard** and **Crazy** cut bombs and homing and raise the hit chance until, on Crazy, every round that reaches you hits. Harder modes score ×1.25, ×1.5 and ×2. |
+| Twice the space between buildings; open lots; one more row | Yes | Streets are 10.5 m wide instead of 5.5 m (walkers pace up to keep every schedule). One more row, and only about half the outer lots hold a tower; the rest are **low khaki barracks**, **vehicle yards** and parks. The camera window stays the same size in metres. |
+| Tunnels where enemies hide | Yes, as a mechanic | Tunnel entrances sit in the yards beside each mission's blocks: fighters underground are safe from ordinary blasts, and a bomb bursting on the entrance **collapses it on everyone inside**. From 1.2 on, some start with a garrison (a "TUNNEL / 2" badge says how many); in the alert missions, fighters caught in the street run for the nearest tunnel. A garrisoned tunnel adds one to the mission's par. |
+| Symbols and health bars, not text | Yes | Harbour groups carry a short badge, a symbol and a count: **★** in red for a key group, **★** in gold for warships, **●** for small boats, plus seconds while a group waits to move. Every ship shows a **health bar** (one pip per hit it can take), yellow while the pattern covers it, starred for key ships. Names and timetables stay in the intel strip and the map. |
+| Harbour ×2 long, ×2 wide | Yes | The quay runs 270 m: a far-west fuel depot and a far-east repair yard join the three basins, and the **outer roads** open beyond the moles behind a new breakwater. 66 more boats in every harbour (99–108 in all). The quota rose only a little (40, 36 and 45): more to choose from, not a longer grind. |
+| The canal, likewise | Yes | Ripples under guns, launchers, skiffs and the lock gate; health pips over guns, launchers and skiffs (hits left with the deck gun); the hit-chance banner; the difficulty's levers; and Marlin may range 7 m further up the canal. |
+
+### Found while building
+
+- **The autopilot swung across its mark.** It steered on the pipper, which already leads by the flight's own speed times the fall; with the flight now able to hover, the old gains overshot forever (±2 m, never inside the 1.1 m release). Gains are below one per fall time now, and the pipper settles.
+- **A hover just past a mark deadlocked.** Turning back needed a pivot, which the autopilot suppressed for small errors: it hung 1.6 m off the mark. Small backward speeds are now a creep, for players too.
+- **Longer walks broke a rally.** With wider streets the Shift Change walkers could not make their gathering; walking pace scales with the street pitch.
+- **A drifting flight turned round in the middle of a test** (the patrol edge in the wide city), which is right for play; the check now creeps from a slow crawl.
+
+![Tunnels, barracks and yards in the airier city](chapter1-tunnels.png)
+
+### Independent review of 2.5
+
+A separate reviewer probed the change in the browser. Nothing crashed; the findings, all fixed:
+
+| # | Finding | Fix |
+| --- | --- | --- |
+| 1 | A mark on a boat that never stops (the circling raiders) was never dropped on: the hover trailed it by 1.1–1.8 m, just outside the release tolerance. | The autopilot flies along with a marked target (its velocity) as well as toward it, and a moving target gets a small speed allowance at release. A check marks a circling raider and gets the drop. |
+| 2 | On phones the canal's hit-chance banner landed on the shield and weapon bars. | It sits under the convoy panel on phones and tablets (the tightest landscape phones leave it to the red aim lines); the audit checks it forced on. |
+| 3 | The "chance" was a fixed script: every retry rolled the same sequence. | Each attempt rolls its own sequence (still reproducible across a run of attempts). |
+| 4 | A glance still paid as a body block: on Easy, blocking became free score, with a toast flood. | A harmless block still counts but pays nothing; the glance toast comes at most every 8 s. |
+| 5 | The glance timer carried over between missions. | Reset at every start. |
+| 6 | The rescue rolled the chance but never showed it. | The shield panel names it ("LANTERN SHIELDS / 5% HIT"). |
+| 7 | Rescue stars counted damage points while the criteria said "hits"; harder modes made one hit cost two. | Stars count hits. |
+
+Smaller ones, also fixed:
+- the Crazy blurb overstated its hit chance;
+- a flak "break" style could carry red into the canal;
+- Easy's extra bombs and barge armour could out-score Normal through the finish bonus (the bonus now scales back);
+- backwards creep was unreachable with keys (now a tap nudges back and a held key turns round, while a light stick push creeps as long as it is held), and the help texts still said "throttle";
+- Reverse with a mark set was undone by the autopilot (Reverse now clears the mark), and stick pivots didn't count for the coach;
+- a mark beyond the safe airspace parked the flight at the edge (marks are brought inside);
+- tunnel ripples were drawn once per fighter inside;
+- the tunnel mouth clipped the yard wall;
+- three street points kept the old street pitch (the Market Square rally, the crossing, the convoy loop);
+- two harbour checks passed vacuously;
+- the canal banner was announced as an alert;
+- and some dead code and a misleading name (`enemyFire` is a reload multiplier, now `enemyReload`).
+
+## 14. Controls
 
 | Action | Desktop | Touch |
 | --- | --- | --- |
-| Steer formation (lane / speed) | W S / A D | Left stick (portrait: the camera looks along the flight path) |
+| Fly the formation in the safe airspace (across / along its line) | W S / A D | Left stick (portrait: the camera looks along the flight path) |
 | Turn the flight round | F | Reverse |
 | Mark the drop (the flight flies there and releases) | Click the city or the map; right click cancels | Tap the city |
 | Payload, release now, salvo | 1–9, Space, X | Payload chips, Release, Salvo |

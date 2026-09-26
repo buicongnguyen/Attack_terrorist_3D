@@ -1,5 +1,39 @@
 # Release Verification
 
+## Tidelock 2.5 (easy by default, free flight, an airier city, a harbour four times the size)
+
+Difficulty modes, free flight, hit chances, ripples, the airier city with tunnels, the 2 × 2 harbour with badges and health bars, and the canal's markers ([REDESIGN.md §13](REDESIGN.md#13-tidelock-25-easy-by-default-free-flight-an-airier-city-and-a-harbour-four-times-the-size)) were verified on 2026-09-26 against the production build (`vite preview`, GPU rendering).
+
+- **72 Node tests.** New:
+  - four modes with Easy the default;
+  - on Easy nothing can hit you in the first two city and canal missions, and never more than 10 %;
+  - each harder mode hits at least as often, never beyond certain;
+  - every lever points the right way from Easy to Crazy; payloads scale but never lose a bomb type;
+  - the per-mission random source repeats exactly;
+  - streets twice as wide as they were;
+  - tunnels only in yards beside each mission's blocks, never under a building, with their garrisons;
+  - every harbour 270 m long and twice as deep, with 99–108 boats and a quota between a third and a half;
+  - fits for the new flotillas; no hull overlaps or grounding over four minutes.
+- **269 browser checks**, zero runtime or resource errors. New:
+  - holding back turns the flight round and flies it back; a light touch creeps; let go, it drifts; the safe airspace holds; every target ripples;
+  - flak with no chance never harms a held course;
+  - garrisons hide underground, a near miss spares them, a hit on the entrance collapses it, and a fighter in the street runs into a tunnel;
+  - Crazy carries fewer bombs and flak that can hit from 1.1; the mode is saved and shown; Easy comes back;
+  - a mark on a circling raider still gets its drop;
+  - harbour badges are a symbol and a count, with stars on key groups;
+  - the canal banner names the hit chance, and guns wear health pips.
+- **Scripted pilots**, all on Easy (the default):
+
+  | Missions | Result |
+  | --- | --- |
+  | City 1.1–1.6 | all six, tunnels included; 1, 3, 4, 9, 8 and 9 bombs in 11–133 s |
+  | Harbour 1.7–1.9 | the quota by marking groups: 20, 15 and 20 bombs in 190–323 s |
+  | Canal 2.1–2.6 | all six, barges almost untouched, 3 stars each |
+  | Rescue 3.1–3.3 | full sorties home |
+- **Layout audit** at eight sizes from 320×568 to 1440×900 (tablets 768×1024 and 820×1180 included) across city, harbour, canal and rescue, with the flak banner, the canal banner, every help timer and the difficulty chip showing: no overlaps, nothing off-screen.
+- **Rendering:** 188–572 draw calls; at most 2.5 ms a frame on the test GPU, the 108-boat harbour included.
+- **Independent review:** 7 findings and a tail of smaller ones, all fixed ([REDESIGN.md §13](REDESIGN.md#independent-review-of-25)).
+
 ## Tidelock 2.4 (crowded harbours, a canal at war)
 
 The crowded harbours, the angle buttons, the wider canal with its weapons, air strike and help, and the three new canal missions ([REDESIGN.md §12](REDESIGN.md#12-tidelock-24-crowded-harbours-and-a-canal-at-war)) were verified on 2026-09-26 against the production build (`vite preview`, GPU rendering).

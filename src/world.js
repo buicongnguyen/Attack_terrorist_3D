@@ -559,8 +559,9 @@ export class WorldView {
   frameCity(aspect, mobile) {
     const layout = this.strikeLayout;
     const windowed = Boolean(layout.grid || layout.harbour?.wide);
-    const w = windowed ? 1.75 * CITY.pitch + 4 : (layout.cols * CITY.pitch) / 2 + 4,
-      d = windowed ? 1.5 * CITY.pitch + 5 : (layout.rows * CITY.pitch) / 2 + 5;
+    // A fixed window in metres (about the old four blocks by three), whatever the street width.
+    const w = windowed ? 27.6 : (layout.cols * CITY.pitch) / 2 + 4,
+      d = windowed ? 25.25 : (layout.rows * CITY.pitch) / 2 + 5;
     this.strikeWindow = { w, d, bounds: cityBounds(layout) };
     this.target.set(0, 4, 0);
     // Portrait phones look along the flight path so the district fills the screen width:

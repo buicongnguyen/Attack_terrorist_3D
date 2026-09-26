@@ -52,6 +52,7 @@ import { BOMBS, BOMB_ORDER, FLIGHT, STRIKE_MISSIONS, isPattern } from "./strike-
 import { patternDiagram, ROTATION_STEP } from "./harbour-data.js";
 import { CAST, PROLOGUE, CHAPTER_STORY, MISSION_STORY, FINALE, speaker } from "./story.js";
 import { activeBonuses } from "./pickups.js";
+import { DIFFICULTIES, DIFFICULTY, DEFAULT_DIFFICULTY, difficulty, percent } from "./difficulty.js";
 import { RescueHUD } from "./rescue-hud.js";
 import { isHostileEntity } from "./rescue-data.js";
 
@@ -144,9 +145,10 @@ export function readSave() {
       muted: Boolean(saved.muted),
       reducedMotion: Boolean(saved.reducedMotion),
       seenPrologue: Boolean(saved.seenPrologue),
+      difficulty: DIFFICULTIES.includes(saved.difficulty) ? saved.difficulty : DEFAULT_DIFFICULTY,
     };
   } catch {
-    return { records: {}, muted: false, reducedMotion: false, seenPrologue: false };
+    return { records: {}, muted: false, reducedMotion: false, seenPrologue: false, difficulty: DEFAULT_DIFFICULTY };
   }
 }
 
@@ -239,6 +241,8 @@ export class UI {
     this.labels = new Map();
     this.dialog = $("menu-dialog");
     this.brief = $("brief-dialog");
+    this.game.difficulty = save.difficulty || DEFAULT_DIFFICULTY;
+    this.buildDifficulty();
     this.game.reducedMotion = save.reducedMotion || matchMedia("(prefers-reduced-motion: reduce)").matches;
     $("reduced-motion").checked = this.game.reducedMotion;
     document.documentElement.dataset.reducedMotion = String(this.game.reducedMotion);
@@ -308,6 +312,37 @@ export class UI {
       }
     }
     this.view.needsRender = true;
+  }
+
+  // The difficulty picker in Mission Control. A new mode applies from the next mission start.
+  buildDifficulty() {
+    const box = $("difficulty-options");
+    box.innerHTML = DIFFICULTIES.map(
+      (name) => `<button type="button" role="radio" data-mode="${name}" class="mode-${name}">${DIFFICULTY[name].label}</button>`,
+    ).join("");
+    box.onclick = (event) => {
+      const button = event.target.closest("[data-mode]");
+      if (button) this.setDifficulty(button.dataset.mode);
+    };
+    this.showDifficulty();
+  }
+
+  setDifficulty(name) {
+    if (!DIFFICULTIES.includes(name)) return;
+    const changed = name !== this.game.difficulty;
+    this.game.difficulty = this.save.difficulty = name;
+    this.persist();
+    this.showDifficulty(changed && this.game.mission && this.game.status === "playing");
+  }
+
+  showDifficulty(pending = false) {
+    const name = this.game.difficulty;
+    for (const button of $("difficulty-options").querySelectorAll("[data-mode]")) {
+      const on = button.dataset.mode === name;
+      button.classList.toggle("selected", on);
+      button.setAttribute("aria-checked", String(on));
+    }
+    $("difficulty-blurb").textContent = `${difficulty(name).blurb}${pending ? " Retry the mission to play it this way." : ""}`;
   }
 
   persist() {
@@ -572,6 +607,28 @@ export class UI {
       c.strokeStyle = "rgba(255, 255, 255, 0.7)";
       c.lineWidth = 1;
       c.strokeRect(Math.min(x0, x1), Math.min(y0, y1), Math.abs(x1 - x0), Math.abs(y1 - y0));
+    }
+    // The safe airspace, and tunnel entrances (with a dot while someone hides inside).
+    if (op.radar.airspace) {
+      const s = op.radar.airspace;
+      const [x0, y0] = at(-s.x, s.min),
+        [x1, y1] = at(s.x, s.max);
+      c.setLineDash([4, 3]);
+      c.strokeStyle = "rgba(127, 216, 255, 0.8)";
+      c.strokeRect(Math.min(x0, x1), Math.min(y0, y1), Math.abs(x1 - x0), Math.abs(y1 - y0));
+      c.setLineDash([]);
+    }
+    for (const t of op.radar.tunnels || []) {
+      const [x, y] = at(t.x, t.z);
+      c.fillStyle = "#1a1420";
+      c.fillRect(x - 3.5, y - 3.5, 7, 7);
+      c.strokeStyle = "#ffcc1f";
+      c.lineWidth = 1.5;
+      c.strokeRect(x - 3.5, y - 3.5, 7, 7);
+      if (t.inside) {
+        c.fillStyle = "#ff4b2b";
+        c.fillRect(x - 1.5, y - 1.5, 3, 3);
+      }
     }
     for (const r of op.radar.rallies) {
       const [x, y] = at(r.x, r.z);
@@ -848,7 +905,7 @@ export class UI {
     const keys = [
       [
         ["W / S", "Steer the formation"],
-        ["A / D", "Speed"],
+        ["A / D", "Fly along the line (tap back to nudge, hold to turn)"],
         ["F", "Reverse"],
         kinds.size > 1 && [`1-${kinds.size}`, "Payload"],
         ["CLICK", "Mark the drop: the flight flies there and drops"],
@@ -876,7 +933,7 @@ export class UI {
     ];
     const touch = [
       [
-        ["STICK", "Steer and speed"],
+        ["STICK", "Fly the formation"],
         ["REVERSE", "Turn the flight round"],
         kinds.size > 1 && ["CARDS", "Tap a payload"],
         ["TAP", "Mark the drop: the flight flies there and drops"],
@@ -997,6 +1054,9 @@ export class UI {
     $("mission-name").textContent = m.name;
     $("objective").textContent = story.goals[0];
     $("mission-index").textContent = `MISSION ${String(missionNumber(data.index)).padStart(2, "0")} / ${String(chapterSize(c)).padStart(2, "0")}`;
+    $("difficulty-chip").textContent = this.game.mode.label.toUpperCase();
+    $("difficulty-chip").className = `mode-chip mode-${this.game.difficulty}`;
+    this.showDifficulty();
     $("footer-mode").textContent = [`${story.place} / AIRBORNE`, `${story.place} / UPRIVER`, `${story.place} / EXTRACTION`][c];
     $("flight-panel").hidden = $("ladder").hidden = $("intel").hidden = $("radar").hidden = c !== 0;
     if (c === 0) $("radar-title").textContent = `${STRIKE_MISSIONS[data.index].harbour ? "HARBOUR" : "CITY"} MAP / ${this.touch ? "TAP" : "CLICK"} TO MARK`;
@@ -1022,7 +1082,9 @@ export class UI {
     $("salvo").hidden = $("formation").hidden = flight.length < 2;
     $("coach").hidden = true;
     this.coachKey = null;
-    $("shield-title").textContent = c === 1 ? "MARLIN SHIELDS" : "LANTERN SHIELDS";
+    // The shield panel names the chance that enemy fire reaching you does harm.
+    const chance = this.game.hitChance > 0 ? `${percent(this.game.hitChance)} HIT` : "SAFE";
+    $("shield-title").textContent = `${c === 1 ? "MARLIN" : "LANTERN"} SHIELDS / ${chance}`;
     $("comms").innerHTML = "";
     for (const el of this.labels.values()) el.remove();
     this.labels.clear();
@@ -1030,6 +1092,9 @@ export class UI {
     this.weapon("gun");
     $("toast").classList.remove("visible", "checkpoint");
     $("flak-warning").hidden = true;
+    $("flak-warning").classList.remove("calm", "break");
+    // Flak locks are urgent alerts; the canal's steady banner is announced politely.
+    $("flak-warning").setAttribute("role", c === 0 ? "alert" : "status");
     this.intelKey = this.ladderKey = null;
     this.lastHUD = -1;
     this.updateHUD(true);
@@ -1224,7 +1289,7 @@ export class UI {
     $("formation-label").textContent = op.wide ? "WIDE" : "TIGHT";
     // In the portrait camera the flight runs down the screen flying east.
     const arrow = this.view.strikePortrait ? (op.dir > 0 ? "↓" : "↑") : op.dir > 0 ? "→" : "←";
-    $("speed-value").textContent = `${arrow} ${Math.round((op.speed / FLIGHT.speed) * 100)}%`;
+    $("speed-value").textContent = `${arrow} ${Math.round((op.speed / FLIGHT.maxSpeed) * 100)}%`;
     $("reverse").disabled = !op.reversible;
     const ready = op.phase === "pass" && this.game.status === "playing";
     const any = op.aircraft.some((a) => a.alive && Object.values(a.payload).some((n) => n > 0));
@@ -1260,7 +1325,12 @@ export class UI {
     if (flak.length) {
       // The most urgent lock leads; any others are counted.
       const [first] = flak;
-      const text = `FLAK LOCK / ${first.callsign.toUpperCase()} / ${first.solved ? "BREAK!" : `${Math.max(0, first.in).toFixed(1)}s`}${flak.length > 1 ? ` +${flak.length - 1}` : ""}`;
+      // The warning says how likely a held course is to be hit (the difficulty's hit chance);
+      // narrow screens name the aircraft K1-K3.
+      const risk = first.chance > 0 ? `${percent(first.chance)} IF HELD` : "SAFE FOR NOW";
+      const narrow = innerWidth < 1100;
+      const who = narrow ? `K${["one", "two", "three"].indexOf(first.callsign.split(" ").pop().toLowerCase()) + 1}` : first.callsign.toUpperCase();
+      const text = `FLAK${narrow ? "" : " LOCK"} / ${who} / ${first.solved ? "BREAK!" : `${Math.max(0, first.in).toFixed(1)}s`} / ${risk}${flak.length > 1 ? ` +${flak.length - 1}` : ""}`;
       $("flak-warning").classList.toggle("break", first.solved);
       if ($("flak-text").textContent !== text) $("flak-text").textContent = text;
     }
@@ -1365,6 +1435,15 @@ export class UI {
   }
 
   updateRiver(state, op) {
+    // The top banner says how likely enemy fire is to hurt when a gun has you in its sights.
+    const incoming = op.incoming;
+    $("flak-warning").hidden = !incoming.aiming;
+    $("flak-warning").classList.add("calm");
+    if (incoming.aiming) {
+      const risk = incoming.chance > 0 ? `${percent(incoming.chance)} HIT CHANCE` : "CAN'T HIT YOU YET";
+      const text = innerWidth < 700 ? `${incoming.aiming} AIMING / ${incoming.chance > 0 ? `${percent(incoming.chance)} HIT` : "SAFE"}` : `ENEMY FIRE / ${incoming.aiming} AIMING / ${risk}`;
+      if ($("flak-text").textContent !== text) $("flak-text").textContent = text;
+    }
     const w = op.weapons;
     $("rocket-stock").textContent = w.rockets;
     $("rocket-weapon").classList.toggle("empty", w.rockets <= 0);
@@ -1406,6 +1485,7 @@ export class UI {
       const p = this.view.project(label);
       if (el.textContent !== label.text) el.textContent = label.text;
       el.classList.toggle("hot", Boolean(label.hot));
+      if ((el.dataset.kind || "") !== (label.kind || "")) el.dataset.kind = label.kind || "";
       el.style.transform = `translate(${p.x}px, ${p.y}px) translate(-50%, -100%)`;
     }
     for (const [id, el] of this.labels)

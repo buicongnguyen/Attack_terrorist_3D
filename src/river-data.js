@@ -6,7 +6,8 @@ export const RIVER = Object.freeze({
   bank: 17.5,
   laneX: 13.5,
   near: 17,
-  far: -13,
+  // 2.5: Marlin may range further up the canal ahead of the barges.
+  far: -20,
   spawnZ: -72,
   despawnZ: 36,
   bargeZ: [9.5, 16.5],
@@ -42,8 +43,8 @@ export const WEAPONS = Object.freeze({
 });
 
 // Kestrel Flight's air strike: two bombers lay a line of bombs across the canal where you aim.
+// (How many a mission starts with is the difficulty's `strikes`.)
 export const AIR_STRIKE = Object.freeze({
-  charges: 2,
   warning: 1.6,
   bombs: 9,
   radius: 4.2,

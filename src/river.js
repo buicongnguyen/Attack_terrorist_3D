@@ -17,6 +17,7 @@ import { PICKUPS } from "./pickups.js";
 import { COLORS, chapterStart } from "./data.js";
 import { clamp, segmentSphere } from "./physics.js";
 import { dampAngle } from "./harbour.js";
+import { Ripples, healthMaterial } from "./ripples.js";
 
 // The laser beam: a white-hot core inside two additive glows, stretched from muzzle to hit.
 const BEAM = {
@@ -68,12 +69,46 @@ export class RiverOperation {
     this.blocked = 0;
     this.combo = { count: 0, timer: 0 };
     // Marlin's arsenal and the help that can join from crates.
-    this.rockets = WEAPONS.rocket.stock;
-    this.strikes = AIR_STRIKE.charges;
+    // The difficulty sets the stock, the air strikes, the barges' armour and the enemy's rate of fire.
+    this.rockets = Math.round(WEAPONS.rocket.stock * g.mode.rockets);
+    this.strikes = g.mode.strikes;
+    this.fireRate = this.data.fireRate * g.mode.enemyReload;
     this.laser = { heat: 0, locked: false, beam: false };
     this.airStrike = null;
     this.support = { heli: null, ally: null };
     this.beam = this.createBeam();
+    this.ripples = new Ripples(view, 90);
+  }
+
+  // Ripple styles for the canal's enemy (see ripples.js): gun lines red, the dangerous launchers
+  // and the lock gate gold, skiffs small.
+  rippleStyle(e) {
+    return (
+      {
+        cannon: { size: 2.4, color: 0xff4b2b, gain: 0.8 },
+        launcher: { size: 3.2, color: 0xffc62b, gain: 1 },
+        skiff: { size: 1.7, color: 0xff4b2b, gain: 0.7 },
+        tower: { size: 3.8, color: 0xffc62b, gain: 1 },
+        generator: { size: 3.2, color: 0xffc62b, gain: 1 },
+        enemy: { size: 1.1, color: 0xff4b2b, gain: 0.45 },
+      }[e.type] || null
+    );
+  }
+
+  // Hits left with the deck gun, as a row of pips over guns, launchers and skiffs.
+  addHealthBar(e) {
+    const bar = new THREE.Sprite(this.healthFor(e));
+    bar.position.set(0, e.type === "launcher" ? 4.2 : 2.6, 0);
+    bar.scale.set(e.type === "launcher" ? 3.4 : 2.4, 0.9, 1);
+    bar.renderOrder = 12;
+    e.mesh.add(bar);
+    e.hpBar = bar;
+    e.maxHp ??= e.hp;
+  }
+
+  healthFor(e) {
+    const hits = (hp) => Math.max(0, Math.ceil(hp / WEAPONS.gun.damage));
+    return healthMaterial(hits(e.hp), hits(e.maxHp ?? e.hp));
   }
 
   say(key) {
@@ -92,8 +127,8 @@ export class RiverOperation {
       index: i,
       mesh,
       position: mesh.position,
-      hp: RIVER.bargeHp,
-      max: RIVER.bargeHp,
+      hp: RIVER.bargeHp * this.game.mode.bargeHp,
+      max: RIVER.bargeHp * this.game.mode.bargeHp,
       alive: true,
       smoke: 0,
       sink: 0,
@@ -150,6 +185,7 @@ export class RiverOperation {
         gun.mesh.rotation.y = (s * Math.PI) / 2;
         gun.turret = turretNode(gun.mesh);
         gun.line = this.aimLine();
+        this.addHealthBar(gun);
         for (let c = 0; c < (event.crew || 0); c++)
           g.opponent(V(s * (RIVER.bank + 1.4 + c * 0.7), 1.08, cz + 1.3 - c * 2.6), { scrolling: true, scale: 0.9 });
       }
@@ -171,6 +207,7 @@ export class RiverOperation {
         });
         launcher.mesh.rotation.y = (-s * Math.PI) / 2;
         launcher.light = g.view.ring(V(0, 0.1, 0), 1.85, COLORS.hostile, 0.13, launcher.mesh);
+        this.addHealthBar(launcher);
       }
     } else if (event.type === "mines") {
       for (const x of event.xs) {
@@ -202,6 +239,7 @@ export class RiverOperation {
         if (model === "boat") skiff.mesh.scale.setScalar(0.6);
         skiff.line = this.aimLine();
         skiff.turret = turretNode(skiff.mesh);
+        this.addHealthBar(skiff);
       }
       if (event.pattern !== "pincer") this.say("skiffs");
     } else if (event.type === "bridge") this.spawnBridge(z);
@@ -336,6 +374,7 @@ export class RiverOperation {
     this.updateAirStrike(dt, flow);
     this.updateGunship(dt);
     this.updateEscort(dt);
+    this.updateMarks();
     g.entities = g.entities.filter((e) => !e.dead || e.fallTime !== undefined);
     if (g.status !== "playing") return;
     if (!this.barges.some((b) => b.alive)) g.finish(false, "barges");
@@ -394,6 +433,7 @@ export class RiverOperation {
   hurtBarge(barge, amount, position) {
     if (!barge.alive || this.game.status !== "playing") return;
     const g = this.game;
+    amount *= g.mode.enemyDamage;
     barge.hp = Math.max(0, barge.hp - amount);
     this.bargeDamage += amount;
     g.puff(position || barge.mesh.position.clone().add(V(0, 1.5, 0)), 0xffb35c, 0.5, 0.6);
@@ -496,7 +536,7 @@ export class RiverOperation {
       e.parity = (e.parity || 0) + 1;
       e.target = this.chooseTarget(e, e.parity);
       e.aim = 0.9;
-      e.cooldown = this.data.fireRate;
+      e.cooldown = this.fireRate;
     }
   }
 
@@ -509,7 +549,7 @@ export class RiverOperation {
       e.parity = (e.parity || 0) + 1;
       e.target = this.chooseTarget(e, e.parity);
       e.aim = 0.8;
-      e.cooldown = 2.6;
+      e.cooldown = 2.6 * this.game.mode.enemyReload;
     }
   }
 
@@ -521,7 +561,7 @@ export class RiverOperation {
       const target = this.chooseTarget(e, 1);
       const shot = g.spawnShot(e.position.clone().add(V(0, 2.7, 0)), target.position.clone().add(V(0, 1, 0)), true, true, null, target);
       shot.homing = target;
-      e.cooldown = 5;
+      e.cooldown = 5 * this.game.mode.enemyReload;
     }
   }
 
@@ -568,7 +608,7 @@ export class RiverOperation {
         e.parity = (e.parity || 0) + 1;
         e.target = this.chooseTarget(e, e.parity);
         e.aim = SKIFF.aim;
-        e.cooldown = SKIFF.fireEvery;
+        e.cooldown = SKIFF.fireEvery * this.game.mode.enemyReload;
       }
     }
     this.orders = this.orders.filter((o) => {
@@ -611,7 +651,7 @@ export class RiverOperation {
           const shot = g.spawnShot(tower.position.clone().add(V(0, 6.2, 0)), t.position.clone().add(V(0, 1, 0)), true, true, null, t);
           shot.homing = t;
           shot.heavy = true;
-          tower.cooldown = cfg.shellEvery;
+          tower.cooldown = cfg.shellEvery * this.game.mode.enemyReload;
           tower.target = null;
         }
       }
@@ -652,10 +692,11 @@ export class RiverOperation {
     return best;
   }
 
-  onBlocked(shot) {
+  onBlocked(shot, glanced = false) {
     if (this.game.status !== "playing") return;
     if (shot.aimedAt?.kind === "barge") {
       this.blocked++;
+      if (glanced) return;
       this.game.score += 20;
       this.game.notify("toast", "SHOT BLOCKED +20");
     }
@@ -708,6 +749,22 @@ export class RiverOperation {
     this.updateAirStrike(dt, 0);
     this.updateGunship(dt);
     this.updateEscort(dt);
+  }
+
+  // Ripples under the enemy in view, health pips kept current, and how many are aiming now.
+  updateMarks() {
+    const g = this.game;
+    const items = [];
+    this.aiming = 0;
+    for (const e of g.entities) {
+      if (!isHostileEntity(e)) continue;
+      if (e.hpBar) e.hpBar.material = this.healthFor(e);
+      if (e.aim > 0 && e.target) this.aiming++;
+      if (e.position.z < -48 || e.position.z > 26) continue;
+      const style = this.rippleStyle(e);
+      if (style) items.push({ x: e.position.x, y: (e.type === "tower" ? 1.1 : e.position.y) + 0.12, z: e.position.z, ...style });
+    }
+    this.ripples.update(g.time, items);
   }
 
   // ------------------------------------------------------------------ Marlin's weapons
@@ -1146,6 +1203,8 @@ export class RiverOperation {
           }
         : null,
       labels: labels.map((l, i) => ({ id: `pincer-${i}`, ...l })),
+      // Guns aiming at the convoy right now, and the chance a round that arrives does harm.
+      incoming: { aiming: this.aiming || 0, chance: this.game.hitChance },
       weapons: {
         rockets: this.rockets,
         heat: this.laser.heat,
@@ -1172,6 +1231,6 @@ export class RiverOperation {
   }
 
   finishBonus() {
-    return 300 + this.game.shields.reduce((a, b) => a + b, 0) * 40 + this.barges.reduce((s, b) => s + (b.alive ? b.hp * 20 : 0), 0);
+    return 300 + this.game.shields.reduce((a, b) => a + b, 0) * 40 + this.barges.reduce((s, b) => s + (b.alive ? (b.hp / this.game.mode.bargeHp) * 20 : 0), 0);
   }
 }

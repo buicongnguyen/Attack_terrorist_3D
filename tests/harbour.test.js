@@ -108,6 +108,15 @@ test("each harbour group has a pattern and angle that sinks it in one release", 
     [2, "westRing", "ring", 0, { x: -40, z: 5 }, null, 0],
     [2, "eastColumn", "stick", 0, { x: 42, z: 6 }, "angle", 0],
     [2, "patrolLine", "stick", 0, { x: 58, z: 12 }, "angle", 0],
+    // The far basins and the outer roads (2.5), shared by every harbour.
+    [0, "depotRows", "stick", 0, { x: -116.4, z: -9 }, null, 0, 5],
+    [0, "depotRows", "stick", 0, { x: -116.4, z: 7 }, null, 0, 5],
+    [0, "yardRaftA", "box", 0, { x: 84, z: -8 }, null, 0],
+    [0, "yardLine", "stick", 2, { x: 100, z: 14 }, "angle", 0],
+    [0, "roadsLine", "stick", 2, { x: -60, z: 64 }, "angle", 0],
+    [0, "roadsRing", "ring", 0, { x: 70, z: 50 }, null, 0],
+    [0, "roadsRaft", "box", 0, { x: 104, z: 38 }, null, 0],
+    [0, "roadsPatrol", "stick", 0, { x: 104, z: 62 }, "angle", 0],
   ];
   for (const [m, id, kind, step, centre, lesson, station, expect] of cases) {
     const g = group(m, id);
@@ -219,6 +228,7 @@ test("ships sail smoothly, never onto a quay, and never through each other", () 
         for (let b = a + 1; b < hulls.length; b++) {
           const A = hulls[a],
             B = hulls[b];
+          if (Math.hypot(A.p.x - B.p.x, A.p.z - B.p.z) > (A.def.length + B.def.length) / 2 + 1) continue;
           assert.ok(!overlap(rectangle(A.p, A.def, 0.1), rectangle(B.p, B.def, 0.1)), `1.${m + 7} ${A.key} and ${B.key} collide at t=${t}`);
         }
       if (previous)
@@ -261,11 +271,13 @@ test("a freed ferry's run to safety stays off the quays and clear of every other
 test("every harbour is crowded: thirty-odd boats, a quota to sink and the key ships named", () => {
   for (const m of HARBOUR_MISSIONS) {
     const hostile = m.fleet.flatMap((g) => g.ships).filter((cls) => !SHIPS[cls].civilian).length;
-    assert.ok(hostile >= 30, `${m.lesson}: ${hostile} boats`);
-    assert.ok(m.quota >= hostile * 0.8 && m.quota < hostile, `${m.lesson}: quota ${m.quota} of ${hostile}`);
+    // 2.5: twice as long and wide, ~100 boats; more to choose from, not a longer grind.
+    assert.ok(hostile >= 90, `${m.lesson}: ${hostile} boats`);
+    assert.ok(m.quota >= hostile * 0.33 && m.quota <= hostile * 0.5, `${m.lesson}: quota ${m.quota} of ${hostile}`);
     for (const id of m.required) assert.ok(m.fleet.some((g) => g.id === id), `${m.lesson}: key group ${id}`);
-    // The basins either side of the old harbour are reached by the sliding camera.
-    assert.ok(m.harbour.wide && m.cols * 13.5 > 130);
+    // The basins either side of the old harbour, and the outer roads, are reached by the sliding camera.
+    const b = m.harbour.bounds;
+    assert.ok(m.harbour.wide && b.maxX - b.minX >= 270 && b.maxZ - b.minZ >= 2 * 40.5);
     // Enough bombs to reach the quota at five sinks a release, with room to miss.
     assert.ok(payloadTotal(m.aircraft) * 5 >= m.quota * 1.5, `${m.lesson}: payload`);
   }

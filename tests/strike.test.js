@@ -189,10 +189,17 @@ test("a Drill that clips a corner low down reports the floor it really reaches",
 
 test("a Drill that passes through the shelter on its way down is flagged by the pipper", () => {
   const { buildings, blocks } = setup(4);
-  const f = forecastImpact(blocks, buildings, { x: -13.75, y: 24, z: 3.25, vx: 10, vy: -1.2, vz: 0 }, "drill", 1);
-  assert.equal(f.building, null, "it lands in the street beyond the shelter");
-  assert.ok(f.crossesShelter);
-  assert.ok(!shelterStruck(blocks, buildings, f.impact, "drill", 0.6), "the detonation point alone looks safe");
+  const shelter = buildings.find((b) => b.kind === "shelter");
+  // Release east-bound at the shelter's lane, moving back until the Drill clips the shelter's
+  // roof on the way down and lands in the street beyond it,
+  let f = null;
+  for (let x = shelter.x - 30; x < shelter.x && !f; x += 0.25) {
+    const test = forecastImpact(blocks, buildings, { x, y: 24, z: shelter.z + 0.5, vx: 10, vy: -1.2, vz: 0 }, "drill", 1);
+    // ...far enough from the wall that the detonation point on its own looks safe.
+    if (test.building === null && test.crossesShelter && !shelterStruck(blocks, buildings, test.impact, "drill", 0.6)) f = test;
+  }
+  assert.ok(f, "some release clips the shelter, lands in the street beyond, and bursts clear of it");
+  assert.ok(f.impact.x > shelter.max[0]);
 });
 
 test("climbing part of a stair takes time instead of snapping", () => {

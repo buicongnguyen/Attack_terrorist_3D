@@ -514,6 +514,51 @@ kbd {
     filter: brightness(1.3);
   }
 }
+/* The canal on phones: the banner sits under the convoy panel, clear of the shields and weapons;
+   the tightest landscape phones leave it to the red aim lines. */
+@media (max-width: 700px) and (orientation: portrait) {
+  body[data-chapter="1"] #flak-warning {
+    top: 188px;
+    bottom: auto;
+    left: auto;
+    right: var(--edge, 8px);
+    max-width: calc(100vw - 120px);
+    transform: none;
+  }
+}
+@media (orientation: landscape) and (max-height: 520px) {
+  body[data-chapter="1"] #flak-warning {
+    top: 168px;
+    bottom: auto;
+    left: auto;
+    right: var(--edge, 8px);
+    transform: none;
+  }
+}
+@media (orientation: landscape) and (max-height: 420px) {
+  body[data-chapter="1"] #flak-warning {
+    display: none !important;
+  }
+}
+/* Tablets: on the right under the convoy panel (room for the lock gate's bars too). */
+@media (min-width: 701px) and (max-width: 900px) {
+  body[data-chapter="1"] #flak-warning {
+    top: 300px;
+    bottom: auto;
+    left: auto;
+    right: 20px;
+    transform: none;
+  }
+}
+/* The canal's steady hit-chance banner: amber, no throb (some gun is nearly always aiming). */
+#flak-warning.calm {
+  animation: none;
+  background: rgba(11, 22, 40, 0.88);
+  border: 2px solid #ff8a1f;
+  color: #ffc9a2;
+  font-size: 13px;
+  box-shadow: var(--lip);
+}
 #flak-warning.break {
   background: #ff2a1a;
   box-shadow: 0 4px 0 #9b1b0c, 0 0 0 3px rgba(255, 255, 255, 0.85);
@@ -763,6 +808,27 @@ html[data-touch="true"] .keys-only {
   background: var(--ember);
   border-color: #fff;
   color: #fff;
+}
+/* Harbour group badges: a symbol and a count, coloured by what the group is worth. */
+.world-label[data-kind] {
+  padding: 2px 8px;
+  font-size: 13px;
+}
+.world-label[data-kind="key"] {
+  background: #ff4b2b;
+  border-color: #fff;
+  color: #fff;
+}
+.world-label[data-kind="big"] {
+  background: rgba(11, 22, 40, 0.9);
+  border-color: var(--gold);
+  color: var(--gold);
+}
+.world-label[data-kind="small"] {
+  background: rgba(11, 22, 40, 0.8);
+  border-color: rgba(255, 75, 43, 0.9);
+  color: #ffb3a2;
+  font-size: 11px;
 }
 #ladder {
   position: absolute;
@@ -1589,6 +1655,77 @@ dialog h3 {
 }
 .mission-group button.active {
   outline: 2px solid var(--gold);
+}
+/* Difficulty: four modes, Easy by default. */
+.difficulty-picker {
+  margin: 16px 0 4px;
+}
+.picker-title {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #9fc4ff;
+  letter-spacing: 0.04em;
+}
+#difficulty-options {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+}
+#difficulty-options button {
+  padding: 8px 4px;
+  border-radius: 10px;
+  border: 2px solid rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.06);
+  color: #fff;
+  font-weight: 700;
+  font-size: 13px;
+  cursor: pointer;
+}
+#difficulty-options button.selected {
+  color: var(--ink);
+}
+#difficulty-options .mode-easy.selected {
+  background: #33d69f;
+  border-color: #33d69f;
+}
+#difficulty-options .mode-normal.selected {
+  background: var(--gold);
+  border-color: var(--gold);
+}
+#difficulty-options .mode-hard.selected {
+  background: #ff8a1f;
+  border-color: #ff8a1f;
+}
+#difficulty-options .mode-crazy.selected {
+  background: #ff4b2b;
+  border-color: #ff4b2b;
+  color: #fff;
+}
+#difficulty-blurb {
+  margin: 6px 0 0;
+  font-size: 12px;
+  color: #cfe0ff;
+}
+.mode-chip {
+  padding: 1px 6px;
+  border-radius: 6px;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  color: var(--ink);
+  background: #33d69f;
+}
+.mode-chip.mode-normal {
+  background: var(--gold);
+}
+.mode-chip.mode-hard {
+  background: #ff8a1f;
+}
+.mode-chip.mode-crazy {
+  background: #ff4b2b;
+  color: #fff;
 }
 .preferences {
   display: flex;

@@ -9,26 +9,32 @@ export const CITY = Object.freeze({
   slab: 0.32,
   half: 4,
   tiles: 4,
-  pitch: 13.5,
+  // Lot pitch: an 8 m building and a 10.5 m street (2.5: twice the old 5 m gap between buildings).
+  pitch: 18.5,
   wall: 0.26,
 });
 
 // The flight sweeps back and forth over the city: it turns round a short way past each edge (or
 // whenever the player reverses) and never leaves the map. Over targets it flies slowly (`speed`);
 // flying to a far aim point it cruises at up to `maxSpeed`, and steers faster sideways.
+// 2.5: free flight. Inside the safe airspace the stick moves the flight directly, along its line
+// (up to maxSpeed, either way) and across it; let go and it drifts on at `speed`. Flying the
+// other way is a short pivot (turnTime) rather than a long wingover.
 export const FLIGHT = Object.freeze({
   altitude: 24,
-  speed: 2.4,
-  minSpeed: 1.6,
-  maxSpeed: 6.5,
-  throttle: 4.1,
-  accel: 3,
+  speed: 1.4,
+  maxSpeed: 7.5,
+  accel: 4,
   lateral: 6,
   lateralFast: 11,
   turnMargin: 8,
-  turnTime: 2.6,
-  turnReach: 4,
-  turnClimb: 3,
+  turnTime: 1.2,
+  // Backwards up to this speed is a creep (fine adjustment); held longer than backHold seconds,
+  // "back" turns the flight round.
+  creep: 1.2,
+  backHold: 0.45,
+  turnReach: 1,
+  turnClimb: 1.2,
   tight: 3.4,
   wide: 7,
   trail: 3.4,
@@ -38,6 +44,8 @@ export const FLIGHT = Object.freeze({
 
 // The playable city in world metres: lot edges of the whole grid.
 export function cityBounds(layout) {
+  // A harbour's basins are laid out in metres, not lots.
+  if (layout.harbour?.bounds) return { ...layout.harbour.bounds };
   const g = layout.grid || { minCol: 0, maxCol: layout.cols - 1, minRow: 0, maxRow: layout.rows - 1 };
   return {
     minX: (g.minCol - layout.cols / 2) * CITY.pitch,
@@ -59,7 +67,8 @@ export function laneLimits(layout) {
   return { min: b.minZ + 2, max: b.maxZ - 2 };
 }
 
-export const WALK = Object.freeze({ speed: 3, run: 4.4, stair: 1 });
+// Walkers cover the wider streets (2.5) at a brisker pace, so every schedule keeps its timing.
+export const WALK = Object.freeze({ speed: 4, run: 5.8, stair: 1 });
 export const GRAVITY = -9.81;
 export const STEP = 1 / 120;
 // Speed kept by a Drill each time it punches through a slab.
@@ -273,7 +282,7 @@ const CITY_MISSIONS = [
           P("T3", 1, 1.6, -0.6),
           P("T3", 3, 0.5, 1.5),
         ],
-        rally: S(0, 6.75),
+        rally: S(0, CITY.pitch / 2),
         at: 24,
         every: 64,
         stay: 20,
@@ -365,7 +374,7 @@ const CITY_MISSIONS = [
           P("T2", 1, -2, 1.5),
           P("T2", 2, -1.2, -1.2),
         ],
-        rally: S(-6.75, -2),
+        rally: S(-CITY.pitch / 2, -2),
         at: 22,
         every: 54,
         stay: 20,
@@ -408,7 +417,7 @@ const CITY_MISSIONS = [
     masts: [P("T2", 5, 1.4, -1.2)],
     aa: [P("T1", 5, 0.8, -0.6), P("T3", 5, -0.8, -0.6), P("T6", 3, 1, 1)],
     convoy: {
-      points: [S(-6.75, -6.75), S(6.75, -6.75), S(6.75, 6.75), S(-6.75, 6.75)],
+      points: [S(-CITY.pitch / 2, -CITY.pitch / 2), S(CITY.pitch / 2, -CITY.pitch / 2), S(CITY.pitch / 2, CITY.pitch / 2), S(-CITY.pitch / 2, CITY.pitch / 2)],
       count: 2,
       speed: 4.5,
       gap: 1.1,
@@ -461,7 +470,13 @@ const CITY_MISSIONS = [
 // Each city mission's authored blocks sit in the middle of a district with three times as many
 // buildings along a row and four times as many along a column. The rest is generated: ordinary
 // towers of 2-6 storeys and small parks, the same every time for a given mission.
-export const CITY_GROWTH = Object.freeze({ cols: 3, rows: 4 });
+// 2.5: one more row again, and in each row of the wider city only about half the lots hold a
+// tower. The rest are open: low barracks, vehicle yards (some over tunnel entrances) and parks.
+export const CITY_GROWTH = Object.freeze({ cols: 3, rows: 4, extraRows: 1 });
+// Tunnel entrances in the yards next to each mission's own blocks, and the fighters already
+// hiding in each (none in the first mission).
+const TUNNELS = [0, 1, 1, 1, 2, 2];
+export const GARRISON = 2;
 // Early missions hit harder (blast radius) and their bombs home further onto a nearby target.
 const POWER = [1.6, 1.5, 1.4, 1.3, 1.25, 1.2];
 const ASSIST = [4.5, 4, 3.5, 3, 3, 2.5];
@@ -479,7 +494,7 @@ function seeded(seed) {
 
 export function expandCity(layout, index) {
   const extraCols = layout.cols * (CITY_GROWTH.cols - 1),
-    extraRows = layout.rows * (CITY_GROWTH.rows - 1);
+    extraRows = layout.rows * (CITY_GROWTH.rows - 1) + CITY_GROWTH.extraRows;
   const grid = {
     minCol: -Math.floor(extraCols / 2),
     maxCol: layout.cols - 1 + Math.ceil(extraCols / 2),
@@ -488,19 +503,59 @@ export function expandCity(layout, index) {
   };
   const random = seeded(4099 + index * 977);
   const buildings = [...layout.buildings],
-    parks = [];
+    parks = [],
+    yards = [];
+  // Lots in the ring around the mission's own blocks, nearest first: tunnel yards go there.
+  const ring = [];
   for (let row = grid.minRow; row <= grid.maxRow; row++)
     for (let col = grid.minCol; col <= grid.maxCol; col++) {
       if (col >= 0 && col < layout.cols && row >= 0 && row < layout.rows) continue;
-      if (random() < 0.14) {
-        parks.push({ col, row });
+      const out = Math.max(-col, col - (layout.cols - 1), -row, row - (layout.rows - 1), 0);
+      if (out === 1 && (col < 0 || col >= layout.cols) !== (row < 0 || row >= layout.rows)) ring.push({ col, row });
+    }
+  const tunnels = new Set(
+    ring
+      .map((lot) => ({ ...lot, key: random() }))
+      .sort((a, b) => a.key - b.key)
+      .slice(0, TUNNELS[index] ?? 1)
+      .map((lot) => `${lot.col},${lot.row}`),
+  );
+  for (let row = grid.minRow; row <= grid.maxRow; row++)
+    for (let col = grid.minCol; col <= grid.maxCol; col++) {
+      if (col >= 0 && col < layout.cols && row >= 0 && row < layout.rows) continue;
+      if (tunnels.has(`${col},${row}`)) {
+        yards.push({ col, row, tunnel: true });
         continue;
       }
-      const floors = 2 + Math.floor(random() * 5);
-      const roof = random() < 0.25 ? [random() < 0.5 ? "hvac" : "tank"] : [];
-      buildings.push(tower(`C${col}_${row}`, col, row, floors, { roof }));
+      const r = random();
+      if (r < 0.5) {
+        const floors = 2 + Math.floor(random() * 5);
+        const roof = random() < 0.25 ? [random() < 0.5 ? "hvac" : "tank"] : [];
+        buildings.push(tower(`C${col}_${row}`, col, row, floors, { roof }));
+      } else if (r < 0.7) buildings.push(tower(`B${col}_${row}`, col, row, 1, { name: "Barracks", color: "#8f9a5b", roof: [] }));
+      else if (r < 0.85) yards.push({ col, row, tunnel: false });
+      else parks.push({ col, row });
     }
-  return { ...layout, grid, buildings, parks, power: POWER[index] ?? 1.2, assist: ASSIST[index] ?? 2.5 };
+  // A tunnel's entrance sits in its yard, on the side facing the mission's blocks.
+  const tunnelList = yards
+    .filter((y) => y.tunnel)
+    .map((y, i) => {
+      const c = lotCenter(layout, y.col, y.row);
+      const toward = { x: -Math.sign(c.x) * (Math.abs(c.x) > (layout.cols * CITY.pitch) / 2 ? 1.2 : 0), z: -Math.sign(c.z) * (Math.abs(c.z) > (layout.rows * CITY.pitch) / 2 ? 1.2 : 0) };
+      return { id: `tunnel${i}`, x: c.x + toward.x, z: c.z + toward.z, garrison: GARRISON };
+    });
+  return {
+    ...layout,
+    grid,
+    buildings,
+    parks,
+    yards,
+    tunnels: tunnelList,
+    // Every garrisoned tunnel is one more target for the par.
+    par: layout.par + tunnelList.filter((t) => t.garrison).length,
+    power: POWER[index] ?? 1.2,
+    assist: ASSIST[index] ?? 2.5,
+  };
 }
 
 export const STRIKE_MISSIONS = [

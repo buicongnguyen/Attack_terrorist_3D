@@ -285,9 +285,11 @@ export async function checkStrike(page, check) {
     };
 
     // Flak: holding course once the fire solution has frozen gets the target hit; breaking away dodges.
-    const flakPass = (breakAway) => {
+    const flakPass = (breakAway, chance = 1) => {
       ui.start(3);
       g.paused = false;
+      // The mechanics at a certain hit; the difficulty's chance is checked separately.
+      g.hitChance = chance;
       const op = g.op;
       op.aa.slice(1).forEach((n) => (n.dead = true));
       const nest = op.aa[0];
@@ -313,6 +315,9 @@ export async function checkStrike(page, check) {
     const held = flakPass(false);
     const broke = flakPass(true);
     out.flakHitsAHeldCourse = held.fired && held.lost > 0;
+    // With no chance of a hit (Easy, early missions) a held course only glances.
+    const safe = flakPass(false, 0);
+    out.noChanceMeansNoHarm = safe.fired && safe.lost === 0;
     out.flakMissesABreakAfterTheSolution = broke.fired && broke.solved && broke.lost === 0;
     out.flakLockKeepsItsTarget = (() => {
       ui.start(3);
@@ -396,6 +401,83 @@ export async function checkStrike(page, check) {
     return out;
   });
   for (const [name, value] of Object.entries(review)) check(`strike ${name}`, value === true);
+
+  // 2.5: free flight in the safe airspace, tunnels, and the difficulty modes.
+  const freedom = await page.evaluate(() => {
+    const { game: g, ui } = window.__TIDELOCK__;
+    const S = window.__TIDELOCK_STRIKE__;
+    const out = {};
+    const run = (seconds, each) => {
+      for (let i = 0; i < 120 * seconds && g.status === "playing"; i++) {
+        each?.();
+        g.update(1 / 120);
+      }
+    };
+    ui.start(1);
+    g.paused = false;
+    const op = g.op;
+    // Holding west while facing east: the flight pivots and flies back at speed.
+    const x0 = op.flight.x;
+    run(4, () => (g.input.x = -1));
+    out.holdingBackTurnsAndFliesBack = op.flight.dir === -1 && op.flight.x < x0 - 5 && op.flight.speed > 5;
+    // Slowed to a crawl, a light touch the other way is a creep backwards, not a turn.
+    run(3, () => (g.input.x = -0.2));
+    const x1 = op.flight.x;
+    run(3, () => (g.input.x = 0.1));
+    out.lightTouchCreepsBack = op.flight.dir === -1 && op.flight.phase === "pass" && op.flight.x > x1;
+    // Let go and the flight drifts on slowly.
+    g.input.x = 0;
+    run(2);
+    out.letGoDrifts = Math.abs(op.flight.speed - S.FLIGHT.speed) < 0.2;
+    // Held one way for a minute, the flight stops at the edge of the safe airspace.
+    run(60, () => (g.input.x = 1));
+    g.input.x = 0;
+    out.safeAirspaceHolds = Math.abs(op.flight.x) <= op.turnX + 1e-6 && op.airspace.visible !== false;
+    // Every live target ripples.
+    out.targetsRipple = op.ripples.mesh.count >= op.targets().length * 2;
+
+    // Tunnels (1.5): two garrisons underground, safe from a near miss, crushed by a hit on the entrance.
+    ui.start(4);
+    g.paused = false;
+    const tunnel = g.op.tunnels[0];
+    const inside = [...tunnel.occupants];
+    out.garrisonHidesUnderground = inside.length === 2 && inside.every((e) => e.inTunnel && !e.mesh.visible);
+    const bomb = () => ({ kind: "shockwave", mesh: g.view.model("bomb-blast"), dead: false });
+    // (Easy's bigger blasts reach further: the miss is judged against the scaled reach.)
+    g.op.detonate(bomb(), { x: tunnel.x + S.BOMBS.shockwave.radius * g.op.power + 3, y: 1, z: tunnel.z });
+    out.nearMissSparesTheTunnel = !tunnel.dead && inside.every((e) => !e.dead);
+    g.op.detonate(bomb(), { x: tunnel.x + 0.5, y: 1, z: tunnel.z });
+    out.hitOnTheEntranceCollapsesIt = tunnel.dead && inside.every((e) => e.dead);
+    // A fighter caught in the street next to the other tunnel runs down into it.
+    ui.start(4);
+    g.paused = false;
+    const other = g.op.tunnels[1];
+    const runner = g.op.enemies.find((e) => !e.inTunnel && !e.dead);
+    runner.state = "route";
+    runner.position.set(other.x + 4, 1, other.z);
+    runner.cur = { b: null, f: 0 };
+    g.op.currentPlace = () => ({ x: other.x + 4, y: 1, z: other.z, b: null, f: 0 });
+    g.op.hide(runner, true);
+    delete g.op.currentPlace;
+    run(4);
+    out.streetFightersFleeIntoTunnels = runner.inTunnel === other && other.occupants.has(runner);
+
+    // Difficulty: Easy is the default; Crazy carries fewer bombs and flak that can hit from 1.1.
+    ui.start(1);
+    const easyDrills = g.op.aircraft[0].payload.drill;
+    const easyChance = g.hitChance;
+    ui.setDifficulty("crazy");
+    ui.start(1);
+    out.crazyCarriesFewerBombs = g.op.aircraft[0].payload.drill < easyDrills;
+    out.crazyHitsFromTheStart = g.hitChance >= 0.4 && easyChance === 0;
+    out.modeIsSavedAndShown = ui.save.difficulty === "crazy" && document.getElementById("difficulty-chip").textContent === "CRAZY";
+    ui.setDifficulty("easy");
+    ui.start(1);
+    out.easyIsBack = g.difficulty === "easy" && document.querySelector('#difficulty-options [data-mode="easy"]').classList.contains("selected");
+    g.input.x = 0;
+    return out;
+  });
+  for (const [name, value] of Object.entries(freedom)) check(`strike ${name}`, value === true);
 
   const runs = await page.evaluate(`(${autopilot.toString()})()`);
   for (const run of runs) {

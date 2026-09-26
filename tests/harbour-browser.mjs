@@ -1,37 +1,47 @@
 // Harbour strike checks (missions 1.7-1.9): pattern bombs, ships, the ferry, and a scripted pilot
-// that wins each mission with the controls a player has (lane, speed, Reverse, payload, angle, release).
+// that wins each mission with the controls a player has: it picks a group, the pattern and angle
+// that sink most of it, marks the spot (as a click on the map does) and lets the flight fly
+// there and drop; it breaks away from flak by hand.
 
 export function harbourPilot(indices) {
   const { game: g, ui } = window.__TIDELOCK__;
+  const H = window.__TIDELOCK_HARBOUR__,
+    S = window.__TIDELOCK_STRIKE__;
   const results = [];
   for (const index of indices) {
     ui.start(index);
     g.paused = false;
     const op = g.op;
-    let target = null,
+    let plan = null,
       waitBombs = false,
       jink = 0,
       jinkDir = 1,
-      lastRelease = 0,
-      reversals = 0;
+      used = 0,
+      marks = 0;
     for (let step = 0; step < 120 * 420 && g.status === "playing"; step++) {
-      if (step % 12 === 0 && !waitBombs) target = chooseGroup();
-      steer();
+      if (!waitBombs && (!plan || step % 30 === 0)) {
+        if (!plan || plan.group.ships.every((s) => s.dead)) plan = choose();
+        if (plan) mark(plan);
+      }
       // Flak counter, as a player would: break sideways once the fire solution freezes.
       const lockIn = Math.min(9, ...op.aa.filter((n) => !n.dead && n.state === "lock").map((n) => (n.solution ? 0 : n.lock)));
       if (lockIn < 0.05 && jink <= 0) {
         jink = 1.1;
         jinkDir = op.flight.lateral > 0.5 ? -1 : 1;
       }
+      g.input.z = 0;
       if (jink > 0) {
         jink -= 1 / 120;
         g.input.z = jinkDir;
-      } else if (step % 6 === 0 && !waitBombs && tryRelease()) {
+      }
+      g.update(1 / 120);
+      if (op.used > used) {
+        used = op.used;
         waitBombs = true;
-        lastRelease = g.time;
+        plan = null;
+        op.clearAim();
       }
       if (waitBombs && op.bombs.length === 0) waitBombs = false;
-      g.update(1 / 120);
     }
     g.input.x = g.input.z = 0;
     results.push({
@@ -44,69 +54,62 @@ export function harbourPilot(indices) {
       left: op.remaining().ships,
       stars: op.stars(g.status === "success"),
       lost: op.aircraft.filter((a) => !a.alive).length,
-      reversals,
+      marks,
     });
 
-    function aliveIn(group) {
+    function alive(group) {
       return group.ships.filter((s) => !s.dead && !s.civilian);
     }
-    // The group with the most ships left, preferring one that is holding still.
-    function chooseGroup() {
-      const groups = op.fleet.groups.filter((gr) => aliveIn(gr).length);
-      groups.sort((a, b) => weight(b) - weight(a));
-      return groups[0] || null;
+    function loaded() {
+      return Object.keys(S.BOMBS).filter((kind) => op.aircraft.some((a) => a.alive && a.payload[kind] > 0));
     }
-    function weight(group) {
-      const ships = aliveIn(group);
-      const pose = window.__TIDELOCK_HARBOUR__.shipPose(group.data, group.ships.indexOf(ships[0]), g.time, group.plan);
-      return ships.length + (pose.holding ? 0.5 : 0);
-    }
-    function centre(group, time) {
-      const ships = aliveIn(group);
-      const c = { x: 0, z: 0 };
-      for (const s of ships) {
-        const p = op.fleet.poseAt(s, time);
-        c.x += p.x / ships.length;
-        c.z += p.z / ships.length;
-      }
-      return c;
-    }
-    function steer() {
-      g.input.x = 0;
-      g.input.z = 0;
-      if (!target) return;
-      const a = op.shooterFor(op.selected) || op.aircraft.find((x) => x.alive && x.forecast);
-      const f = a?.forecast;
-      if (!f) return;
-      const c = centre(target, g.time + f.time);
-      g.input.z = Math.max(-1, Math.min(1, (c.z - f.impact.z) * 0.8));
-      // A target well behind the pipper: turning round beats flying on to the edge.
-      const ahead = (c.x - f.impact.x) * op.flight.dir;
-      if (ahead < -12 && Math.abs(c.z - f.impact.z) < 4 && op.reverse()) reversals++;
-    }
-    // Try every loaded pattern at every angle from the shooter that would drop it; release the best
-    // when it sinks enough of the target group (or anything, once it has been a while).
-    function tryRelease() {
-      if (op.flight.phase !== "pass" || !target) return false;
-      const n = aliveIn(target).length;
-      if (!n) return false;
-      const need = g.time - lastRelease > 70 ? 1 : Math.min(n, 3);
+    // The group and fit worth most now: sinks first, key groups before the rest, near before far.
+    function choose() {
+      const fall = 2.2;
+      const ships = op.fleet.predicted(g.time + fall);
+      const flight = op.flight.x;
       let best = null;
-      for (const kind of Object.keys(window.__TIDELOCK_STRIKE__.BOMBS)) {
-        const a = op.shooterFor(kind);
-        if (!a || a.cooldown > 0) continue;
-        const steps = window.__TIDELOCK_STRIKE__.BOMBS[kind].pattern ? [0, 1, 2, 3, 4, 5, 6, 7] : [op.patternStep];
-        for (const s of steps) {
-          const { prediction } = op.preview(a, kind, s);
-          if (!prediction || prediction.civilian) continue;
-          const score = prediction.sinks * 10 + prediction.hits;
-          if (!best || score > best.score) best = { kind, s, score, prediction };
+      for (const group of op.fleet.groups) {
+        const left = alive(group);
+        if (!left.length) continue;
+        const mine = ships.filter((s) => s.ship.group === group);
+        const c = mine.reduce((a, s) => ({ x: a.x + s.pose.x / mine.length, z: a.z + s.pose.z / mine.length }), { x: 0, z: 0 });
+        const key = op.layout.required?.includes(group.data.id) ? 25 : 0;
+        for (const kind of loaded()) {
+          const def = S.BOMBS[kind];
+          const steps = def.pattern ? (kind === "ring" ? [0] : [0, 1, 2, 3, 4, 5, 6, 7]) : [0];
+          // Centred on the group, or on any one of its boats (a row, a raft, a hull).
+          const centres = [c, ...mine.filter((s) => !s.ship.dead).map((s) => ({ x: s.pose.x, z: s.pose.z }))];
+          for (const step of steps)
+            for (const centre of centres) {
+              const at = centre;
+              const offset = { x: at.x - c.x, z: at.z - c.z };
+              const points = def.pattern
+                ? H.patternPoints(def.pattern, at, step * H.ROTATION_STEP).map((p) => ({ ...p, y: 0.05, kind }))
+                : [{ x: at.x, y: 0.05, z: at.z, kind }];
+              const r = H.predictHits(mine, points, def.radius, def.shipDamage ?? 1, fall);
+              if (!r.sinks) continue;
+              const score = r.sinks * 10 + r.hits + key - Math.abs(at.x - flight) / 12;
+              if (!best || score > best.score) best = { group, kind, step, at, offset, score, points };
+            }
         }
       }
-      if (!best || best.prediction.sinks < need) return false;
-      op.select(best.kind);
-      op.rotate(best.s - op.patternStep);
-      return op.release(best.kind);
+      // Never a pattern that would touch a civilian.
+      if (best && H.predictHits(ships, best.points, S.BOMBS[best.kind].radius).civilian) return null;
+      return best;
+    }
+    // Select the payload and angle, then mark the spot: the flight flies there and drops by itself.
+    function mark(p) {
+      op.select(p.kind);
+      op.setPatternStep(p.step);
+      // Moving groups: keep the mark on the group's centre where it will be when the bombs land.
+      const ships = alive(p.group);
+      const c = ships.reduce((a, s) => {
+        const pose = op.fleet.poseAt(s, g.time + 2.2);
+        return { x: a.x + pose.x / ships.length, z: a.z + pose.z / ships.length };
+      }, { x: 0, z: 0 });
+      op.aim = { x: c.x + p.offset.x, z: c.z + p.offset.z };
+      marks++;
     }
   }
   return results;
@@ -139,15 +142,20 @@ export async function checkHarbour(page, check) {
     out.reverseStartsATurn = op.reverse() && op.flight.phase === "turn" && !op.canRelease();
     run(Math.ceil(S.FLIGHT.turnTime * 120) + 2);
     out.reverseFliesBack = op.flight.phase === "pass" && op.flight.dir === -1 && Math.abs(op.flight.x - x0) < 0.3 && Math.abs(op.flight.lane - lane) < 0.3;
-    // Speed is screen-relative: flying west, pushing right slows the flight down.
-    g.input.x = 1;
+    // Speed is screen-relative: flying west, a push to the right slows the flight (held on, it
+    // would turn round).
     run(120);
+    const pace = op.flight.speed;
+    g.input.x = 1;
+    run(Math.floor(S.FLIGHT.backHold * 120) - 6);
     g.input.x = 0;
-    out.pushingAgainstTheFlightSlowsIt = op.flight.speed < S.FLIGHT.speed - 0.5;
-    // The edges turn the flight round by themselves.
+    out.pushingAgainstTheFlightSlowsIt = pace > 1 && op.flight.speed < pace - 0.5 && op.flight.dir === -1 && op.flight.phase === "pass";
+    // Drifting on, the edge of the safe airspace turns the flight round by itself.
+    run(60);
+    const steady = op.flight.phase === "pass" && op.flight.dir === -1;
     op.flight.x = -op.turnX - 0.1;
     run(2);
-    out.edgesTurnTheFlightRound = op.flight.phase === "turn";
+    out.edgesTurnTheFlightRound = steady && op.flight.phase === "turn";
 
     // A pattern bomb bursts into its shape and the counter matches what sinks.
     ui.start(6);
@@ -287,6 +295,23 @@ export async function checkHarbour(page, check) {
     const down = g.op.patternStep === 2;
     document.querySelector('#ladder-floors [data-turn="2"]')?.click();
     out.angleButtonsTurnAndFlip = down && g.op.patternStep === 6;
+    // A mark on a boat that never stops (a raider circling in the outer roads) still gets its drop:
+    // the flight flies along with it.
+    ui.start(7);
+    g.paused = false;
+    run(12);
+    const circler = g.op.fleet.groups.find((x) => x.data.id === "roadsRing").ships[0];
+    g.op.select("stick");
+    g.op.setAim(circler.position, circler);
+    for (let i = 0; i < 120 * 90 && g.op.used === 0 && g.status === "playing"; i++) run(1);
+    out.markOnAMovingBoatDrops = g.op.used === 1;
+    // Badges, not sentences: every group over the water is a symbol and a count.
+    ui.start(8);
+    g.paused = false;
+    run(24);
+    const badges = g.op.fleet.labels();
+    out.harbourBadgesAreShort = badges.length > 5 && badges.every((l) => l.text.length <= 12 && /^[★●] \d/.test(l.text));
+    out.keyShipsWearStars = badges.some((l) => l.kind === "key" && l.text.startsWith("★"));
     return out;
   });
   for (const [name, value] of Object.entries(mechanics)) check(`harbour ${name}`, value === true);
@@ -294,7 +319,7 @@ export async function checkHarbour(page, check) {
   const runs = await page.evaluate(`(${harbourPilot.toString()})([6, 7, 8])`);
   for (const run of runs) {
     console.log(
-      `  harbour 1.${run.index + 1}: ${run.status} ${run.reason || ""} used ${run.used}/${run.par} in ${run.time}s stars ${run.stars} lost ${run.lost} ships left ${run.left} reversals ${run.reversals}`,
+      `  harbour 1.${run.index + 1}: ${run.status} ${run.reason || ""} used ${run.used}/${run.par} in ${run.time}s stars ${run.stars} lost ${run.lost} ships left ${run.left} marks ${run.marks}`,
     );
     check(`harbour mission 1.${run.index + 1} completed by scripted pilot`, run.status === "success");
   }

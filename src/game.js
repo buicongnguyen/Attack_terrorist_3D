@@ -7,6 +7,7 @@ import { isHostileEntity } from "./rescue-data.js";
 import { MISSIONS, COLORS, SHOT_INTERVAL, damageShields } from "./data.js";
 import { DECK_GUN_RANGE, WEAPONS } from "./river-data.js";
 import { createPhysics, addBox, movement, segmentSphere, clamp } from "./physics.js";
+import { DEFAULT_DIFFICULTY, difficulty, hitChance, seededRandom } from "./difficulty.js";
 
 const V = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
 const forward = V(0, 0, -1);
@@ -59,6 +60,7 @@ export class Game {
     this.weapon = "gun";
     this.paused = false;
     this.reducedMotion = false;
+    this.difficulty = DEFAULT_DIFFICULTY;
   }
 
   start(index) {
@@ -87,6 +89,16 @@ export class Game {
     this.rocketCooldown = 0;
     this.status = "playing";
     this.reason = null;
+    // The mode's levers, the chance that enemy fire reaching you hurts, and a per-mission random
+    // source, so the same mission plays out the same way in tests and scripted runs.
+    this.mode = difficulty(this.difficulty);
+    this.hitChance = hitChance(index, this.difficulty);
+    // Each attempt rolls its own sequence (a retry is not a replay), yet a run of attempts still
+    // repeats exactly, which keeps the scripted runs reproducible.
+    this.attempts = (this.attempts ?? 0) + 1;
+    this.random = seededRandom(1 + index * 7919 + this.attempts * 104729);
+    this.lastMiss = -Infinity;
+    this.hitsTaken = 0;
     this.finishTimer = 0;
     this.sentResult = false;
     this.paused = false;
@@ -513,6 +525,14 @@ export class Game {
     const other = this.op.friendlyHit?.(shot);
     if (t === null && !other) return;
     shot.dead = true;
+    // Enemy fire that reaches you only hurts with the mission's hit chance; the rest glances off.
+    if (!this.hitRoll()) {
+      const at = other && (t === null || other.t < t) ? other.t : t;
+      this.glance(shot.last.clone().lerp(shot.position, at));
+      // Still a block (Marlin was in the way), but a harmless one pays nothing.
+      if (t !== null && (!other || t <= other.t)) this.op.onBlocked?.(shot, true);
+      return;
+    }
     if (other && (t === null || other.t < t)) {
       other.apply();
       this.blast(shot.last.clone().lerp(shot.position, other.t), shot.missile ? 1.1 : 0.45, COLORS.hostile, { quiet: true });
@@ -622,8 +642,27 @@ export class Game {
     this.op.onKill?.(e, reward);
   }
 
+  // Whether enemy fire that has reached its mark does harm (the difficulty's hit chance).
+  hitRoll() {
+    return this.hitChance >= 1 || this.random() < this.hitChance;
+  }
+
+  // A round that reached you but did no harm: a spark and a "MISS" tick, so the rule is visible.
+  glance(position) {
+    this.flash(position, 0xfff1b8, 0.6);
+    this.ember(position, 0x9ff3ff, 0.5, 0.25);
+    // The toast explains the rule now and then; the spark marks every glance.
+    if (this.time - this.lastMiss > 8) {
+      this.lastMiss = this.time;
+      this.notify("toast", "GLANCING HIT / NO DAMAGE");
+    }
+  }
+
   hurtPlayer(position, amount) {
     if (this.status !== "playing") return;
+    // Harder modes hit harder (Easy softens a two-point mine to one); hits are counted as hits.
+    amount = Math.max(1, Math.round(amount * this.mode.enemyDamage));
+    this.hitsTaken++;
     const offset = position.clone().sub(this.player.position);
     let angle = Math.atan2(offset.z, offset.x);
     if (angle < 0) angle += Math.PI * 2;
@@ -807,6 +846,8 @@ export class Game {
     this.input.fire = false;
     if (success) {
       this.score += this.op.finishBonus?.() ?? 300;
+      // Harder modes pay more.
+      this.score = Math.round(this.score * this.mode.score);
       this.audio.play("win");
     } else {
       if (this.player && reason === "hull") this.blast(this.player.position, 2.3, COLORS.hostile);
