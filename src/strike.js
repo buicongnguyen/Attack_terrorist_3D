@@ -20,6 +20,10 @@ import {
   forecastImpact,
   blockHits,
   blocksNear,
+  boxDistance,
+  blastDistance,
+  inStorey,
+  DRILL_BURST,
   lineBlocked,
   surfaceBelow,
   burstGround,
@@ -55,6 +59,10 @@ const V = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
 const forward = V(0, 0, -1);
 const LIVERY = ["#ffc62b", "#ff8a6b", "#33d69f"];
 const HIDE_SECONDS = 18;
+// An enemy's marker, over the head (figures stand 1.4 m) but under the next floor (2.6).
+const MARKER_LIFT = 1.75;
+// How far a crewed barracks' fighters stand from its middle: one bomb on the roof reaches them all.
+const CAMP_RING = 1.7;
 // Flak telegraphs for 2 s; a volley can hurt only the aircraft it locked, and only once.
 // The fire solution freezes `solution` seconds before the shot: a lane change after that moment
 // (the HUD shows BREAK) throws the volley off. The slow flight stays in range longer, so nests
@@ -203,6 +211,23 @@ export class StrikeOperation {
       this.enterTunnel(e, tunnel, Infinity);
       this.enemies.push(e);
     }
+    // A crewed barracks: a crowd of fighters on its one floor, waiting for orders.
+    this.camps = this.buildings
+      .filter((b) => b.garrison)
+      .map((b) => {
+        const crew = [];
+        for (let i = 0; i < b.garrison; i++) {
+          // One in the middle and the rest on a ring round it, close enough for one bomb.
+          const a = (i / Math.max(1, b.garrison - 1)) * Math.PI * 2 + 0.6;
+          const [dx, dz] = i === b.garrison - 1 ? [0, 0] : [Math.cos(a) * CAMP_RING, Math.sin(a) * CAMP_RING];
+          const here = { t: 0, x: b.x + dx, y: storyY(0), z: b.z + dz, b: b.id, f: 0 };
+          crew.push(this.createEnemy({ route: { keys: [here, { ...here, t: 1 }], period: 1, offset: 0 }, group: `barracks:${b.id}`, post: here }));
+        }
+        // Under a roof their shadows never show, so they skip the shadow pass.
+        for (const e of crew) e.mesh.traverse((o) => o.isMesh && (o.castShadow = false));
+        this.enemies.push(...crew);
+        return { building: b, crew };
+      });
     this.aa = this.layout.aa.map((place, i) => this.createFlak(place, i));
     this.masts = this.layout.masts.map((place) => this.createMast(place));
     this.trucks = this.createConvoy();
@@ -452,7 +477,8 @@ export class StrikeOperation {
       });
     e.marker = new THREE.Sprite(markerMaterial(e.officer ? "officer" : "enemy"));
     e.marker.scale.setScalar(1.6);
-    e.marker.position.set(0, 2.6, 0);
+    // Over the head but inside the target's own storey (2.6: storeys of 1.9 m).
+    e.marker.position.set(0, MARKER_LIFT, 0);
     e.marker.renderOrder = 12;
     e.mesh.add(e.marker);
     e.hidden = false;
@@ -1182,13 +1208,18 @@ export class StrikeOperation {
       }
     }
     const slot = (e.id ?? this.enemies.indexOf(e)) % 4;
-    const spot = {
-      x: building.x + [-2, 2, -1.6, 1.8][slot],
-      y: storyY(0),
-      z: building.z + [-1.8, -1.2, 1.4, 1.6][slot],
-      b: building.id,
-      f: 0,
-    };
+    // A barracks crew already inside keeps its place (four hiding spots would bunch five).
+    const post = e.plan.post;
+    const spot =
+      post && post.b === building.id
+        ? { x: post.x, y: post.y, z: post.z, b: post.b, f: post.f }
+        : {
+            x: building.x + [-2, 2, -1.6, 1.8][slot],
+            y: storyY(0),
+            z: building.z + [-1.8, -1.2, 1.4, 1.6][slot],
+            b: building.id,
+            f: 0,
+          };
     e.path = timeline(pathBetween(this.layout, this.buildings, from, spot), WALK.run, g.time);
     e.state = "hide";
     e.hidden = true;
@@ -1451,11 +1482,8 @@ export class StrikeOperation {
       if (!end) continue;
       const reach = BOMBS.lance.radius * this.power;
       if (target.type === "ship") return Math.hypot(end.x - aim.x, end.z - aim.z) < reach + target.def.beam / 2 - 0.4;
-      const chest = { x: aim.x, y: aim.y + lift, z: aim.z };
-      return (
-        Math.hypot(end.x - chest.x, end.y - chest.y, end.z - chest.z) < reach - 0.4 &&
-        !lineBlocked(this.blocks, this.buildings, end, chest)
-      );
+      const chest = { x: aim.x, y: aim.y + inStorey(lift), z: aim.z };
+      return blastDistance(end, chest) < reach - 0.4 && !lineBlocked(this.blocks, this.buildings, end, chest);
     }
     return false;
   }
@@ -1475,7 +1503,7 @@ export class StrikeOperation {
     const building = buildingAt(this.buildings, b.x, b.z);
     if (building) {
       const target = Math.min(bomb.floor - 1, building.floors);
-      const detonateY = target >= building.floors ? building.top : storyY(target) + 1.1;
+      const detonateY = target >= building.floors ? building.top : storyY(target) + DRILL_BURST;
       if (b.y <= detonateY) this.detonate(bomb, b);
     }
   }
@@ -1534,21 +1562,13 @@ export class StrikeOperation {
     // Break structure first; people behind freshly broken walls are exposed to the blast.
     for (const block of blocksNear(this.blocks, point, breakRadius * 1.5)) {
       const limit = block.kind === "glass" ? breakRadius * 1.5 : breakRadius;
-      const d = Math.hypot(
-        Math.max(block.min[0] - point.x, 0, point.x - block.max[0]),
-        Math.max(block.min[1] - point.y, 0, point.y - block.max[1]),
-        Math.max(block.min[2] - point.z, 0, point.z - block.max[2]),
-      );
-      if (d < limit) this.breakBlock(block, point);
+      if (boxDistance(block.min, block.max, point) < limit) this.breakBlock(block, point);
     }
     if (shelterStruck(this.blocks, this.buildings, point, bomb.kind, 0, def.pattern ? 1 : this.power)) this.abort();
     let kills = 0;
     const exposed = (target, lift) => {
-      const chest = { x: target.position.x, y: target.position.y + lift, z: target.position.z };
-      return (
-        Math.hypot(chest.x - point.x, chest.y - point.y, chest.z - point.z) < radius &&
-        !lineBlocked(this.blocks, this.buildings, point, chest)
-      );
+      const chest = { x: target.position.x, y: target.position.y + inStorey(lift), z: target.position.z };
+      return blastDistance(chest, point) < radius && !lineBlocked(this.blocks, this.buildings, point, chest);
     };
     // A burst on a tunnel entrance brings it down; anyone underground is safe from anything else.
     for (const tunnel of this.tunnels)
@@ -1962,7 +1982,7 @@ export class StrikeOperation {
       hint: this.hint(),
       shelter: this.shelterWarning,
       progress: total ? 1 - (left.enemies + left.aa + left.masts + left.trucks + left.ships) / total : 1,
-      labels: [...this.patternLabels(), ...(this.fleet ? this.fleet.labels() : []), ...this.rallyLabels(), ...this.tunnelLabels()],
+      labels: [...this.patternLabels(), ...(this.fleet ? this.fleet.labels() : []), ...this.rallyLabels(), ...this.tunnelLabels(), ...this.campLabels()],
     };
   }
 
@@ -1992,6 +2012,14 @@ export class StrikeOperation {
     return this.tunnels
       .filter((t) => !t.dead && t.occupants.size)
       .map((t) => ({ id: `tunnel-${t.id}`, x: t.x, y: CITY.ground + 2.6, z: t.z, text: `TUNNEL / ${t.occupants.size}`, hot: true }));
+  }
+
+  // And over a crewed barracks: how many are still inside.
+  campLabels() {
+    return (this.camps || [])
+      .map(({ building: b, crew }) => ({ b, inside: crew.filter((e) => !e.dead && e.cur.b === b.id).length }))
+      .filter(({ inside }) => inside)
+      .map(({ b, inside }) => ({ id: `camp-${b.id}`, x: b.x, y: b.top + 3, z: b.z, text: `BARRACKS / ${inside}`, hot: true }));
   }
 
   // What the pattern panel shows: the selected shape, its angle and what it would hit.
@@ -2028,7 +2056,8 @@ export class StrikeOperation {
         .map((e) => ({
           id: `rally-${e.group}`,
           x: e.centre.x,
-          y: e.centre.y + 2.8,
+          // Indoors, under the next floor (2.6); in the street, over the heads.
+          y: e.centre.y + (e.centre.b ? 1.8 : 2.8),
           z: e.centre.z,
           text: e.status?.active
             ? e.present

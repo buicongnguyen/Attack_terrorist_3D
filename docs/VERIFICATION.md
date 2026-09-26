@@ -1,5 +1,35 @@
 # Release Verification
 
+## Tidelock 2.6 (a lower city, with parks, road works and crowded barracks)
+
+The lower storeys with blasts measured in storeys, the three kinds of park, the road works and the crewed barracks ([REDESIGN.md §14](REDESIGN.md#14-tidelock-26-a-lower-city-with-parks-road-works-and-crowded-barracks)) were verified on 2026-09-26 against the production build (`vite preview`), with GPU rendering and with SwiftShader as in CI.
+
+- **77 Node tests.** New or changed:
+  - storeys of 1.9 m, a figure still fits, and the tallest tower clears the flight;
+  - blasts reach the same floors as with 2.8 m storeys, and a street-level blast is unchanged;
+  - the wider city is low and open: towers of one to three storeys on under half the lots;
+  - crewed barracks: one storey, next to each mission's blocks, 0/1/1/1/2/2 of them;
+  - each crewed barracks brings two bombs, and Crazy always keeps at least one spare;
+  - road works: one lane of an inner street, clear of the walking line, doorways, crossings and the convoy loop, one per segment;
+  - every mission re-expands identically, and the authored missions are never changed.
+- **275 browser checks**, zero runtime or resource errors, both on the GPU and on SwiftShader. New:
+  - each crewed barracks holds five fighters on its one floor, all counted as targets;
+  - one bomb clears a barracks on Easy, and one Drill does on Crazy, whether it bursts on the floor or on the roof;
+  - every marker sits inside its target's own storey, and so does the Drill's floor band;
+  - a Drill set to F3 reaches F4 but never F5;
+  - letting go, the flight drifts (the check no longer assumes it stays clear of the patrol edge).
+- **Scripted pilots**, all on Easy:
+
+  | Missions | Result |
+  | --- | --- |
+  | City 1.1–1.6 | all six, crewed barracks and tunnels included; 1, 4, 5, 8, 9 and 13 bombs in 11–173 s |
+  | Harbour 1.7–1.9 | the quota with the lower warehouses: 20, 15 and 20 bombs in 190–323 s |
+  | Canal 2.1–2.6 | all six, 3 stars each |
+  | Rescue 3.1–3.3 | full sorties home |
+- **Layout audit** at eight sizes from 320×568 to 1440×900, with banners and help forced on: no overlaps, nothing off-screen. World tags now sit under every panel.
+- **Rendering:** 216–627 draw calls in the city (1.6 is the most; its barracks crews skip the shadow pass), at most 1.7 ms a frame there and 2.4 ms in the busiest harbour on the test GPU.
+- **Independent review:** 5 findings and a tail of smaller ones, all fixed ([REDESIGN.md §14](REDESIGN.md#independent-review-of-26)).
+
 ## Tidelock 2.5 (easy by default, free flight, an airier city, a harbour four times the size)
 
 Difficulty modes, free flight, hit chances, ripples, the airier city with tunnels, the 2 × 2 harbour with badges and health bars, and the canal's markers ([REDESIGN.md §13](REDESIGN.md#13-tidelock-25-easy-by-default-free-flight-an-airier-city-and-a-harbour-four-times-the-size)) were verified on 2026-09-26 against the production build (`vite preview`, GPU rendering).

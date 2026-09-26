@@ -410,7 +410,57 @@ Smaller ones, also fixed:
 - the canal banner was announced as an alert;
 - and some dead code and a misleading name (`enemyFire` is a reload multiplier, now `enemyReload`).
 
-## 14. Controls
+## 14. Tidelock 2.6: a lower city, with parks, road works and crowded barracks
+
+### The brief
+
+Reduce the height of every building: when buildings are tall, it is hard to tell where the targets are, and a target looks as if it is on the street when nothing is there. Add parks, yards, some streets under repair, and one-storey barracks with many enemies inside.
+
+### Evaluation
+
+The diagnosis is right, and it is geometry. The camera looks down at 45°, so anything above the ground is drawn up the screen by about its own height. A target on the roof of the seven-storey Glass Tower (19.8 m in 2.5) was drawn roughly a whole street "behind" its building, and the two-to-six-storey towers filling the wider city did the same everywhere. Lowering the buildings fixes it without touching the camera, the missions or their floors. Parks, yards and road works also help: they break up the grid, so the eye finds a target's lot quickly. A barracks full of enemies is a good target: one clear block, one bomb, a crowd.
+
+### What changed
+
+| Idea | Kept | How |
+| --- | --- | --- |
+| Lower buildings | Yes | Storeys are **1.9 m** instead of 2.8 m (figures stand 1.4 m, so they still fit). Every mission keeps its floors, so Drill floors, stairs and schedules are unchanged, and **blasts are measured in storeys**: a Drill set to a floor reaches the same floors as before, and a blast in the street reaches as far. Markers, rally tags and the Drill's floor band stay inside their own storey. The tallest tower is 13.5 m (was 19.8 m), a typical mission block 7.8 m (was 11.4 m). Towers in the wider city have one to three storeys (were two to six), and the median building there is now one storey. The harbour's warehouses are lower too. |
+| Parks and yards | Yes | Next to each mission's blocks, where the camera spends its time, three lots in four are now parks, yards or low barracks: 27–38 open lots in each mission (21–30 before). Parks come in three kinds: a tree-lined path with benches, a pond with a fountain where two paths cross, and a playground with a sandpit, swings and a slide. |
+| Streets under repair | Yes | Eight road works in each mission. One lane of an inner street is dug up inside red and white barriers, with cones at each end and a yellow digger and a sand pile on the pavement beside it. They stay clear of the walking line, doorways, crossings, crewed barracks and the convoy loop in 1.6, and no car parks on a street under repair. They are scenery only. |
+| One-storey barracks full of enemies | Yes, as targets | From 1.2 on, **crewed barracks** stand beside the mission's blocks (1, 1, 1, 2 and 2 of them). Each has sandbags either side of its door, a red flag on the roof, a "BARRACKS / 5" tag, and five fighters on its one floor, each a target with its own ripple. One Shockwave or Drill clears it, on any difficulty. Each adds one to the mission's par and brings two bombs, so even Crazy keeps one to spare. The Glass Tower now has 25 hostiles and 31 targets. |
+
+![A crewed barracks (five fighters), a tunnel and the lower city of 1.6](chapter1-barracks.png)
+
+### Found while building
+
+- **The first road works were on the pavement.** A street's asphalt is 3.8 m of its 10.5 m, and the dig sat 3.6 m off the centre line. It now takes one lane, with the digger on the pavement.
+- **A free-flight check assumed that a 2 s drift could not reach the patrol edge.** The reshuffled outer lots brought 1.2's edge a metre closer, and the flight turned round there, as it should. The check now looks for the drift before any turn.
+- **Storeys of 2.2 m were not low enough.** At 45° the Glass Tower's roof was still drawn 15.6 m up the screen from its base, most of a lot's width. At 1.9 m, about as low as a figure fits, that is 13.5 m.
+- **World tags were drawn over the HUD.** On a phone the new "BARRACKS / 5" tag landed on the radio message; tunnel and rally tags could do the same. Tags now sit under the top bar and every panel.
+
+### Independent review of 2.6
+
+A separate reviewer probed the change in the browser. Nothing crashed. Its findings, all fixed:
+
+| # | Finding | Fix |
+| --- | --- | --- |
+| 1 | With lower storeys, the blasts (sized in metres) reached further in floors: a Drill set to F3 killed on F2 to F4 at every spot and on F5 near the hole. This broke the floor-by-floor promise of the ladder. | Height differences in every blast check count 2.8 / 1.9 times over, and heights inside a storey (a chest, the Drill's burst) shrink by as much. Blasts reach the same floors as in 2.5, and a street blast is unchanged. A check confirms that F3 reaches F4 but never F5. |
+| 2 | Crazy had no spare bomb in four missions: the barracks raised the par, not the payload. At Crazy's power a Drill could also leave two of a crew alive. | Each crewed barracks brings two bombs (1–4 spare on Crazy), and the crew stands closer together. A check clears a crew with one Drill on Crazy, bursting either on the floor or on the roof. |
+| 3 | The Drill's floor band spilled 0.45 m into the storey above. | The band fits its storey. A check covers it. |
+| 4 | Enemy markers sat 2.5 m above the feet, in the storey above; indoor rally tags too. This caused the very "target looks elsewhere" confusion that 2.6 is meant to fix. | Markers sit over the head but under the next floor, and indoor rally tags sit under it too. A check covers the markers. |
+| 5 | The park kind depended only on the column. | It changes along rows and down columns. |
+
+Smaller ones, also fixed:
+- the sandbags stood across a crewed barracks' door;
+- road works could sit on a runner's way into a tunnel yard, and walkers on the centre line brushed the inner barrier (the works now keep clear of tunnel yards on either side, and the lane moved 0.1 m out);
+- five hiding crew shared four hiding spots (a crew now holds its place);
+- stale comments ("2–6 storeys", "about half", the zebra crossing's span) and a default that never fired;
+- the barracks tags came out of `tunnelLabels()`;
+- the determinism test skipped the road works and yards (it now re-expands every mission and compares the whole thing).
+
+The review also noted that each fighter costs about ten draw calls. The crews are under a roof, so they skip the shadow pass: 1.6 draws 627 calls, not 706.
+
+## 15. Controls
 
 | Action | Desktop | Touch |
 | --- | --- | --- |

@@ -425,10 +425,11 @@ export async function checkStrike(page, check) {
     const x1 = op.flight.x;
     run(3, () => (g.input.x = 0.1));
     out.lightTouchCreepsBack = op.flight.dir === -1 && op.flight.phase === "pass" && op.flight.x > x1;
-    // Let go and the flight drifts on slowly.
+    // Let go and the flight drifts on slowly (it may reach the patrol edge and turn round there).
     g.input.x = 0;
-    run(2);
-    out.letGoDrifts = Math.abs(op.flight.speed - S.FLIGHT.speed) < 0.2;
+    let drifting = false;
+    run(2, () => (drifting ||= op.flight.phase === "pass" && Math.abs(op.flight.speed - S.FLIGHT.speed) < 0.2 && op.flight.vx * op.flight.dir > 0));
+    out.letGoDrifts = drifting;
     // Held one way for a minute, the flight stops at the edge of the safe airspace.
     run(60, () => (g.input.x = 1));
     g.input.x = 0;
@@ -461,6 +462,43 @@ export async function checkStrike(page, check) {
     delete g.op.currentPlace;
     run(4);
     out.streetFightersFleeIntoTunnels = runner.inTunnel === other && other.occupants.has(runner);
+
+    // 2.6: one-storey barracks with a crowd inside (1.5 and 1.6 have two); one bomb on the roof clears one.
+    ui.start(5);
+    g.paused = false;
+    const camps = g.op.buildings.filter((b) => b.garrison);
+    const crew = (b) => g.op.enemies.filter((e) => e.plan?.group === `barracks:${b.id}`);
+    const live = g.op.targets();
+    out.barracksHoldACrowd =
+      camps.length === 2 &&
+      camps.every((b) => b.floors === 1 && crew(b).length === S.BARRACKS_CREW && crew(b).every((e) => e.cur.b === b.id && e.cur.f === 0 && live.includes(e)));
+    run(2);
+    g.op.detonate(bomb(), { x: camps[0].x + 0.5, y: camps[0].top + 0.2, z: camps[0].z });
+    g.op.detonate({ ...bomb(), kind: "drill" }, { x: camps[1].x, y: camps[1].top - 1, z: camps[1].z });
+    out.oneBombClearsABarracks = camps.every((b) => crew(b).every((e) => e.dead));
+    // On Crazy too, one Drill clears a crowd, bursting on its floor or on the roof.
+    ui.setDifficulty("crazy");
+    ui.start(5);
+    g.paused = false;
+    const hard = g.op.buildings.filter((b) => b.garrison);
+    g.op.detonate({ ...bomb(), kind: "drill" }, { x: hard[0].x, y: S.storyY(0) + S.DRILL_BURST, z: hard[0].z });
+    g.op.detonate({ ...bomb(), kind: "drill" }, { x: hard[1].x, y: hard[1].top, z: hard[1].z });
+    out.oneDrillClearsABarracksOnCrazy = hard.length === 2 && hard.every((b) => crew(b).every((e) => e.dead));
+    ui.setDifficulty("easy");
+    // Lower storeys: every marker sits inside its target's own storey, and so does the Drill's
+    // floor band; a Drill set to F3 reaches F2 to F4 at most, never F5.
+    ui.start(5);
+    g.paused = false;
+    out.markersInTheirOwnStorey = g.op.enemies.every((e) => e.marker.position.y * e.mesh.scale.y < S.CITY.floorH);
+    const tower = g.op.buildings.find((b) => b.floors >= 5);
+    g.op.city.showBand(tower, 2, "#ffffff");
+    const band = g.op.city.band;
+    out.drillBandInItsStorey = band.position.y - band.scale.y / 2 >= S.storyY(2) && band.position.y + band.scale.y / 2 <= S.storyY(3);
+    g.op.city.showBand(null);
+    const burst = { x: tower.x, y: S.storyY(2) + S.DRILL_BURST, z: tower.z };
+    const reach = S.BOMBS.drill.radius * g.op.power;
+    const onFloor = (f) => S.blastDistance(burst, { x: tower.x, y: S.storyY(f) + S.inStorey(0.8), z: tower.z }) < reach;
+    out.drillReachStaysNearItsFloor = onFloor(2) && !onFloor(4);
 
     // Difficulty: Easy is the default; Crazy carries fewer bombs and flak that can hit from 1.1.
     ui.start(1);

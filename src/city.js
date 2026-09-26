@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { CITY, storyY, lotCenter, cityBounds } from "./strike-data.js";
+import { CITY, WORKS, storyY, lotCenter, cityBounds } from "./strike-data.js";
 import { material } from "./world.js";
 
 const V = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
@@ -220,6 +220,8 @@ export class CityView {
     for (const plaza of this.layout.plazas || []) this.buildPlaza(plaza);
     for (const park of this.layout.parks || []) this.buildPark(park);
     for (const yard of this.layout.yards || []) this.buildYard(yard);
+    for (const work of this.layout.roadworks || []) this.buildRoadworks(work);
+    for (const b of this.buildings) if (b.garrison) this.buildCamp(b);
   }
 
   buildHarbour(harbour) {
@@ -298,18 +300,102 @@ export class CityView {
     for (const dx of [-4.2, 4.2]) this.box(V(c.x + dx, CITY.ground + 0.35, c.z), V(0.3, 0.7, 8.4), 0xc9b98f);
   }
 
-  // A pocket park on an empty lot: lawn, a path and a few trees.
+  // Road works: one lane dug up inside red and white barriers, cones at each end, and a yellow
+  // digger with its sand pile on the pavement beside it.
+  buildRoadworks(work) {
+    const along = work.along === "x";
+    const g = CITY.ground;
+    // Local frame: u runs along the street towards the middle of the segment, v across it
+    // towards the digger's pavement.
+    const k = -work.shift;
+    const at = (u, v, y, su, sv, sy, colour) =>
+      this.box(along ? V(work.x + u * k, g + y, work.z + v * work.side) : V(work.x + v * work.side, g + y, work.z + u * k), along ? V(su, sy, sv) : V(sv, sy, su), colour);
+    const { length: l, width: w, lane, pavement } = WORKS;
+    at(0, 0, 0.07, l - 0.4, w - 0.3, 0.06, 0x6b4a33);
+    at(-0.6, 0, 0.12, 1.2, 0.7, 0.1, 0x4a3324);
+    const n = 4;
+    for (let i = 0; i < n; i++) {
+      const u = -l / 2 + ((i + 0.5) * l) / n;
+      const colour = i % 2 ? 0xffffff : 0xff4b2b;
+      for (const s of [-1, 1]) at(u, (s * w) / 2, 0.38, l / n - 0.12, 0.16, 0.5, colour);
+    }
+    for (const s of [-1, 1]) {
+      // (Short of the zebra crossing at the end of the segment.)
+      at(s * WORKS.cones, -0.2, 0.28, 0.36, 0.36, 0.56, 0xff8a1f);
+      at(s * WORKS.cones, -0.2, 0.34, 0.4, 0.4, 0.08, 0xffffff);
+    }
+    // The digger: tracks, a yellow body, a cab, and a boom over the dig with its bucket.
+    const v = pavement - lane;
+    at(0.2, v - 0.55, 0.22, 2, 0.4, 0.44, 0x2a2d33);
+    at(0.2, v + 0.55, 0.22, 2, 0.4, 0.44, 0x2a2d33);
+    at(0.2, v, 0.75, 1.8, 1.3, 0.62, 0xffc62b);
+    at(0.55, v + 0.25, 1.45, 0.8, 0.8, 0.8, 0x2f3542);
+    at(0.55, v + 0.25, 1.9, 0.9, 0.9, 0.1, 0xffc62b);
+    at(-0.5, v * 0.5, 1.55, 0.3, v, 0.3, 0xffc62b);
+    at(-0.5, 0.15, 0.85, 0.3, 0.3, 1.1, 0xffc62b);
+    at(-0.5, 0.05, 0.35, 0.7, 0.5, 0.4, 0x3a4048);
+    // Sand beside it, towards the middle of the segment (clear of the corner trees).
+    at(1.9, v + 0.1, 0.3, 1.2, 1.1, 0.6, 0xe9c98b);
+    at(1.9, v + 0.1, 0.65, 0.7, 0.6, 0.3, 0xe9c98b);
+  }
+
+  // A crewed barracks: sandbags either side of the door and a red flag, so the crowd inside is expected.
+  buildCamp(b) {
+    const g = CITY.ground;
+    for (const s of [-1, 1]) {
+      this.box(V(b.x + s * 3.1, g + 0.3, b.z + 5.2), V(1.6, 0.6, 0.8), 0xc9b98f);
+      this.box(V(b.x + s * 3.1, g + 0.72, b.z + 5.2), V(1.1, 0.26, 0.6), 0xc9b98f);
+    }
+    this.box(V(b.x + 3.6, b.top + 1.4, b.z - 3.6), V(0.12, 2.8, 0.12), 0x3a4048);
+    this.box(V(b.x + 4.1, b.top + 2.4, b.z - 3.6), V(1, 0.6, 0.06), 0xff4b2b);
+  }
+
+  // A pocket park on an empty lot, in three kinds (2.6), so a row of parks isn't a row of copies: trees and benches along a path, a
+  // pond with a fountain where two paths cross, and a playground.
   buildPark(park) {
     const c = lotCenter(this.layout, park.col, park.row);
-    this.box(V(c.x, CITY.ground + 0.03, c.z), V(8.6, 0.08, 8.6), 0x5cbf45);
-    this.box(V(c.x, CITY.ground + 0.07, c.z), V(8.6, 0.02, 1.4), 0xf2d19a);
-    for (const [dx, dz] of [
-      [-2.6, -2.4],
-      [2.8, -2.2],
-      [-2.2, 2.6],
-      [2.4, 2.8],
-    ])
-      this.prop("street-tree", V(c.x + dx, CITY.ground, c.z + dz), 0.85 + this.random() * 0.25, this.random() * 6);
+    const g = CITY.ground;
+    const at = (dx, y, dz, sx, sy, sz, colour) => this.box(V(c.x + dx, g + y, c.z + dz), V(sx, sy, sz), colour);
+    const tree = (dx, dz) => this.prop("street-tree", V(c.x + dx, g, c.z + dz), 0.85 + this.random() * 0.25, this.random() * 6);
+    // A bench along x (seat, back and two legs), its back to +z or -z.
+    const bench = (dx, dz, back) => {
+      at(dx, 0.42, dz, 1.4, 0.1, 0.45, 0x9a6a44);
+      at(dx, 0.7, dz + back * 0.22, 1.4, 0.4, 0.08, 0x9a6a44);
+      for (const s of [-0.55, 0.55]) at(dx + s, 0.2, dz, 0.1, 0.4, 0.4, 0x3a4048);
+    };
+    at(0, 0.03, 0, 8.6, 0.08, 8.6, 0x5cbf45);
+    // Kinds change along a row and down a column.
+    const kind = (((park.col + 2 * park.row) % 3) + 3) % 3;
+    if (kind === 1) {
+      // Crossing paths, a square pond in stone and a jet of water.
+      at(0, 0.07, 0, 8.6, 0.02, 1.4, 0xf2d19a);
+      at(0, 0.07, 0, 1.4, 0.02, 8.6, 0xf2d19a);
+      at(0, 0.2, 0, 3, 0.4, 3, 0xc9b98f);
+      at(0, 0.24, 0, 2.4, 0.4, 2.4, 0x3fb6e8);
+      at(0, 0.9, 0, 0.22, 1.1, 0.22, 0xdff6ff);
+      for (const [dx, dz] of [[-3, -3], [3, -3], [-3, 3], [3, 3]]) tree(dx, dz);
+      bench(-2.6, 1.3, 1);
+      bench(2.6, -1.3, -1);
+    } else if (kind === 2) {
+      // A playground: a sandpit, a slide and a swing.
+      at(0, 0.07, -0.6, 8.6, 0.02, 1.4, 0xf2d19a);
+      at(-2.2, 0.12, 2.3, 2.8, 0.22, 2.4, 0xc9b98f);
+      at(-2.2, 0.15, 2.3, 2.3, 0.22, 1.9, 0xf3dc9c);
+      at(2.6, 0.9, 2.6, 1, 0.12, 1, 0xffc62b);
+      for (const [sx, sz] of [[-0.4, -0.4], [0.4, -0.4], [-0.4, 0.4], [0.4, 0.4]]) at(2.6 + sx, 0.45, 2.6 + sz, 0.1, 0.9, 0.1, 0x3a4048);
+      for (let i = 0; i < 4; i++) at(1.85 - i * 0.42, 0.78 - i * 0.2, 2.6, 0.5, 0.1, 0.8, 0xff4b2b);
+      at(0.6, 1.6, 1.6, 2.4, 0.12, 0.12, 0x2f86e8);
+      for (const s of [-1.1, 1.1]) at(0.6 + s, 0.8, 1.6, 0.12, 1.6, 0.12, 0x2f86e8);
+      for (const s of [-0.5, 0.5]) at(0.6 + s, 0.45, 1.6, 0.5, 0.06, 0.3, 0xff4b2b);
+      tree(-2.8, -2.8);
+      tree(2.8, -2.6);
+      bench(0, -2.4, -1);
+    } else {
+      at(0, 0.07, 0, 8.6, 0.02, 1.4, 0xf2d19a);
+      for (const [dx, dz] of [[-2.6, -2.4], [2.8, -2.2], [-2.2, 2.6], [2.4, 2.8]]) tree(dx, dz);
+      bench(0, -1.2, -1);
+      bench(0.2, 1.2, 1);
+    }
   }
 
   buildPlaza(plaza) {
@@ -485,9 +571,12 @@ export class CityView {
     const e = this.extent();
     const palette = ["#ff4b2b", "#ffc62b", "#2f86e8", "#33d69f", "#f7f1e1", "#b04cff", "#ff8a6b"];
     const skip = (x, z, keep) => this.random() > (this.quiet(x, z) ? keep * 0.3 : keep);
+    // No parked car on a segment under repair.
+    const works = (this.layout.roadworks || []).filter((w) => w.along === "x");
     for (const z of lines.streets)
       for (let i = 0; i < lines.avenues.length - 1; i++) {
         if (skip((lines.avenues[i] + lines.avenues[i + 1]) / 2, z, 0.65)) continue;
+        if (works.some((w) => Math.abs(w.z - z) < 2 && w.x > lines.avenues[i] && w.x < lines.avenues[i + 1])) continue;
         const x = (lines.avenues[i] + lines.avenues[i + 1]) / 2 + (this.random() - 0.5) * 4;
         const lane = this.random() < 0.5 ? -1.2 : 1.2;
         this.prop("car", V(x, CITY.ground, z + lane), 0.72, Math.PI / 2, palette[Math.floor(this.random() * palette.length)]);
@@ -517,8 +606,9 @@ export class CityView {
       this.band.position.set(building.x, building.top + 0.1, building.z);
       this.band.scale.set(8.9, 0.3, 8.9);
     } else {
-      this.band.position.set(building.x, y0 + 1.2, building.z);
-      this.band.scale.set(8.9, 2.3, 8.9);
+      // Inside its own storey (2.6: storeys of 1.9 m), not into the next.
+      this.band.position.set(building.x, y0 + CITY.floorH / 2, building.z);
+      this.band.scale.set(8.9, CITY.floorH - 0.2, 8.9);
     }
   }
 }

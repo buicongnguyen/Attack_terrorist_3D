@@ -20,6 +20,7 @@ import {
   lineBlocked,
   lerp3,
   storyY,
+  DRILL_BURST,
   scatterPattern,
   shelterStruck,
   payloadTotal,
@@ -158,7 +159,7 @@ test("the Drill forecast names the floor it will detonate on", () => {
     const f = forecastImpact(blocks, buildings, release, "drill", 3);
     if (f.building?.id !== "T1" || Math.abs(f.detonation.x - tower.x) > 2) continue;
     assert.equal(f.floor, 2);
-    assert.ok(f.detonation.y <= storyY(2) + 1.1 && f.detonation.y > storyY(2));
+    assert.ok(f.detonation.y <= storyY(2) + DRILL_BURST && f.detonation.y > storyY(2));
     return;
   }
   assert.fail("no release over the tower");

@@ -5,7 +5,9 @@ import { HARBOUR_MISSIONS, WATER_LEVEL, onLand, patternPoints } from "./harbour-
 export const CITY = Object.freeze({
   ground: 1,
   plinth: 0.2,
-  floorH: 2.8,
+  // 2.6: lower storeys (2.8 m before; figures stand 1.4 m), so a target on a roof sits close to
+  // its own street on screen instead of floating over the next one.
+  floorH: 1.9,
   slab: 0.32,
   half: 4,
   tiles: 4,
@@ -13,6 +15,15 @@ export const CITY = Object.freeze({
   pitch: 18.5,
   wall: 0.26,
 });
+
+// Blasts reach the same floors as they did with 2.8 m storeys (2.6): in a blast check a height
+// difference counts STOREY_REACH times over, and heights inside a storey (a chest, the Drill's
+// burst) shrink by as much. A blast at street level is unchanged.
+export const STOREY_REACH = 2.8 / CITY.floorH;
+export const inStorey = (h) => h / STOREY_REACH;
+export const blastDistance = (a, b) => Math.hypot(a.x - b.x, (a.y - b.y) * STOREY_REACH, a.z - b.z);
+// Where a Drill bursts above the floor it was set to.
+export const DRILL_BURST = inStorey(1.1);
 
 // The flight sweeps back and forth over the city: it turns round a short way past each edge (or
 // whenever the player reverses) and never leaves the map. Over targets it flies slowly (`speed`);
@@ -204,7 +215,7 @@ const tower = (id, col, row, floors, opts = {}) => ({
   ...opts,
 });
 
-const CITY_MISSIONS = [
+export const CITY_MISSIONS = [
   {
     // 1.1 Wake-Up Call: a single jammer with three guards. Teaches the pipper.
     cols: 3,
@@ -468,15 +479,25 @@ const CITY_MISSIONS = [
 // ------------------------------------------------------------------ the wider city
 
 // Each city mission's authored blocks sit in the middle of a district with three times as many
-// buildings along a row and four times as many along a column. The rest is generated: ordinary
-// towers of 2-6 storeys and small parks, the same every time for a given mission.
-// 2.5: one more row again, and in each row of the wider city only about half the lots hold a
-// tower. The rest are open: low barracks, vehicle yards (some over tunnel entrances) and parks.
+// buildings along a row and four times as many along a column (and one more row). The rest is
+// generated, the same every time for a given mission. 2.6: it is low and open. Under half the
+// lots hold a tower, of one to three storeys (a quarter of those next to the mission's blocks);
+// the rest are low barracks, vehicle yards (some over tunnel entrances) and parks.
 export const CITY_GROWTH = Object.freeze({ cols: 3, rows: 4, extraRows: 1 });
 // Tunnel entrances in the yards next to each mission's own blocks, and the fighters already
 // hiding in each (none in the first mission).
 const TUNNELS = [0, 1, 1, 1, 2, 2];
 export const GARRISON = 2;
+// One-storey barracks with a crowd of fighters inside (2.6), beside each mission's blocks.
+const BARRACKS = [0, 1, 1, 1, 2, 2];
+export const BARRACKS_CREW = 5;
+// Each crewed barracks is one more target for the par, so it brings two bombs (Shockwaves, or
+// Drills where the mission carries no Shockwave): even on Crazy a mission keeps a bomb to spare.
+const BARRACKS_BOMBS = 2;
+// Street segments dug up for repairs: one lane of the asphalt (the street is 3.8 m wide, the
+// walking line its centre), off the middle of the segment so a door's path to the street stays clear.
+const ROADWORKS = 8;
+export const WORKS = Object.freeze({ lane: 1.2, width: 1.3, length: 4.4, shift: 3.4, pavement: 3, cones: 2.4 });
 // Early missions hit harder (blast radius) and their bombs home further onto a nearby target.
 const POWER = [1.6, 1.5, 1.4, 1.3, 1.25, 1.2];
 const ASSIST = [4.5, 4, 3.5, 3, 3, 2.5];
@@ -513,27 +534,33 @@ export function expandCity(layout, index) {
       const out = Math.max(-col, col - (layout.cols - 1), -row, row - (layout.rows - 1), 0);
       if (out === 1 && (col < 0 || col >= layout.cols) !== (row < 0 || row >= layout.rows)) ring.push({ col, row });
     }
-  const tunnels = new Set(
-    ring
-      .map((lot) => ({ ...lot, key: random() }))
-      .sort((a, b) => a.key - b.key)
-      .slice(0, TUNNELS[index] ?? 1)
-      .map((lot) => `${lot.col},${lot.row}`),
-  );
+  const shuffled = ring.map((lot) => ({ ...lot, key: random() })).sort((a, b) => a.key - b.key);
+  const tunnelCount = TUNNELS[index] ?? 1;
+  const tunnels = new Set(shuffled.slice(0, tunnelCount).map((lot) => `${lot.col},${lot.row}`));
+  const crewed = new Set(shuffled.slice(tunnelCount, tunnelCount + (BARRACKS[index] ?? 1)).map((lot) => `${lot.col},${lot.row}`));
   for (let row = grid.minRow; row <= grid.maxRow; row++)
     for (let col = grid.minCol; col <= grid.maxCol; col++) {
       if (col >= 0 && col < layout.cols && row >= 0 && row < layout.rows) continue;
-      if (tunnels.has(`${col},${row}`)) {
+      const key = `${col},${row}`;
+      if (tunnels.has(key)) {
         yards.push({ col, row, tunnel: true });
         continue;
       }
+      if (crewed.has(key)) {
+        buildings.push(tower(`G${col}_${row}`, col, row, 1, { name: "Barracks", color: "#8f9a5b", roof: [], garrison: BARRACKS_CREW }));
+        continue;
+      }
+      // Low and open: towers of one to three storeys, and next to the mission's blocks (where
+      // the camera spends its time) mostly parks, yards and barracks.
+      const near = ring.some((lot) => lot.col === col && lot.row === row);
+      const [tall, low, yard] = near ? [0.25, 0.45, 0.75] : [0.45, 0.6, 0.8];
       const r = random();
-      if (r < 0.5) {
-        const floors = 2 + Math.floor(random() * 5);
+      if (r < tall) {
+        const floors = 1 + Math.floor(random() * 3);
         const roof = random() < 0.25 ? [random() < 0.5 ? "hvac" : "tank"] : [];
         buildings.push(tower(`C${col}_${row}`, col, row, floors, { roof }));
-      } else if (r < 0.7) buildings.push(tower(`B${col}_${row}`, col, row, 1, { name: "Barracks", color: "#8f9a5b", roof: [] }));
-      else if (r < 0.85) yards.push({ col, row, tunnel: false });
+      } else if (r < low) buildings.push(tower(`B${col}_${row}`, col, row, 1, { name: "Barracks", color: "#8f9a5b", roof: [] }));
+      else if (r < yard) yards.push({ col, row, tunnel: false });
       else parks.push({ col, row });
     }
   // A tunnel's entrance sits in its yard, on the side facing the mission's blocks.
@@ -544,15 +571,57 @@ export function expandCity(layout, index) {
       const toward = { x: -Math.sign(c.x) * (Math.abs(c.x) > (layout.cols * CITY.pitch) / 2 ? 1.2 : 0), z: -Math.sign(c.z) * (Math.abs(c.z) > (layout.rows * CITY.pitch) / 2 ? 1.2 : 0) };
       return { id: `tunnel${i}`, x: c.x + toward.x, z: c.z + toward.z, garrison: GARRISON };
     });
+  // Road works: a dug-up lane on some inner street segments, with the digger on the pavement
+  // beside it. Not on the convoy's loop, not beside a crewed barracks (its sandbags) or a tunnel
+  // yard (fighters run in from the street), and one per segment.
+  const roadworks = [];
+  const busy = new Set([...buildings.filter((b) => b.garrison), ...yards.filter((y) => y.tunnel)].map((l) => `${l.col},${l.row}`));
+  const loop = layout.convoy?.points || [];
+  const onLoop = (x, z) =>
+    loop.some((a, i) => {
+      const b = loop[(i + 1) % loop.length];
+      const t = Math.max(0, Math.min(1, ((x - a.x) * (b.x - a.x) + (z - a.z) * (b.z - a.z)) / ((b.x - a.x) ** 2 + (b.z - a.z) ** 2 || 1)));
+      return Math.hypot(x - a.x - t * (b.x - a.x), z - a.z - t * (b.z - a.z)) < 3;
+    });
+  const segments = new Set();
+  for (let tries = 0; roadworks.length < ROADWORKS && tries < ROADWORKS * 20; tries++) {
+    const across = random() < 0.5;
+    // An inner line (a street between two rows of lots, or an avenue between two columns).
+    const line = across ? grid.minRow + 1 + Math.floor(random() * (grid.maxRow - grid.minRow)) : grid.minCol + 1 + Math.floor(random() * (grid.maxCol - grid.minCol));
+    const cell = across ? grid.minCol + Math.floor(random() * (grid.maxCol - grid.minCol + 1)) : grid.minRow + Math.floor(random() * (grid.maxRow - grid.minRow + 1));
+    const side = random() < 0.5 ? -1 : 1;
+    const shift = random() < 0.5 ? -1 : 1;
+    const segment = `${across ? "s" : "a"}${line},${cell}`;
+    if (segments.has(segment)) continue;
+    // The lots on either side of the segment.
+    const beside = across ? [`${cell},${line}`, `${cell},${line - 1}`] : [`${line},${cell}`, `${line - 1},${cell}`];
+    if (beside.some((key) => busy.has(key))) continue;
+    const c = across ? lotCenter(layout, cell, line) : lotCenter(layout, line, cell);
+    // The street runs half a pitch north of (or west of) the lot centre.
+    const work = across
+      ? { x: c.x + shift * WORKS.shift, z: c.z - CITY.pitch / 2 + side * WORKS.lane, along: "x", side, shift }
+      : { x: c.x - CITY.pitch / 2 + side * WORKS.lane, z: c.z + shift * WORKS.shift, along: "z", side, shift };
+    if (onLoop(work.x, work.z)) continue;
+    segments.add(segment);
+    roadworks.push(work);
+  }
+  const crews = buildings.filter((b) => b.garrison).length;
+  const kind = layout.aircraft.some((a) => a.payload.shockwave) ? "shockwave" : "drill";
+  const carrier = layout.aircraft.findIndex((a) => a.payload[kind]);
+  const aircraft = layout.aircraft.map((a, i) =>
+    i === carrier && crews ? { ...a, payload: { ...a.payload, [kind]: a.payload[kind] + crews * BARRACKS_BOMBS } } : a,
+  );
   return {
     ...layout,
+    aircraft,
     grid,
     buildings,
     parks,
     yards,
+    roadworks,
     tunnels: tunnelList,
-    // Every garrisoned tunnel is one more target for the par.
-    par: layout.par + tunnelList.filter((t) => t.garrison).length,
+    // Every garrisoned tunnel or barracks is one more target for the par.
+    par: layout.par + tunnelList.filter((t) => t.garrison).length + crews,
     power: POWER[index] ?? 1.2,
     assist: ASSIST[index] ?? 2.5,
   };
@@ -726,10 +795,11 @@ export function segmentBox(a, b, min, max, pad = 0) {
   return t0;
 }
 
-const boxDistance = (min, max, p) =>
+// A blast's distance to a box, heights counted in storeys (see STOREY_REACH).
+export const boxDistance = (min, max, p) =>
   Math.hypot(
     Math.max(min[0] - p.x, 0, p.x - max[0]),
-    Math.max(min[1] - p.y, 0, p.y - max[1]),
+    Math.max(min[1] - p.y, 0, p.y - max[1]) * STOREY_REACH,
     Math.max(min[2] - p.z, 0, p.z - max[2]),
   );
 
@@ -1106,8 +1176,7 @@ export function forecastImpact(blocks, buildings, release, kind, floor = 1, opts
       const building = buildingAt(buildings, b.x, b.z);
       if (building) {
         const target = Math.min(floor - 1, building.floors);
-        const detonateY =
-          target >= building.floors ? building.top : storyY(target) + 1.1;
+        const detonateY = target >= building.floors ? building.top : storyY(target) + DRILL_BURST;
         if (b.y <= detonateY) {
           points.push(b);
           // Report the floor the bomb actually reaches: a release that clips a corner
@@ -1191,24 +1260,17 @@ export function scatterCentre(point, velocity, below) {
   return { x: point.x + velocity.vx * t * 0.85, z: point.z + velocity.vz * t * 0.85 };
 }
 
-const aabbDistance = (min, max, p) =>
-  Math.hypot(
-    Math.max(min[0] - p.x, 0, p.x - max[0]),
-    Math.max(min[1] - p.y, 0, p.y - max[1]),
-    Math.max(min[2] - p.z, 0, p.z - max[2]),
-  );
-
 // One rule for both the pipper warning and the abort: a detonation breaks a shelter
 // block, or lands within 45% of its blast radius of the shelter.
 export function shelterStruck(blocks, buildings, point, kind, margin = 0, power = 1) {
   const def = kind === "bomblet" ? BOMBS.scatter : BOMBS[kind] || BOMBS.scatter;
   for (const b of buildings) {
     if (b.kind !== "shelter") continue;
-    if (aabbDistance(b.min, b.max, point) < def.radius * power * 0.45 + margin) return true;
+    if (boxDistance(b.min, b.max, point) < def.radius * power * 0.45 + margin) return true;
     for (const block of blocksOf(blocks, b)) {
       if (!block.alive) continue;
       const limit = (block.kind === "glass" ? def.breakRadius * 1.5 : def.breakRadius) + margin;
-      if (aabbDistance(block.min, block.max, point) < limit) return true;
+      if (boxDistance(block.min, block.max, point) < limit) return true;
     }
   }
   return false;

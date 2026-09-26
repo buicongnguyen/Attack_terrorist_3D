@@ -38,6 +38,8 @@
       <button id="loading-retry" class="primary-button" onclick="location.reload()" hidden>Reload mission</button>
     </div>
     <div id="app" hidden>
+      <!-- World tags first, so the top bar and every HUD panel cover them. -->
+      <div id="world-labels" aria-hidden="true"></div>
       <header class="topbar">
         <div class="brand">
           <div class="brand-mark"><i data-lucide="crosshair"></i></div>
@@ -80,7 +82,6 @@
       <div id="intel" hidden aria-label="Intel timeline"></div>
       <div id="flak-warning" hidden role="alert"><i data-lucide="siren"></i><span id="flak-text">FLAK LOCK</span></div>
       <div id="coach" hidden role="status" aria-live="polite"></div>
-      <div id="world-labels" aria-hidden="true"></div>
       <div id="toast" role="status" aria-live="polite"></div>
       <div id="combo" aria-live="polite"><strong id="combo-count"></strong><span id="combo-bonus"></span></div>
 
