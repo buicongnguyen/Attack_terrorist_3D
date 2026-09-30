@@ -360,11 +360,13 @@ export class RescueOperation {
     pickup.dead = true;
     g.view.disposeObject(pickup.mesh);
     if (pickup.kind === "health") g.shields = [3, 3, 3];
+    const before = { ...this.gear };
     if (pickup.kind === "ammo") this.gear.rockets = Math.min(24, this.gear.rockets + 10);
     if (pickup.kind === "support") {
       this.gear.guided = Math.min(12, this.gear.guided + 4);
       this.gear.flares = Math.min(6, this.gear.flares + 2);
     }
+    const added = (key) => this.gear[key] - before[key];
     const rounds = ROUNDS[pickup.kind] ? pickup.kind : null;
     if (rounds) g.gainRounds(rounds);
     g.score += 60;
@@ -373,7 +375,11 @@ export class RescueOperation {
     if (!rounds)
       g.notify(
         "toast",
-        pickup.kind === "health" ? "SHIELDS RESTORED" : pickup.kind === "ammo" ? "ROCKETS +10" : "GUIDED +4 / FLARES +2",
+        pickup.kind === "health"
+          ? "SHIELDS RESTORED"
+          : pickup.kind === "ammo"
+            ? `ROCKETS +${added("rockets")}${added("rockets") ? "" : " / FULL"}`
+            : `GUIDED +${added("guided")} / FLARES +${added("flares")}`,
       );
   }
 

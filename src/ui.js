@@ -132,7 +132,7 @@ export function readSave() {
     const records = {};
     for (const [key, value] of Object.entries(saved.records || {})) {
       if (
-        Number.isInteger(+key) &&
+        /^\d+$/.test(key) &&
         +key >= 0 &&
         +key < MISSIONS.length &&
         Number.isFinite(value?.score) &&
@@ -263,7 +263,7 @@ export class UI {
       (e) => e.pointerType === "mouse" && this.finePointer.matches && (e.movementX || e.movementY) && this.setTouch(false),
       true,
     );
-    // A resize (phone toolbars, rotation) must not drop a stick the player is holding.
+    // A resize (phone toolbars, rotation) releases held keys, which would otherwise stick.
     window.addEventListener("resize", () => this.keys.clear());
     refreshIcons();
     this.badgeOverlays = [
@@ -480,9 +480,8 @@ export class UI {
     );
     // Right-click cancels the drop mark.
     this.view.canvas.addEventListener("contextmenu", (e) => {
-      if (!this.strike) return;
       e.preventDefault();
-      this.strike.clearAim();
+      this.strike?.clearAim();
     });
     // The minimap: tap or click anywhere on it to mark a drop point there.
     $("radar-map").addEventListener("pointerdown", (e) => {
@@ -701,7 +700,16 @@ export class UI {
     if (this.finePointer.matches && !e.repeat) this.setTouch(false);
     this.keys.add(code);
     if (e.repeat) return;
-    if (code === "KeyR") return this.start(this.game.index);
+    // R restarts, but only when pressed twice: it sits beside the flight keys.
+    if (code === "KeyR") {
+      const now = performance.now();
+      if (now - (this.restartAsked ?? -Infinity) < 1500 || this.game.status !== "playing") {
+        this.restartAsked = -Infinity;
+        return this.start(this.game.index);
+      }
+      this.restartAsked = now;
+      return this.game.notify("toast", "PRESS R AGAIN TO RESTART");
+    }
     const digit = +(/^(?:Digit|Numpad)([1-9])$/.exec(code)?.[1] || 0);
     const strike = this.strike;
     if (strike) {
@@ -1029,7 +1037,8 @@ export class UI {
       $("toast").textContent = data;
       $("toast").classList.add("visible", "checkpoint");
       this.toastTime = performance.now() + 2600;
-    } else if (type === "result") this.showResult(data);
+    } else if (type === "record") this.record(data);
+    else if (type === "result") this.showResult(data);
   }
 
   onStart(data) {
@@ -1124,13 +1133,17 @@ export class UI {
     refreshIcons();
   }
 
+  // Save a win (the best score and stars per mission are kept).
+  record(result) {
+    if (!result.success) return;
+    this.save.records = saveResult(this.save.records, result.index, result.score, result.stars);
+    this.persist();
+  }
+
   showResult(result) {
     this.clearInput();
     this.game.paused = true;
-    if (result.success) {
-      this.save.records = saveResult(this.save.records, result.index, result.score, result.stars);
-      this.persist();
-    }
+    this.record(result);
     const story = MISSION_STORY[result.index];
     const finale = result.success && result.index === MISSIONS.length - 1;
     const chapterEnd = result.success && MISSIONS[result.index + 1]?.chapter !== MISSIONS[result.index].chapter;
@@ -1141,7 +1154,7 @@ export class UI {
           ? `CHAPTER 0${this.game.chapter + 1} COMPLETE`
           : "MISSION COMPLETE"
         : "MISSION FAILED";
-    $("result-title").textContent = finale ? FINALE.title : result.success ? this.game.mission.name : "Regroup, Kestrel.";
+    $("result-title").textContent = finale ? FINALE.title : result.success ? this.game.mission.name : `Regroup, ${["Kestrel", "Marlin", "Lantern"][this.game.chapter]}.`;
     $("result-story").textContent = finale ? `${story.success} ${FINALE.text}` : result.success ? story.success : this.failureText(result, story);
     $("result-stars").innerHTML = Array.from(
       { length: 3 },

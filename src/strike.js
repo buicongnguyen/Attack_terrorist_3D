@@ -1978,7 +1978,7 @@ export class StrikeOperation {
       total,
       used: this.used,
       par: this.layout.par,
-      flak: (this.flakLocks || []).sort((a, b) => a.in - b.in),
+      flak: [...(this.flakLocks || [])].sort((a, b) => a.in - b.in),
       hint: this.hint(),
       shelter: this.shelterWarning,
       progress: total ? 1 - (left.enemies + left.aa + left.masts + left.trucks + left.ships) / total : 1,

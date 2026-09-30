@@ -1134,6 +1134,9 @@ export class Game {
       this.score += this.op.finishBonus?.() ?? 300;
       // Harder modes pay more.
       this.score = Math.round(this.score * this.mode.score);
+      // A win is recorded at once: the result dialog comes a moment later, and a pause in between
+      // must not lose it.
+      this.notify("record", this.result());
       this.audio.play("win");
     } else {
       if (this.player && reason === "hull") this.blast(this.player.position, 2.3, COLORS.hostile);

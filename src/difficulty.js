@@ -52,7 +52,7 @@ export const DIFFICULTY = Object.freeze({
   },
   crazy: {
     label: "Crazy",
-    blurb: "Scarce bombs and little mercy: most rounds that reach you hit.",
+    blurb: "Scarce bombs and little mercy: enemy fire lands far more often than on Hard.",
     bombs: 0.65,
     power: 0.8,
     assist: 0.3,

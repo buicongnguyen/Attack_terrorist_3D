@@ -395,7 +395,8 @@ export class RiverOperation {
         piece.rotation.y = i * 0.7;
       }
     }
-    g.score += r.spec.reward;
+    if (!r.paid) g.score += r.spec.reward;
+    r.paid = true;
   }
 
   // A stretch of bank scrolling round comes back intact.

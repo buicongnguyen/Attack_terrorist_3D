@@ -419,17 +419,9 @@ export function skiffPath(order, t) {
   };
 }
 
-export function pincerMeeting(order) {
-  return { x: order.meet.x, z: order.meet.z, time: order.delay };
-}
-
 export function riverStars({ success, bargesLost, bargeHealth, damage }) {
   if (!success) return 0;
   return 1 + (bargesLost === 0 ? 1 : 0) + (bargeHealth >= 0.6 && damage <= 4 ? 1 : 0);
-}
-
-export function scriptWindow(script, from, to) {
-  return script.filter((event) => event.d >= from && event.d < to);
 }
 
 // Where an air strike's line of bombs falls: across the whole canal at `z`, clamped ahead of
