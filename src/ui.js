@@ -211,6 +211,20 @@ const setHTML = (el, html) => {
 const escape = (text) =>
   String(text).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
 
+// Blender-rendered chapter medallions (public/ui); a missing file just hides the image.
+const EMBLEMS = ["city", "river", "valley"];
+// `key` is a chapter number, or "tidelock" for the finale.
+const emblemUrl = (key) => `${import.meta.env.BASE_URL}ui/emblem-${EMBLEMS[key] || (key === "tidelock" ? key : "city")}.webp`;
+function showEmblem(img, key, onMissing) {
+  // Shown at once (a repeated address fires no new load event); a file that fails hides it again.
+  img.hidden = false;
+  img.onerror = () => {
+    img.hidden = true;
+    onMissing?.();
+  };
+  img.src = emblemUrl(key);
+}
+
 function portrait(who) {
   const cast = speaker(who);
   return `<span class="portrait ${cast.hostile ? "hostile" : ""}" style="--tone:${cast.color}">${cast.initials}</span>`;
@@ -884,6 +898,7 @@ export class UI {
       story = MISSION_STORY[g.index],
       chapter = CHAPTER_STORY[g.chapter];
     const first = MISSIONS.findIndex((m) => m.chapter === g.chapter) === g.index;
+    showEmblem($("brief-emblem"), g.chapter);
     $("brief-eyebrow").textContent = `CHAPTER 0${g.chapter + 1} / ${chapter.title.toUpperCase()} / MISSION ${missionNumber(g.index)}`;
     $("brief-clock").textContent = `${story.place} / ${story.clock}`;
     $("brief-title").textContent = g.mission.name;
@@ -1003,7 +1018,8 @@ export class UI {
     CHAPTERS.forEach((chapter, c) => {
       const group = document.createElement("div");
       group.className = "mission-group";
-      group.innerHTML = `<span class="group-title" style="--tone:${chapter.color}">0${c + 1} ${chapter.name}</span>`;
+      group.innerHTML = `<span class="group-title" style="--tone:${chapter.color}"><img class="emblem" alt="" width="34" height="34" src="${emblemUrl(c)}" />0${c + 1} ${chapter.name}</span>`;
+      group.querySelector("img").addEventListener("error", (e) => e.target.remove());
       MISSIONS.forEach((mission, index) => {
         if (mission.chapter !== c) return;
         const record = this.save.records[index];
@@ -1150,6 +1166,11 @@ export class UI {
     this.record(result);
     const story = MISSION_STORY[result.index];
     const finale = result.success && result.index === MISSIONS.length - 1;
+    // A win shows its chapter's medallion; a failure keeps the plain icon.
+    const emblem = $("result-emblem-img");
+    $("result-icon").style.display = result.success ? "none" : "";
+    if (result.success) showEmblem(emblem, finale ? "tidelock" : this.game.chapter, () => ($("result-icon").style.display = ""));
+    else emblem.hidden = true;
     const chapterEnd = result.success && MISSIONS[result.index + 1]?.chapter !== MISSIONS[result.index].chapter;
     $("result-eyebrow").textContent = finale
       ? FINALE.eyebrow

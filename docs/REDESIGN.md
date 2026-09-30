@@ -544,7 +544,35 @@ Smaller ones, also fixed:
 - a list with no users, duplicated snapshot fields and an inline copy of the round order;
 - a test that checked constants instead of landing.
 
-## 16. Controls
+## 16. Tidelock 2.8: menus that fit a phone
+
+### The brief
+
+Check the menus, especially on a phone: neat buttons and text, and perhaps Blender for AAA-grade design.
+
+### Evaluation
+
+Blender is the right tool for the artwork and the wrong one for the controls. Buttons and text stay in CSS, where they are sharp at every size, tiny, accessible and translatable; Blender makes what CSS can't, rendered 3D medallions. An audit at seven screen sizes (320×568 to 1440×900) found the real problems:
+
+- 36 px difficulty buttons and 34 px mission rows (guidelines say 44 px);
+- Mission Control's four action buttons in ragged rows of different widths;
+- 10 px text in the controls table, key caps and result figures;
+- a "Next mission" label that wrapped onto two lines;
+- no sign of which chapter a screen belonged to.
+
+### What changed
+
+| Part | Change |
+| --- | --- |
+| Buttons and rows | Every button is 48 px high, every tap target at least 44 px, text at least 11 px. Mission Control's actions are a grid: Resume across the top, then three equal buttons (four across on a wider screen). The mission list, difficulty picker, preference toggles and controls summary are all 44 px rows that fill their width. |
+| Results | On a phone the buttons stack ("Next mission" first, "Retry" below), and "Next mission" never wraps. |
+| Blender medallions | Four thick bevelled medals rendered in Blender (`tools/blender/ui_emblems.py`, 13 KB each): a strike bomb over a skyline (city), a gunboat on the water (canal), a helicopter over mountains (valley) and the Tidelock gate with its wave. They head each chapter in Mission Control, the briefing and the win screen. |
+| Safe areas | Dialogs keep clear of a phone's home bar. |
+| Checks | `tests/menus-browser.mjs` runs the briefing, Mission Control, victory and defeat screens at seven sizes and fails on any small target, small text, sideways scroll or button outside its dialog (28 checks). |
+
+![Mission control and a win on a phone](mobile-menus.png)
+
+## 17. Controls
 
 | Action | Desktop | Touch |
 | --- | --- | --- |

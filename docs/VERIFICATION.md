@@ -1,5 +1,12 @@
 # Release Verification
 
+## Tidelock 2.8 (menus that fit a phone)
+
+The menu layout and the Blender medallions ([REDESIGN.md §16](REDESIGN.md#16-tidelock-28-menus-that-fit-a-phone)) were verified on 2026-09-30.
+
+- **337 browser checks**, zero runtime or resource errors, including 28 new menu checks: the briefing, Mission Control, victory and defeat screens at 320×568, 360×740, 390×844, 844×390, 667×375, 768×1024 and 1440×900, none with a target under 43 px, text under 11 px, sideways scrolling or a button outside its dialog.
+- **88 Node tests** unchanged.
+
 ## Tidelock 2.7 (banks that burn, and a helicopter that is easy to fly)
 
 The canal's destructible banks and barracks, rounds, and the helicopter's three maps, fly-over pickups, direction fire, launch crews, missile trucks and drone stations ([REDESIGN.md §15](REDESIGN.md#15-tidelock-27-banks-that-burn-and-a-helicopter-that-is-easy-to-fly)) were verified on 2026-09-26 against the production build (`vite preview`), with GPU rendering and with SwiftShader as in CI.

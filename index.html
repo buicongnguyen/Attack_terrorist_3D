@@ -221,6 +221,7 @@
 
     <dialog id="brief-dialog" aria-labelledby="brief-title">
       <div class="brief-top">
+        <img id="brief-emblem" class="emblem" alt="" width="52" height="52" hidden />
         <span class="eyebrow" id="brief-eyebrow">CHAPTER 01</span>
         <span class="brief-clock" id="brief-clock"></span>
       </div>
@@ -284,7 +285,7 @@
     </dialog>
 
     <dialog id="result-dialog" aria-labelledby="result-title" aria-describedby="result-story">
-      <div class="result-emblem"><i id="result-icon" data-lucide="badge-check"></i></div>
+      <div class="result-emblem"><img id="result-emblem-img" alt="" width="88" height="88" hidden /><i id="result-icon" data-lucide="badge-check"></i></div>
       <p class="eyebrow" id="result-eyebrow">MISSION COMPLETE</p>
       <h2 id="result-title">Jammer down</h2>
       <p id="result-story"></p>
@@ -296,8 +297,8 @@
         <div><span>BEST</span><strong id="result-best">0</strong></div>
       </div>
       <div class="result-actions">
-        <button id="result-retry" class="secondary-button"><i data-lucide="rotate-ccw"></i>Retry</button
-        ><button id="result-next" class="primary-button">Next mission<i data-lucide="arrow-right"></i></button>
+        <button id="result-next" class="primary-button">Next mission<i data-lucide="arrow-right"></i></button
+        ><button id="result-retry" class="secondary-button"><i data-lucide="rotate-ccw"></i>Retry</button>
       </div>
     </dialog>
     <script type="module" src="/src/main.js"></script>

@@ -2865,3 +2865,167 @@ html[data-reduced-motion="true"] *::after {
     padding: 2px;
   }
 }
+
+/* ------------------------------------------------------------------ menus, dialogs and results (2.8)
+   One rhythm for every screen: 48 px buttons, 44 px targets, 12 px and up for text, rows that
+   fill their width, and room at the bottom for a phone's home bar. */
+dialog {
+  max-height: calc(100dvh - 30px - env(safe-area-inset-bottom, 0px));
+}
+.primary-button,
+.secondary-button {
+  min-height: 48px;
+  white-space: nowrap;
+}
+.emblem {
+  flex: none;
+  object-fit: contain;
+  filter: drop-shadow(0 3px 4px rgba(0, 0, 0, 0.35));
+}
+.brief-top {
+  align-items: center;
+}
+.brief-top .emblem {
+  order: -1;
+  margin-right: 2px;
+}
+.group-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  letter-spacing: 0.03em;
+}
+.group-title .emblem {
+  margin: -4px 0;
+}
+.menu-actions {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+.menu-actions .primary-button {
+  grid-column: 1 / -1;
+}
+.menu-actions button {
+  width: 100%;
+  min-width: 0;
+  padding: 0 8px;
+  gap: 6px;
+  font-size: 15px;
+}
+@media (min-width: 520px) {
+  .menu-actions {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+  .menu-actions .primary-button {
+    grid-column: auto;
+  }
+}
+.difficulty-picker .picker-title {
+  font-size: 12px;
+}
+#difficulty-options button {
+  min-height: 44px;
+  font-size: 14px;
+}
+#difficulty-blurb {
+  font-size: 13px;
+  line-height: 1.4;
+}
+.mission-group {
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 200px), 1fr));
+}
+.mission-group button {
+  min-height: 44px;
+  font-size: 14px;
+}
+.mission-group button span,
+.mission-group button em {
+  font-size: 12px;
+}
+.preferences {
+  flex-direction: column;
+  gap: 4px;
+  font-size: 15px;
+}
+.preferences label {
+  min-height: 44px;
+  justify-content: space-between;
+}
+.preferences input[type="checkbox"] {
+  width: 26px;
+  height: 26px;
+  accent-color: var(--gold);
+}
+@media (min-width: 520px) {
+  .preferences {
+    flex-direction: row;
+    gap: 24px;
+  }
+  .preferences label {
+    gap: 12px;
+  }
+}
+details summary {
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+}
+#brief-lines .radio-line small {
+  font-size: 11px;
+}
+#brief-lines .radio-line p {
+  font-size: 13px;
+}
+.pad,
+kbd,
+.primary-button kbd,
+.secondary-button kbd {
+  font-size: 11px;
+}
+.result-stats span {
+  font-size: 11px;
+}
+.result-emblem {
+  width: 96px;
+  height: 96px;
+}
+.result-emblem:has(img:not([hidden])) {
+  background: none;
+  box-shadow: none;
+  transform: none;
+}
+.result-emblem img {
+  width: 96px;
+  height: 96px;
+  filter: drop-shadow(0 6px 8px rgba(0, 0, 0, 0.45));
+}
+.result-actions {
+  flex-wrap: wrap;
+}
+.result-actions .primary-button {
+  flex: 1 1 100%;
+}
+.result-actions .secondary-button {
+  flex: 1 1 100%;
+}
+@media (min-width: 520px) {
+  .result-actions {
+    flex-direction: row-reverse;
+    flex-wrap: nowrap;
+  }
+  .result-actions .primary-button {
+    flex: 1 1 0;
+  }
+  .result-actions .secondary-button {
+    flex: 1 1 0;
+  }
+}
+@media (orientation: landscape) and (max-height: 520px) {
+  .result-emblem,
+  .result-emblem img {
+    width: 64px;
+    height: 64px;
+  }
+}
