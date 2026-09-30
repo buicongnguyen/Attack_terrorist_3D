@@ -200,7 +200,7 @@ export class RescueOperation {
         radius: 1.65,
         route: t.route,
         leg: 1,
-        cooldown: 2 + Math.random(),
+        cooldown: 2 + g.random(),
         range: spec.range,
       });
       truck.turretNode = truck.mesh.getObjectByName("TruckTurret");
@@ -258,10 +258,10 @@ export class RescueOperation {
     const g = this.game;
     const e = g.opponent(V(x, GROUND, z), { hp: THREATS.soldier.hp, scale: 1.05 });
     e.state = "idle";
-    e.cooldown = 1.5 + Math.random() * 2;
+    e.cooldown = 1.5 + g.random() * 2;
     e.range = THREATS.soldier.range;
     e.home = { x, z };
-    e.mesh.rotation.y = Math.random() * Math.PI * 2;
+    e.mesh.rotation.y = g.random() * Math.PI * 2;
     return e;
   }
 

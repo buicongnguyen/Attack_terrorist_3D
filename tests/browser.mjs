@@ -335,6 +335,41 @@ try {
   }
 
   await checkRescue(page, browser, url, check, errors);
+  const flow = await page.evaluate(() => {
+    const { game: g, ui } = __TIDELOCK__,
+      out = {};
+    const key = (code) => window.dispatchEvent(new KeyboardEvent("keydown", { code }));
+    // A win is saved the moment the mission ends, even if the menu opens before the dialog.
+    localStorage.removeItem("tidelock-v4");
+    ui.start(0);
+    g.paused = false;
+    g.finish(true);
+    for (let i = 0; i < 30; i++) g.update(1 / 120);
+    ui.menu();
+    out.winSavedBeforeTheDialog = Boolean(JSON.parse(localStorage.getItem("tidelock-v4") || "{}").records?.[0]);
+    // R restarts only when pressed twice; right-click never opens the browser menu.
+    ui.start(9);
+    g.paused = false;
+    for (let i = 0; i < 120; i++) g.update(1 / 120);
+    key("KeyR");
+    out.firstRKeepsPlaying = g.time > 0.9;
+    window.dispatchEvent(new KeyboardEvent("keyup", { code: "KeyR" }));
+    key("KeyR");
+    out.secondRRestarts = g.time < 0.1;
+    const menu = new MouseEvent("contextmenu", { cancelable: true, bubbles: true });
+    ui.view.canvas.dispatchEvent(menu);
+    out.rightClickNeverOpensTheBrowserMenu = menu.defaultPrevented;
+    // A second finger lifting doesn't stop the first finger's fire.
+    ui.start(15);
+    ui.pointerFire = true;
+    ui.firePointer = 1;
+    ui.view.canvas.dispatchEvent(new PointerEvent("pointerup", { pointerId: 2 }));
+    out.otherFingerKeepsFiring = ui.pointerFire === true;
+    ui.view.canvas.dispatchEvent(new PointerEvent("pointerup", { pointerId: 1 }));
+    out.firingFingerStopsIt = ui.pointerFire === false;
+    return out;
+  });
+  for (const [name, value] of Object.entries(flow)) check(`flow ${name}`, value);
   check("no browser runtime or resource errors", errors.length === 0);
   console.log(JSON.stringify({ passed: results.length, firstFrame, errors }, null, 2));
 } catch (error) {

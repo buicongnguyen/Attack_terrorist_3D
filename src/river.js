@@ -1320,7 +1320,7 @@ export class RiverOperation {
     const origin = h.muzzle ? h.muzzle.getWorldPosition(V()) : h.mesh.position.clone().add(V(0, -0.5, -2));
     if (h.cooldown <= 0) {
       h.cooldown = SUPPORT.heli.every;
-      const jitter = V((Math.random() - 0.5) * 0.6, 0, (Math.random() - 0.5) * 0.6);
+      const jitter = V((g.random() - 0.5) * 0.6, 0, (g.random() - 0.5) * 0.6);
       g.spawnShot(origin, aim.clone().add(jitter), false, false, null, null, { damage: SUPPORT.heli.damage, ally: true, color: 0x9ff3ff });
       g.flash(origin, 0xfff1b8, 0.45);
     }

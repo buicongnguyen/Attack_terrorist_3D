@@ -37,6 +37,7 @@ export class Ripples {
   // `items`: { x, y, z, size, color, gain } for every target to ripple under this frame.
   update(time, items) {
     let i = 0;
+    if (items.length * 2 > this.mesh.count) items = [...items].sort((a, b) => b.gain - a.gain);
     for (const t of items) {
       if (i + 2 > this.mesh.count) break;
       for (let k = 0; k < 2; k++) {

@@ -461,6 +461,7 @@ export class UI {
       this.game.audio.unlock();
       this.aim(e.clientX, e.clientY);
       this.pointerFire = true;
+      this.firePointer = e.pointerId;
       this.view.canvas.setPointerCapture(e.pointerId);
     });
     this.view.canvas.addEventListener(
@@ -491,7 +492,10 @@ export class UI {
       const point = this.radarToWorld(e.offsetX, e.offsetY);
       if (point) this.strike.setAim(point);
     });
-    const release = () => (this.pointerFire = false);
+    // A second finger lifting must not stop the first one's fire.
+    const release = (e) => {
+      if (e.pointerId === undefined || this.firePointer === undefined || e.pointerId === this.firePointer) this.pointerFire = false;
+    };
     this.view.canvas.addEventListener("pointerup", release);
     this.view.canvas.addEventListener("pointercancel", release);
     this.view.canvas.addEventListener("lostpointercapture", release);
