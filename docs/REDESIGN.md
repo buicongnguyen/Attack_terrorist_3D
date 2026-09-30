@@ -568,7 +568,7 @@ Blender is the right tool for the artwork and the wrong one for the controls. Bu
 | Results | On a phone the buttons stack ("Next mission" first, "Retry" below), and "Next mission" never wraps. |
 | Blender medallions | Four thick bevelled medals rendered in Blender (`tools/blender/ui_emblems.py`, 13 KB each): a strike bomb over a skyline (city), a gunboat on the water (canal), a helicopter over mountains (valley) and the Tidelock gate with its wave. They head each chapter in Mission Control, the briefing and the win screen. |
 | Safe areas | Dialogs keep clear of a phone's home bar. |
-| Checks | `tests/menus-browser.mjs` runs the briefing, Mission Control, victory and defeat screens at seven sizes and fails on any small target, small text, sideways scroll or button outside its dialog (28 checks). |
+| Checks | `tests/menus-browser.mjs` runs the briefing, Mission Control, victory and defeat screens at seven sizes and fails on any small target, small text, sideways scroll or button outside its dialog (35 checks with the page-error checks). |
 
 ![Mission control and a win on a phone](mobile-menus.png)
 
