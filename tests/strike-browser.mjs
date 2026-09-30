@@ -434,6 +434,14 @@ export async function checkStrike(page, check) {
     run(60, () => (g.input.x = 1));
     g.input.x = 0;
     out.safeAirspaceHolds = Math.abs(op.flight.x) <= op.turnX + 1e-6 && op.airspace.visible !== false;
+    // A mark on a target that has run out of the airspace is kept for a moment, then dropped, so
+    // the flight does not wait at the edge for ever.
+    const runaway = { position: { x: op.turnX + 30, y: 0, z: 0 }, dead: false };
+    op.setAim(runaway.position, runaway);
+    run(1);
+    const keptAMoment = op.aim?.target === runaway;
+    run(3);
+    out.markOutOfReachIsDropped = keptAMoment && !op.aim;
     // Every live target ripples.
     out.targetsRipple = op.ripples.mesh.count >= op.targets().length * 2;
 

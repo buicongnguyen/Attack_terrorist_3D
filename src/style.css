@@ -2512,8 +2512,9 @@ html[data-touch="true"] kbd {
   .radio-line small {
     display: none;
   }
+  /* The radio is read mid-fight: it stays at the 11 px floor, even here. */
   .radio-line p {
-    font-size: 10px;
+    font-size: 11px;
   }
   .portrait {
     width: 26px;

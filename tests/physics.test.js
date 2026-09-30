@@ -51,10 +51,14 @@ test("debris fragments settle on the ground plane instead of falling through", (
   assert.ok(chunk.position.y > 1 && chunk.position.y < 1.6, `rest height ${chunk.position.y}`);
 });
 
-test("a shield absorbs first; only a hit through a broken sector breaches", () => {
+test("the struck sector absorbs first, then damage spills round; only empty shields breach", () => {
   const first = damageShields([1, 1, 1], 1);
   assert.deepEqual(first, { shields: [1, 0, 1], breached: false });
-  assert.equal(damageShields(first.shields, 1).breached, true);
+  // A second hit on the broken side drains the next sector instead of ending the sortie.
+  const second = damageShields(first.shields, 1);
+  assert.deepEqual(second, { shields: [1, 0, 0], breached: false });
+  assert.deepEqual(damageShields([0, 0, 2], 0, 3), { shields: [0, 0, 0], breached: true });
+  assert.equal(damageShields([0, 0, 0], 2).breached, true);
 });
 
 test("mission records store bests instead of accumulating retry scores", () => {

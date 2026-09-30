@@ -166,9 +166,16 @@ export function saveResult(records, index, score, stars) {
   };
 }
 
+// A hit drains the struck sector first and spills round the others, so the hull only breaches
+// once every sector is empty (the HUD counts shields as one total out of nine).
 export function damageShields(shields, sector, amount = 1) {
   const result = [...shields];
-  const absorbed = Math.min(result[sector], amount);
-  result[sector] -= absorbed;
-  return { shields: result, breached: amount > absorbed };
+  let remaining = amount;
+  for (let i = 0; i < result.length && remaining > 0; i++) {
+    const s = (sector + i) % result.length,
+      absorbed = Math.min(result[s], remaining);
+    result[s] -= absorbed;
+    remaining -= absorbed;
+  }
+  return { shields: result, breached: remaining > 0 };
 }

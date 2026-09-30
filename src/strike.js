@@ -117,6 +117,10 @@ const ASSIST_STEER = 6;
 const AIM_TOLERANCE = 1.1;
 // A click this close to a target marks the target itself (and follows it if it moves).
 const AIM_SNAP = 3.5;
+// A marked target this far past the safe airspace is out of reach; after MARK_GRACE seconds out
+// there the mark is dropped instead of holding the flight at the edge.
+const MARK_REACH = 6;
+const MARK_GRACE = 3;
 // The autopilot's correction per metre of pipper error (m/s per m).
 const AUTO_GAIN = 0.55;
 // How far past the last live target a flight with no mark flies before it turns round.
@@ -631,6 +635,8 @@ export class StrikeOperation {
     }
     // A point beyond the safe airspace is brought back to its edge, where the flight can reach it.
     this.aim = target ? { target } : { x: clamp(point.x, -this.turnX, this.turnX), z: clamp(point.z, this.lanes.min - 3, this.lanes.max + 3) };
+    // A fresh mark gets its own grace before it counts as out of reach.
+    this.markOutside = 0;
     this.aimUsed = true;
     this.forecastTimer = 0;
     return true;
@@ -638,6 +644,23 @@ export class StrikeOperation {
 
   clearAim() {
     this.aim = null;
+  }
+
+  // A marked target that runs out of the safe airspace is waited for a moment (it may turn back),
+  // then the mark is dropped and the flight is free to patrol again.
+  watchMark(dt) {
+    const target = this.aim?.target;
+    if (!target || target.dead) {
+      this.markOutside = 0;
+      return;
+    }
+    const p = target.position;
+    const outside = Math.abs(p.x) > this.turnX + MARK_REACH || p.z < this.lanes.min - MARK_REACH || p.z > this.lanes.max + MARK_REACH;
+    this.markOutside = outside ? (this.markOutside || 0) + dt : 0;
+    if (this.markOutside < MARK_GRACE) return;
+    this.markOutside = 0;
+    this.clearAim();
+    this.game.notify("toast", "MARK DROPPED / OUT OF REACH");
   }
 
   // Where the drop should land now: a marked target where it will be when the bomb lands.
@@ -982,6 +1005,7 @@ export class StrikeOperation {
     const g = this.game,
       f = this.flight;
     // With an aim point the flight steers itself; any held key or stick input takes over while held.
+    if (g.status === "playing") this.watchMark(dt);
     const auto = g.status === "playing" ? this.autoPilot() : null;
     const manualX = Math.abs(g.input.x) > 0.05,
       manualZ = Math.abs(g.input.z) > 0.05;

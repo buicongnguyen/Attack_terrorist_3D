@@ -271,10 +271,25 @@ export class UI {
     this.finePointer = matchMedia("(any-pointer: fine)");
     this.setTouch(coarse.matches || (navigator.maxTouchPoints > 0 && !this.finePointer.matches));
     coarse.addEventListener("change", () => this.setTouch(coarse.matches));
-    window.addEventListener("pointerdown", (e) => e.pointerType === "touch" && this.setTouch(true), true);
+    // Fingers still on the screen: a mouse nudged meanwhile must not switch layouts (the switch
+    // clears input and would drop a held stick).
+    this.touches = new Set();
+    window.addEventListener(
+      "pointerdown",
+      (e) => {
+        if (e.pointerType !== "touch") return;
+        this.touches.add(e.pointerId);
+        this.setTouch(true);
+      },
+      true,
+    );
+    const lift = (e) => this.touches.delete(e.pointerId);
+    window.addEventListener("pointerup", lift, true);
+    window.addEventListener("pointercancel", lift, true);
+    window.addEventListener("blur", () => this.touches.clear());
     window.addEventListener(
       "pointermove",
-      (e) => e.pointerType === "mouse" && this.finePointer.matches && (e.movementX || e.movementY) && this.setTouch(false),
+      (e) => e.pointerType === "mouse" && this.finePointer.matches && (e.movementX || e.movementY) && !this.touches.size && this.setTouch(false),
       true,
     );
     // A resize (phone toolbars, rotation) releases held keys, which would otherwise stick.

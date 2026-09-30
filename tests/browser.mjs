@@ -369,6 +369,30 @@ try {
     out.otherFingerKeepsFiring = ui.pointerFire === true;
     ui.view.canvas.dispatchEvent(new PointerEvent("pointerup", { pointerId: 1 }));
     out.firingFingerStopsIt = ui.pointerFire === false;
+    // Lantern's shields, like the boat's: a hit on an empty side drains the others, so the sortie
+    // only ends when the shield count reaches zero.
+    g.paused = false;
+    const damage = Math.max(1, Math.round(g.mode.enemyDamage));
+    g.shields = [0, 0, damage + 1];
+    // (East of the helicopter is sector 0, which is empty.)
+    const side = g.player.position.clone().add(new g.player.position.constructor(3, 0, 0.2));
+    g.hurtPlayer(side, 1);
+    out.helicopterHitOnAnEmptySideDrainsTheRest = g.status === "playing" && g.shields.join() === "0,0,1";
+    g.hurtPlayer(side, 1);
+    g.hurtPlayer(side, 1);
+    out.helicopterBreachesOnlyWhenEmpty = g.status === "failed" && g.reason === "hull";
+    // A touchscreen laptop: a mouse nudged while a finger holds the stick keeps the touch layout
+    // and the stick; once the finger lifts, the mouse switches back.
+    const finger = (type) => window.dispatchEvent(new PointerEvent(type, { pointerId: 7, pointerType: "touch" }));
+    const nudge = () => window.dispatchEvent(new PointerEvent("pointermove", { pointerId: 1, pointerType: "mouse", movementX: 5 }));
+    ui.setTouch(true);
+    finger("pointerdown");
+    ui.moveStick = { x: 1, z: 0 };
+    nudge();
+    out.mouseNudgeKeepsTheHeldStick = document.documentElement.dataset.touch === "true" && ui.moveStick.x === 1;
+    finger("pointerup");
+    nudge();
+    out.mouseAfterTheFingerLiftsSwitchesBack = document.documentElement.dataset.touch === "false";
     return out;
   });
   for (const [name, value] of Object.entries(flow)) check(`flow ${name}`, value);

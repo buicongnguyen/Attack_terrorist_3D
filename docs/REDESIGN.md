@@ -572,6 +572,15 @@ Blender is the right tool for the artwork and the wrong one for the controls. Bu
 
 ![Mission control and a win on a phone](mobile-menus.png)
 
+### Follow-up fixes (2.8.1)
+
+| Problem | Fix |
+| --- | --- |
+| Lantern's shields counted as one total ("6 / 9") on the HUD, but a hit on a side already emptied ended the sortie. | Damage spills round the other sides, as on the boat; the sortie ends only when the count reaches zero (`damageShields` is shared). |
+| A mark on a boat or truck that left the safe airspace held the flight at the edge until the player took over. | A mark out of reach for three seconds is dropped ("MARK DROPPED / OUT OF REACH") and the flight patrols again. |
+| On a touchscreen laptop, nudging the mouse while a finger held a stick switched to the keyboard layout and dropped the stick. | The layout only switches back to the mouse once no finger is on the screen. |
+| The radio text fell to 10 px on small landscape phones. | It stays at 11 px. |
+
 ## 17. Controls
 
 | Action | Desktop | Touch |

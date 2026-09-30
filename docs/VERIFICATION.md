@@ -1,5 +1,16 @@
 # Release Verification
 
+## Tidelock 2.8.1 (follow-up fixes)
+
+The fixes in [REDESIGN.md §16](REDESIGN.md#follow-up-fixes-281) were verified on 2026-10-01 against the production build (`vite preview`).
+
+- **88 Node tests**; the shield test now covers damage spilling round to the other sectors and the breach only at zero.
+- **349 browser checks**, zero runtime or resource errors. New:
+  - a hit on Lantern's empty side drains the other sides, and the sortie ends only when every shield is gone;
+  - a strike mark on a target that has run out of the airspace is kept for a moment, then dropped;
+  - on a touchscreen laptop a mouse nudged while a finger holds the stick keeps the touch layout and the stick, and switches back once the finger lifts.
+- On 568×320, 667×375, 740×360 and 844×390 landscape phones, the 11 px radio line was checked in city, harbour, canal and helicopter missions and overlaps no HUD panel.
+
 ## Tidelock 2.8 (menus that fit a phone)
 
 The menu layout and the Blender medallions ([REDESIGN.md §16](REDESIGN.md#16-tidelock-28-menus-that-fit-a-phone)) were verified on 2026-09-30.

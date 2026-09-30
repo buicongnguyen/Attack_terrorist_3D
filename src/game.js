@@ -840,29 +840,15 @@ export class Game {
     const offset = position.clone().sub(this.player.position);
     let angle = Math.atan2(offset.z, offset.x);
     if (angle < 0) angle += Math.PI * 2;
-    let sector = Math.floor(angle / ((Math.PI * 2) / 3)) % 3;
-    if (this.chapter === 1 && this.shields[sector] === 0) sector = this.shields.findIndex((hp) => hp > 0);
-    if (sector < 0) {
-      this.finish(false, "hull");
-      return;
-    }
-    let result;
-    if (this.chapter === 1) {
-      let remaining = amount;
-      const shields = [...this.shields];
-      for (let i = 0; i < 3; i++) {
-        const s = (sector + i) % 3,
-          absorbed = Math.min(shields[s], remaining);
-        shields[s] -= absorbed;
-        remaining -= absorbed;
-      }
-      result = { shields, breached: remaining > 0 };
-    } else result = damageShields(this.shields, sector, amount);
+    const sector = Math.floor(angle / ((Math.PI * 2) / 3)) % 3;
+    // The boat and the helicopter alike: a hit on an empty side drains the other sides first.
+    const had = this.shields[sector],
+      result = damageShields(this.shields, sector, amount);
     this.shields = result.shields;
     this.damageTaken += amount;
     this.shake = 0.28;
     this.audio.play("hit");
-    this.notify("toast", result.breached ? "HULL BREACH" : this.shields[sector] === 0 ? "SHIELD SECTOR LOST" : "SHIELD HIT");
+    this.notify("toast", result.breached ? "HULL BREACH" : had > 0 && this.shields[sector] === 0 ? "SHIELD SECTOR LOST" : "SHIELD HIT");
     if (result.breached) this.finish(false, "hull");
   }
 
