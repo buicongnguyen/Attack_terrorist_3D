@@ -55,6 +55,7 @@ import { activeBonuses } from "./pickups.js";
 import { DIFFICULTIES, DIFFICULTY, DEFAULT_DIFFICULTY, difficulty, percent } from "./difficulty.js";
 import { RescueHUD } from "./rescue-hud.js";
 import { isHostileEntity } from "./rescue-data.js";
+import { saveGovernor } from "./quality.js";
 
 const iconSet = {
   Crosshair,
@@ -305,6 +306,15 @@ export class UI {
     window.addEventListener("resize", () => this.updateBadgeBounds());
   }
 
+  // The graphics picker shows the setting, and in Auto the level this device runs at.
+  updateGraphics() {
+    const governor = this.view.governor,
+      select = $("graphics-quality");
+    if (!governor || !select) return;
+    select.value = governor.setting;
+    select.options[0].textContent = governor.setting === "auto" ? `Auto (${governor.profile.label})` : "Auto";
+  }
+
   setTouch(on) {
     const value = String(Boolean(on));
     if (document.documentElement.dataset.touch === value) return;
@@ -438,6 +448,18 @@ export class UI {
       this.updateSound();
       this.persist();
     };
+    // 2.9: the graphics level (resolution, shadows, how much wildlife). Auto adapts by itself.
+    const graphics = $("graphics-quality");
+    graphics.onchange = () => {
+      const governor = this.view.governor;
+      if (!governor) return;
+      governor.choose(graphics.value);
+      this.view.applyQuality(governor);
+      this.game.ambientBudget = governor.profile.life;
+      saveGovernor(governor);
+      this.updateGraphics();
+    };
+    this.updateGraphics();
     $("reduced-motion").onchange = () => {
       this.game.reducedMotion = $("reduced-motion").checked;
       this.save.reducedMotion = this.game.reducedMotion;

@@ -1197,7 +1197,7 @@ export class StrikeOperation {
       const moved = Math.hypot(p.x - e.position.x, p.z - e.position.z);
       e.position.set(p.x, p.y, p.z);
       e.cur = { b: p.b, f: p.f };
-      if (moved > 0.0005) e.mesh.rotation.y = THREE.MathUtils.damp(e.mesh.rotation.y, p.heading, 10, dt);
+      if (moved > 0.0005) e.mesh.rotation.y = dampAngle(e.mesh.rotation.y, p.heading, 10, dt);
       e.walking = moved > 0.0005;
       e.limbs?.forEach((limb, i) => {
         if (limb) limb.rotation.x = e.walking ? Math.sin(t * 9 + i * Math.PI) * 0.55 : Math.sin(t * 2 + i) * 0.05;
@@ -1277,7 +1277,7 @@ export class StrikeOperation {
       const p = sampleRoute(truck.route, g.time);
       const heading = Math.atan2(p.x - truck.position.x, p.z - truck.position.z);
       if (Math.hypot(p.x - truck.position.x, p.z - truck.position.z) > 1e-4)
-        truck.mesh.rotation.y = THREE.MathUtils.damp(truck.mesh.rotation.y, heading + Math.PI, 8, dt);
+        truck.mesh.rotation.y = dampAngle(truck.mesh.rotation.y, heading + Math.PI, 8, dt);
       truck.position.set(p.x, p.y, p.z);
       const lead = this.aircraft.find((a) => a.alive);
       if (truck.turret && lead) {

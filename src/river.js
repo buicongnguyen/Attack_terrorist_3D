@@ -771,7 +771,8 @@ export class RiverOperation {
       const dx = p.x - e.position.x,
         dz = p.z - e.position.z;
       e.position.set(p.x, 0.1 + Math.sin(g.time * 7 + e.slot) * 0.04, p.z);
-      if (Math.hypot(dx, dz) > 1e-4) e.mesh.rotation.y = Math.atan2(-dx, -dz);
+      // Skiffs swing round smoothly (the short way) instead of snapping to their course.
+      if (Math.hypot(dx, dz) > 1e-4) e.mesh.rotation.y = dampAngle(e.mesh.rotation.y, Math.atan2(-dx, -dz), 9, dt);
       if (Math.floor(g.time * 10) !== Math.floor((g.time - dt) * 10)) {
         const ring = g.view.ring(V(p.x, 0.11, p.z), 0.4, 0xffffff, 0.08);
         g.effects.push({ mesh: ring, life: 0.9, maxLife: 0.9, ring: true, growth: 2 });

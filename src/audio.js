@@ -90,6 +90,10 @@ export class AudioBus {
         this.noise(0.14, "lowpass", 900, 200, 0.12);
         this.tone("square", 120, 60, 0.09, 0.03);
         break;
+      case "flutter":
+        // A flock taking off: quick soft wing claps.
+        for (let i = 0; i < 6; i++) this.noise(0.035, "bandpass", 2400, 1300, 0.022, i * 0.05 + (i % 2) * 0.012);
+        break;
       case "pop":
         this.tone("sine", 700, 220, 0.1, 0.06);
         this.noise(0.1, "highpass", 2000, 800, 0.05);

@@ -11,6 +11,7 @@ import { createPhysics, addBox, movement, segmentSphere, segmentCircle, clamp } 
 import { DEFAULT_DIFFICULTY, difficulty, hitChance, seededRandom } from "./difficulty.js";
 import { ROUNDS, ROUND_ORDER, emptyRounds, bestRound, spendRound, addRounds, roundEffect } from "./armoury.js";
 import { dampAngle } from "./harbour.js";
+import { Ambient } from "./ambient.js";
 
 const V = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
 const forward = V(0, 0, -1);
@@ -144,6 +145,8 @@ export class Game {
           ? new RiverOperation(this)
           : new RescueOperation(this);
     if (this.chapter === 2) this.rescue = this.op;
+    // 2.9: fish, birds and reeds, sized by the graphics level and calmed by reduced motion.
+    this.ambient = new Ambient(this, { budget: this.ambientBudget ?? 1, quiet: this.reducedMotion });
     this.reticle = this.view.ring(V(0, 0.04, -8), 0.65, COLORS.gold, 0.08);
     this.reticle.visible = this.chapter !== 0;
     this.notify("start", { mission: this.mission, index });
@@ -206,6 +209,7 @@ export class Game {
     if (this.paused) return;
     this.shake = Math.max(0, this.shake - dt * 1.5);
     this.updateEffects(dt);
+    this.ambient?.update(dt);
     if (this.status !== "playing") {
       this.updatePeople(dt);
       if (this.chapter === 0) this.op.settle(dt);
@@ -917,6 +921,8 @@ export class Game {
   // Layered explosion: flash, fireballs, sparks, lingering smoke and a ground shock ring.
   blast(position, radius, color, options = {}) {
     const p = position.clone ? position.clone() : V(position.x, position.y, position.z);
+    // Birds take off and fish scatter whatever the effects budget.
+    this.ambient?.disturb(p.x, p.y, p.z, radius);
     const budget = 260 - this.effects.length;
     if (budget < 6) return;
     const ring = this.view.ring(p.clone().add(V(0, 0.08, 0)), 0.3, color, 0.12);

@@ -2959,10 +2959,26 @@ dialog {
   height: 26px;
   accent-color: var(--gold);
 }
+/* 2.9: the graphics level. */
+.preferences select {
+  min-height: 40px;
+  max-width: 62%;
+  padding: 0 10px;
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.08);
+  color: inherit;
+  font: inherit;
+  font-size: 14px;
+}
+.preferences select option {
+  color: #10223a;
+}
 @media (min-width: 520px) {
   .preferences {
     flex-direction: row;
-    gap: 24px;
+    flex-wrap: wrap;
+    gap: 4px 24px;
   }
   .preferences label {
     gap: 12px;

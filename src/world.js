@@ -117,15 +117,11 @@ function fxTextures() {
 }
 
 export class WorldView {
-  constructor(canvas) {
+  // `options` are the WebGLRenderer options from quality.js (antialiasing per device, the
+  // drawing buffer kept only for QA).
+  constructor(canvas, options = { antialias: true, alpha: false, powerPreference: "high-performance", preserveDrawingBuffer: true }) {
     this.canvas = canvas;
-    this.renderer = new THREE.WebGLRenderer({
-      canvas,
-      antialias: true,
-      alpha: false,
-      powerPreference: "high-performance",
-      preserveDrawingBuffer: true,
-    });
+    this.renderer = new THREE.WebGLRenderer({ canvas, ...options });
     this.renderer.setPixelRatio(Math.min(devicePixelRatio, 1.75));
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFShadowMap;
@@ -551,6 +547,21 @@ export class WorldView {
         }
       }
     }
+  }
+
+  // 2.9: resolution and shadow-map size from the graphics level. The shadow system stays on and
+  // only the sun stops casting at the lowest level: three recompiles lit materials when a light's
+  // shadow changes, cached ones included, which toggling the whole shadow map would not.
+  applyQuality(governor) {
+    this.renderer.setPixelRatio(governor.ratio);
+    const size = governor.profile.shadow;
+    this.sun.castShadow = size > 0;
+    if (size > 0 && this.sun.shadow.mapSize.x !== size) {
+      this.sun.shadow.mapSize.set(size, size);
+      this.sun.shadow.map?.dispose();
+      this.sun.shadow.map = null;
+    }
+    this.resize();
   }
 
   resize() {

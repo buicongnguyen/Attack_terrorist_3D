@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { mkdir } from "node:fs/promises";
 import { checkRescue } from "./rescue-browser.mjs";
 import { checkMenus } from "./menus-browser.mjs";
+import { checkAmbient } from "./ambient-browser.mjs";
 import { checkStrike } from "./strike-browser.mjs";
 import { checkRiver } from "./river-browser.mjs";
 import { checkHarbour } from "./harbour-browser.mjs";
@@ -337,6 +338,7 @@ try {
 
   await checkRescue(page, browser, url, check, errors);
   await checkMenus(browser, url, check);
+  await checkAmbient(browser, url, check);
   const flow = await page.evaluate(() => {
     const { game: g, ui } = __TIDELOCK__,
       out = {};

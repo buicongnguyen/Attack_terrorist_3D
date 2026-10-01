@@ -1,5 +1,31 @@
 # Release Verification
 
+## Tidelock 2.9 (living details, light enough for phones)
+
+The wildlife, the graphics levels and the turning fixes ([REDESIGN.md §17](REDESIGN.md#17-tidelock-29-living-details-light-enough-for-phones)) were verified on 2026-10-01 against the production build (`vite preview`).
+
+- **97 Node tests.** New:
+  - fish keep to their water, and a seed replays the same school;
+  - a scare sends fish darting away;
+  - canal fish drift with the flow and wrap round as whole schools;
+  - river fish follow a winding river without sticking on its banks;
+  - startled birds go nearest first, their group follows, and they settle on another perch;
+  - only a blast at a perch's height strikes it off;
+  - after any run of scares every bird settles again, with no NaNs;
+  - reduced motion keeps birds perched, and headings turn the short way;
+  - the governor lowers the resolution, then the level, ignores menus and hitches, recovers, and only QA keeps the drawing buffer.
+- **380 browser checks**, zero runtime or resource errors, including 31 new ones:
+  - city, harbour, canal and the three valleys each have their expected wildlife, with every fish in the water;
+  - each scene's details add at most 4 draws and under 9,000 triangles, and none cast or receive shadows;
+  - a blast flushes the birds in every scenario;
+  - after 30 s of canal flow every fish is still in the water and the reeds have moved with the current;
+  - the gunboat's bow scatters fish, and Lantern's downwash flushes waders;
+  - reduced motion drops the circling flocks and keeps birds perched;
+  - the Graphics picker's Battery saver drops the shadow pass and the resolution, and Auto restores them;
+  - an emulated phone starts Balanced: 1.25× resolution, no antialiasing, 1024 px shadows, three quarters of the wildlife.
+- **Scripted pilots, skippers and the rescue runs**: all 18 missions give exactly the same results (bombs, times, stars) as 2.8.1. The wildlife never touches the game's random numbers.
+- **Cost**, counted from the detail meshes at 1280×800: city 1 instanced draw and 0.9k triangles, harbour 3 and 2.1k, canal 4 and 3.8k, valleys 3 and 2.1–2.2k. Showing and hiding them changed the raw WebGL draw count per frame by 0–5, within the noise of effects coming and going. A phone at Balanced draws 487×1055 instead of 682×1477.
+
 ## Tidelock 2.8.1 (follow-up fixes)
 
 The fixes in [REDESIGN.md §16](REDESIGN.md#follow-up-fixes-281) were verified on 2026-10-01 against the production build (`vite preview`).

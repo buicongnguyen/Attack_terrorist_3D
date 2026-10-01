@@ -79,6 +79,8 @@ Every mission opens with a briefing and ends with a story debrief and star crite
 
 On portrait phones, Chapter 1's camera looks along the flight path so the district fills the width. Keys are read by physical position, so AZERTY players steer with Z Q S D. The layout follows the input you last used: touch shows the sticks, and a mouse or keyboard shows key hints.
 
+Pigeons, gulls, egrets, waders, fish and reeds live on the roofs, quays, banks and water, and take flight or scatter when the fighting comes near. Each kind is one instanced draw with no shadows. Mission Control's **Graphics** setting (Auto by default) trades resolution and then shadows on slower devices; phones start at Balanced.
+
 ## Run locally
 
 Requires Node.js 22.12+ (or a compatible current release).

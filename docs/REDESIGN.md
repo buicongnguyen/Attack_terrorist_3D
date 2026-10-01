@@ -581,7 +581,57 @@ Blender is the right tool for the artwork and the wrong one for the controls. Bu
 | On a touchscreen laptop, nudging the mouse while a finger held a stick switched to the keyboard layout and dropped the stick. | The layout only switches back to the mouse once no finger is on the screen. |
 | The radio text fell to 10 px on small landscape phones. | It stays at 11 px. |
 
-## 17. Controls
+## 17. Tidelock 2.9: living details, light enough for phones
+
+### The brief
+
+Look at how Zoo Garden draws the fish in its ponds (tiny, beautiful, smooth even on phones), and add the same kind of light, beautiful life to Tidelock wherever a scenario suits it.
+
+### Evaluation
+
+- Zoo Garden's fish are not sprites. They are small low-poly models under a fixed orthographic camera, the 2.5D look Tidelock already has. What keeps them smooth is budget: few objects, no shadows, motion made of a few lines of maths, and a governor that lowers the resolution on a slow phone.
+- Both games were measured at phone size (390×844 at 3×, CPU slowed 4×). Both held 60 fps on a desktop GPU, so what a phone feels is mostly pixels. Tidelock drew 682×1477 with antialiasing and 2048 px shadows on every device; Zoo Garden draws 487×1055 without antialiasing.
+
+### What changed
+
+| Scenario | Details | They react to |
+| --- | --- | --- |
+| City | Pigeons on the roofs, slate grey against the pale roofs. | A bomb: the nearest bird goes first and its flock follows in a ripple, circles, and later settles on another roof (never one a blast has holed). |
+| Harbour | Fish schools in the basins, grey-backed gulls on the quay kerbs, and gulls circling over the part of the harbour in view. | Bombs scatter the fish and flush the gulls. |
+| Canal | Fish drifting with the current, egrets on the grass (herons on the sand below the Narrows' rock walls), reeds swaying in the shallows, and swallows skimming the water (bats at dusk). The Cut's concrete walls leave no beach, so it has fish and swallows only. | The gunboat parts the fish at its bow and flushes the birds it passes; shells and rockets do the same. |
+| Valleys | River fish, waders at the water's edge, and swallows over the jungle, hawks over the canyon, bats at Last Light. | Lantern's downwash flushes the waders and scatters the fish below her; so do explosions. |
+
+How it stays light:
+- Each kind is one instanced draw. The fish swim and the wings beat in the vertex shader; the circling flocks are computed entirely on the GPU.
+- Nothing casts or receives shadows.
+- The update runs at most 60 times a second and allocates nothing.
+- The creatures have their own random numbers, so every mission and every scripted run plays out exactly as before.
+- A wing flutter sounds once per flock taking off, at most every 1.2 s.
+- Reduced motion keeps the birds on their perches, calms the fish and drops the circling flocks.
+
+**Graphics** (Mission Control): Auto (the default), Sharp, Balanced or Battery saver, kept per device.
+- Phones start Balanced: 1.25× resolution, no antialiasing on high-density screens, 1024 px shadows. Desktops keep the old 1.75× cap and 2048 px shadows.
+- Auto lowers the resolution, then the level, after three slow seconds (under 36 fps), and raises it again above 57 fps. It ignores the first four seconds of a mission, while shaders compile.
+- Battery saver stops the sun casting shadows, so the shadow pass is skipped.
+- The level also scales the wildlife: all of it at Sharp, three quarters at Balanced, half at Battery saver.
+- The drawing buffer is kept only in the QA build, so phone GPUs can discard each frame.
+
+Movement: city walkers and trucks now turn the short way round. Their plain damping spun them 270° whenever a new heading crossed ±180°. Canal skiffs swing onto their course instead of snapping.
+
+### Cost
+
+Counted from the detail meshes at 1280×800 (Sharp). Showing and hiding them changed the raw WebGL draw count per frame by 0–5, within the noise of effects coming and going.
+
+| Scenario | Details | Instanced draws | Triangles |
+| --- | --- | ---: | ---: |
+| City 1.1 | 43 pigeons | 1 | 0.9k (of 721k) |
+| Harbour 1.7 | 44 fish, 26 gulls, 7 circling | 3 | 2.1k (of 353k) |
+| Canal 2.1 | 40 fish, 17 egrets, 72 reed clumps, 8 swallows | 4 | 3.8k (of 178k) |
+| Valleys 3.1–3.3 | 44 fish, 26–32 waders, 4–8 circling | 3 | 2.1–2.2k (of 148k–401k) |
+
+On a phone at Balanced the canvas is 487×1055 instead of 682×1477: about half the pixels, with no antialiasing.
+
+## 18. Controls
 
 | Action | Desktop | Touch |
 | --- | --- | --- |
