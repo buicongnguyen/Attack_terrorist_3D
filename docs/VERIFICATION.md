@@ -1,5 +1,9 @@
 # Release Verification
 
+## Tidelock 2.9.1
+
+Graphics and reduced-motion changes made in Mission Control now apply to the wildlife of the mission in progress, not just the next one. Verified on 2026-10-01: 97 Node tests and 381 browser checks (one new: Battery saver halves the canal fish at once, reduced motion drops the swallows at once, and both come back), zero errors, and the 18 scripted runs unchanged.
+
 ## Tidelock 2.9 (living details, light enough for phones)
 
 The wildlife, the graphics levels and the turning fixes ([REDESIGN.md §17](REDESIGN.md#17-tidelock-29-living-details-light-enough-for-phones)) were verified on 2026-10-01 against the production build (`vite preview`).

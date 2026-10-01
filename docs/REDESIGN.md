@@ -613,7 +613,7 @@ How it stays light:
 - Phones start Balanced: 1.25× resolution, no antialiasing on high-density screens, 1024 px shadows. Desktops keep the old 1.75× cap and 2048 px shadows.
 - Auto lowers the resolution, then the level, after three slow seconds (under 36 fps), and raises it again above 57 fps. It ignores the first four seconds of a mission, while shaders compile.
 - Battery saver stops the sun casting shadows, so the shadow pass is skipped.
-- The level also scales the wildlife: all of it at Sharp, three quarters at Balanced, half at Battery saver.
+- The level also scales the wildlife: all of it at Sharp, three quarters at Balanced, half at Battery saver. A level or reduced-motion change made in the menu re-stocks the mission at once (2.9.1); Auto's own changes wait for the next mission, so nothing pops in or out mid-fight.
 - The drawing buffer is kept only in the QA build, so phone GPUs can discard each frame.
 
 Movement: city walkers and trucks now turn the short way round. Their plain damping spun them 270° whenever a new heading crossed ±180°. Canal skiffs swing onto their course instead of snapping.

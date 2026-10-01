@@ -456,6 +456,7 @@ export class UI {
       governor.choose(graphics.value);
       this.view.applyQuality(governor);
       this.game.ambientBudget = governor.profile.life;
+      this.game.restock();
       saveGovernor(governor);
       this.updateGraphics();
     };
@@ -464,6 +465,7 @@ export class UI {
       this.game.reducedMotion = $("reduced-motion").checked;
       this.save.reducedMotion = this.game.reducedMotion;
       document.documentElement.dataset.reducedMotion = String(this.game.reducedMotion);
+      this.game.restock();
       this.persist();
     };
     $("gun-weapon").onclick = () => this.weapon("gun");

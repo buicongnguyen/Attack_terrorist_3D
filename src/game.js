@@ -146,10 +146,18 @@ export class Game {
           : new RescueOperation(this);
     if (this.chapter === 2) this.rescue = this.op;
     // 2.9: fish, birds and reeds, sized by the graphics level and calmed by reduced motion.
-    this.ambient = new Ambient(this, { budget: this.ambientBudget ?? 1, quiet: this.reducedMotion });
+    this.restock();
     this.reticle = this.view.ring(V(0, 0.04, -8), 0.65, COLORS.gold, 0.08);
     this.reticle.visible = this.chapter !== 0;
     this.notify("start", { mission: this.mission, index });
+  }
+
+  // The wildlife for the current mission, sized by the graphics level and calmed by reduced
+  // motion. Called again when either setting changes in the menu, so it applies at once; Auto's
+  // own level changes wait for the next mission, so nothing pops in or out mid-fight.
+  restock() {
+    if (this.ambient) for (const part of [this.ambient.fish, this.ambient.birds, this.ambient.circlers, this.ambient.reeds]) if (part) this.view.disposeObject(part.mesh);
+    this.ambient = new Ambient(this, { budget: this.ambientBudget ?? 1, quiet: this.reducedMotion });
   }
 
   radio(line) {

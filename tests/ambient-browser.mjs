@@ -86,6 +86,23 @@ export async function checkAmbient(browser, url, check) {
     const calm = g.ambient.stats();
     out.reducedMotionCalm = calm.circling === 0 && blastByBird() === 0;
     g.reducedMotion = false;
+    // Settings changed in the menu apply to the mission in progress: Battery saver halves the
+    // wildlife, and reduced motion drops the circling flocks, at once.
+    enter(9);
+    const full = g.ambient.stats().fish;
+    const picker = document.getElementById("graphics-quality");
+    picker.value = "low";
+    picker.dispatchEvent(new Event("change"));
+    const thinned = g.ambient.stats().fish;
+    picker.value = "auto";
+    picker.dispatchEvent(new Event("change"));
+    const motion = document.getElementById("reduced-motion");
+    motion.checked = true;
+    motion.dispatchEvent(new Event("change"));
+    const stilled = g.ambient.stats().circling;
+    motion.checked = false;
+    motion.dispatchEvent(new Event("change"));
+    out.settingsApplyAtOnce = thinned === Math.round(full / 2) && g.ambient.stats().fish === full && stilled === 0 && g.ambient.stats().circling > 0 && g.ambient.stats().meshes === 4;
     // The graphics picker: Battery saver drops the shadow pass and the resolution; Auto restores.
     const { view } = __TIDELOCK__;
     const select = document.getElementById("graphics-quality");
@@ -102,7 +119,7 @@ export async function checkAmbient(browser, url, check) {
     console.log(`  life ${index}: ${s.summary}`);
     for (const key of ["kinds", "fishInWater", "light", "blastFlushesBirds"]) check(`life mission ${index} ${key}`, s[key] === true);
   }
-  for (const key of ["canalFlow", "bowScattersFish", "downwashFlushesWaders", "reducedMotionCalm", "graphicsPicker"]) check(`life ${key}`, scenes[key] === true);
+  for (const key of ["canalFlow", "bowScattersFish", "downwashFlushesWaders", "reducedMotionCalm", "settingsApplyAtOnce", "graphicsPicker"]) check(`life ${key}`, scenes[key] === true);
   check(`life page errors${errors.length ? ": " + errors[0].slice(0, 60) : ""}`, errors.length === 0);
   await page.close();
 
