@@ -1,3 +1,4 @@
+import './mobile-game-init.mjs';
 import "@fontsource-variable/fredoka/wght.css";
 import "./style.css";
 import { WorldView } from "./world.js";

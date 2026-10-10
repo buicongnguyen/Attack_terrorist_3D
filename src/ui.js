@@ -288,6 +288,8 @@ export class UI {
     window.addEventListener("pointerup", lift, true);
     window.addEventListener("pointercancel", lift, true);
     window.addEventListener("blur", () => this.touches.clear());
+window.addEventListener('pagehide', () => this.touches.clear());
+window.addEventListener('mobile-game-interruption', () => this.touches.clear());
     window.addEventListener(
       "pointermove",
       (e) => e.pointerType === "mouse" && this.finePointer.matches && (e.movementX || e.movementY) && !this.touches.size && this.setTouch(false),
@@ -553,6 +555,14 @@ export class UI {
     this.view.canvas.addEventListener("pointercancel", release);
     this.view.canvas.addEventListener("lostpointercapture", release);
     window.addEventListener("blur", () => {
+      this.clearInput();
+      if (this.game.status === "playing" && !this.anyDialog()) this.menu();
+    });
+window.addEventListener('pagehide', () => {
+      this.clearInput();
+      if (this.game.status === "playing" && !this.anyDialog()) this.menu();
+    });
+window.addEventListener('mobile-game-interruption', () => {
       this.clearInput();
       if (this.game.status === "playing" && !this.anyDialog()) this.menu();
     });
