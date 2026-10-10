@@ -81,6 +81,7 @@ export function installMobileGameSupport({ menus = [], controls = [], existingBu
     ${fullViewport ? 'html, body { overscroll-behavior: none; }' : ''}
     canvas { touch-action: none; -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; }
     [data-mobile-display] { min-height: 44px; padding: 8px 14px; margin: 6px; cursor: pointer; font: inherit; }
+    [data-mobile-display][data-mobile-display] { font-size: max(1em, 14px); }
     [data-mobile-display][aria-disabled="true"] { opacity: .65; cursor: progress; }
     #mobile-display-help { box-sizing: border-box; color: #f4f5f2; background: #172528; border: 1px solid #829496;
       border-radius: 14px; padding: 20px; width: min(440px, calc(100vw - 32px));
