@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { FxPool, RingPool } from "./fx.js";
+import { FxPool, RingPool, ScorchPool } from "./fx.js";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { MODELS, ASSET_REVISION } from "./data.js";
 import { createPickupBadgeMaterial, badgeWorldSize } from "./pickups.js";
@@ -166,10 +166,11 @@ export class WorldView {
     // 3.0: glows and smoke are two GPU particle pools, one draw each, kept across missions.
     this.fx = {
       glow: new FxPool(fxTextures().glow, { capacity: 1024, additive: true, renderOrder: 4, name: "fx-glow" }),
-      smoke: new FxPool(fxTextures().smoke, { capacity: 768, renderOrder: 3, name: "fx-smoke" }),
+      smoke: new FxPool(fxTextures().smoke, { capacity: 2048, renderOrder: 3, name: "fx-smoke" }),
       rings: new RingPool({ capacity: 256 }),
+      scorch: new ScorchPool({ capacity: 64 }),
     };
-    this.scene.add(this.fx.glow.mesh, this.fx.smoke.mesh, this.fx.rings.mesh);
+    this.scene.add(this.fx.glow.mesh, this.fx.smoke.mesh, this.fx.rings.mesh, this.fx.scorch.mesh);
     this.missing = new Set();
     this.lastRender = 0;
     this.resize();
@@ -352,6 +353,7 @@ export class WorldView {
     this.fx?.glow.reset();
     this.fx?.smoke.reset();
     this.fx?.rings.reset();
+    this.fx?.scorch.reset();
     this.level = new THREE.Group();
     this.scene.add(this.level);
     this.scrollProps = [];

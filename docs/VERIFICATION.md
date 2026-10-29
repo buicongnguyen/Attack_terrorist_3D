@@ -1,5 +1,17 @@
 # Release Verification
 
+## Tidelock 3.1 (scorch marks, sparks, spray, and upload fix)
+
+Verified on 2026-10-29 against the production build (`vite preview`).
+
+- **97 Node tests** unchanged.
+- **390 browser checks**, zero runtime or resource errors, with two new effect checks:
+  - street blasts leave a scorch that fades, and an airburst leaves none;
+  - a blast's particles are still queued for upload after four more steps of spawning wakes, before the frame renders.
+- **The new upload check catches the bug:** run in the page with the 3.0 behaviour restored, it fails.
+- **Scripted runs:** identical to 3.0.
+- The menu layout check now waits (up to 5 s) for the medallions to load before judging them; on a busy machine the fixed 0.3 s wait sometimes judged them too early.
+
 ## Tidelock 3.0 (more effects, fewer draws)
 
 The effect pools and new effects ([REDESIGN.md §18](REDESIGN.md#18-tidelock-30-more-effects-fewer-draws)) were verified on 2026-10-29 against the production build (`vite preview`).

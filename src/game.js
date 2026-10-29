@@ -629,6 +629,7 @@ export class Game {
       shot.mesh.quaternion.setFromUnitVectors(forward, shot.velocity.clone().normalize());
       if (shot.hostile) this.resolveHostileShot(shot);
       else this.resolveFriendlyShot(shot);
+      const struck = shot.dead;
       if (
         shot.life <= 0 ||
         shot.position.y < -0.8 ||
@@ -637,7 +638,7 @@ export class Game {
           : Math.abs(shot.position.z) > 90 || Math.abs(shot.position.x) > 45)
       )
         shot.dead = true;
-      if (shot.dead && shot.position.y < 0.3 && waterAt(this, shot.position.x, shot.position.z)) this.splash(shot.position, shot.missile ? 0.8 : 0.25);
+      if (shot.dead && !struck && shot.position.y < 0.3 && waterAt(this, shot.position.x, shot.position.z)) this.splash(shot.position, shot.missile ? 0.8 : 0.25);
     }
     this.projectiles = this.projectiles.filter((shot) => {
       if (!shot.dead) return true;
@@ -671,7 +672,7 @@ export class Game {
       // Puffs that swell as they age, so a fast missile leaves a ribbon rather than beads.
       this.view.fx.smoke.spawn(shot.position, { x: (Math.random() - 0.5) * 0.3, y: 0.35, z: (Math.random() - 0.5) * 0.3 }, 0.45, 2.4, 1.1, shot.hostile ? 0xffb396 : 0xe8fbff, 0.8);
       this.ember(shot.position, shot.hostile ? 0xff7a2b : 0x9ff3ff, 0.5, 0.18);
-      shot.trail = 0.03;
+      shot.trail = this.reducedMotion ? 0.05 : 0.03 / Math.max(0.6, this.ambientBudget ?? 1);
     }
     const threat = shot.hostile ? clamp(1 - shot.position.distanceTo(this.player.position) / 28, 0, 1) : 0;
     shot.mesh.scale.setScalar((shot.hostile ? 1.5 : 1.1) * (1 + threat * 0.25 + Math.sin(shot.age * 7) * 0.025));
@@ -746,6 +747,11 @@ export class Game {
       return;
     }
     this.damage(hit.entity, shot.damage ?? (shot.missile ? 5 : 1), shot.missile);
+    if (!shot.missile)
+      for (let i = 0; i < 4; i++) {
+        const a = Math.random() * Math.PI * 2;
+        this.view.fx.glow.spawn(shot.position, { x: Math.cos(a) * 3 - shot.velocity.x * 0.08, y: 1.5 + Math.random() * 2.5, z: Math.sin(a) * 3 - shot.velocity.z * 0.08 }, 0.16, -0.5, 0.25 + Math.random() * 0.2, 0xffe6a0, 1, 12);
+      }
     this.blast(shot.position, shot.missile ? 1.7 : shot.splash ? 0.9 : 0.3, shot.missile ? COLORS.gold : shot.splash ? 0xff8a2b : COLORS.friendly, {
       quiet: !shot.missile,
       small: !shot.missile,
@@ -914,9 +920,7 @@ export class Game {
     // Birds take off and fish scatter whatever happens to the effects.
     this.ambient?.disturb(p.x, p.y, p.z, radius);
     const { glow, smoke } = this.view.fx;
-    {
-      this.shockRing(p.clone().add(V(0, 0.08, 0)), 0.3, color, 0.12, 0.5, radius * 3);
-    }
+    this.shockRing(p.clone().add(V(0, 0.08, 0)), 0.3, color, 0.12, 0.5, radius * 3);
     this.flash(p, 0xfff4c2, radius * (options.small ? 1.2 : 2.2));
     const fire = options.small ? 2 : Math.min(7, 2 + Math.round(radius * 1.2));
     for (let i = 0; i < fire; i++) {
@@ -958,7 +962,12 @@ export class Game {
           1,
         );
     }
-    if (p.y < 1.6 && waterAt(this, p.x, p.z)) this.splash(p, radius);
+    const wet = p.y < 1.6 && waterAt(this, p.x, p.z);
+    if (wet) this.splash(p, radius);
+    // A scorch where it meets the ground (3.1): bombs pass their impact point, the valley knows its
+    // terrain; the scrolling canal banks and anything in the air get none.
+    const ground = options.scorch !== undefined ? options.scorch : (this.chapter === 2 && this.op.groundAt ? this.op.groundAt(p.x, p.z) : null);
+    if (!wet && !options.small && ground !== null && p.y - ground < 2.5 && radius >= 0.9) this.view.fx.scorch.spawn({ x: p.x, y: ground + 0.03, z: p.z }, radius * 0.75);
     if (radius > 2) {
       this.shake = Math.max(this.shake, Math.min(0.45, 0.08 + radius * 0.05));
       this.view.lightFlash(p, radius);
@@ -1006,6 +1015,9 @@ export class Game {
           smoke.spawn({ x: x + side * width * 0.5, y: 0.12, z }, { x: side * (0.5 + Math.random() * 0.5), y: 0.02, z: flow * 0.9 + 0.4 }, 0.3 * strength, 1.6, 1.4, 0xf2fbfa, 0.42 * strength);
       };
       wake(p.x, p.z + 1.7, 1.2, 1);
+      const speed = Math.hypot(this.velocity.x, this.velocity.z);
+      if (speed > 3)
+        for (const side of [-1, 1]) smoke.spawn({ x: p.x + side * 0.4, y: 0.25, z: p.z - 1.6 }, { x: side * (1.2 + Math.random()), y: 1.4 + Math.random() * 0.6, z: flow * 0.6 + 0.8 }, 0.18, 1.2, 0.5, 0xf6fdff, 0.6 * Math.min(1, speed / 8), 7);
       for (const barge of this.op.barges || []) if (barge.alive) wake(barge.mesh.position.x, barge.mesh.position.z + 2.6, 2.2, 0.8);
     } else if (this.chapter === 2) {
       // The rotor wash fans out over whatever is below: spray on the river, dust on land.
@@ -1121,7 +1133,7 @@ export class Game {
         this.puff(base.clone().add(V((Math.random() - 0.5) * 0.6 * e.size, 0, (Math.random() - 0.5) * 0.6 * e.size)), Math.random() < 0.5 ? 0x3b3440 : 0x5a4f55, 0.55 * e.size, 1.6, { x: (Math.random() - 0.5) * 0.4, y: 1.6 + Math.random() * 0.8, z: (Math.random() - 0.5) * 0.4 });
         if (e.fire && Math.random() < 0.6) this.ember(base.clone().add(V((Math.random() - 0.5) * 0.8 * e.size, -0.3, (Math.random() - 0.5) * 0.8 * e.size)), Math.random() < 0.5 ? 0xff8a2b : 0xffc62b, 0.7 * e.size, 0.35);
         // A spark lifting out of the fire now and then.
-        if (e.fire && Math.random() < 0.3) this.ember(base.clone().add(V((Math.random() - 0.5) * 0.5 * e.size, 0, (Math.random() - 0.5) * 0.5 * e.size)), 0xffc062, 0.14, 1.4, { x: (Math.random() - 0.5) * 0.8, y: 2 + Math.random() * 1.5, z: (Math.random() - 0.5) * 0.8 });
+        if (e.fire && !this.reducedMotion && Math.random() < 0.3 * (this.ambientBudget ?? 1)) this.ember(base.clone().add(V((Math.random() - 0.5) * 0.5 * e.size, 0, (Math.random() - 0.5) * 0.5 * e.size)), 0xffc062, 0.14, 1.4, { x: (Math.random() - 0.5) * 0.8, y: 2 + Math.random() * 1.5, z: (Math.random() - 0.5) * 0.8 });
       }
       return e.t > 0;
     });
@@ -1147,6 +1159,7 @@ export class Game {
     this.view.fx.glow.update(dt);
     this.view.fx.smoke.update(dt);
     this.view.fx.rings.update(dt);
+    this.view.fx.scorch.update(dt);
     this.effects = this.effects.filter((e) => {
       e.life -= dt;
       if (e.life <= 0) {

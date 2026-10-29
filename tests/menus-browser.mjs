@@ -47,6 +47,10 @@ export async function checkMenus(browser, url, check) {
     for (const [name, show] of Object.entries(screens)) {
       await page.evaluate(show);
       await page.waitForTimeout(300);
+      // Medallions may still be decoding on a busy machine: give them a moment before judging.
+      await page
+        .waitForFunction(() => [...document.querySelectorAll("dialog[open] img.emblem, dialog[open] .result-emblem img")].every((img) => img.hidden || img.complete), null, { timeout: 5000 })
+        .catch(() => {});
       const expected = { briefing: "brief-dialog", "mission control": "menu-dialog", victory: "result-dialog", defeat: "result-dialog" }[name];
       const problems = await page.evaluate((expected) => {
         const out = [];

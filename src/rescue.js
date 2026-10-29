@@ -347,7 +347,7 @@ export class RescueOperation {
       const p = g.player.position.clone().add(V((i % 2 ? 1 : -1) * 1.1, -0.3, 0.8));
       g.puff(p, 0xffe5a2, 0.28, 1.4, { x: (i % 2 ? 1 : -1) * (2 + i * 0.5), y: -1, z: 2 + i * 0.35 });
       // A burning flare head on each smoke trail.
-      g.ember(p, 0xfff1b8, 0.45, 1.2, { x: (i % 2 ? 1 : -1) * (2 + i * 0.5), y: -1, z: 2 + i * 0.35 });
+      if (!g.reducedMotion) g.ember(p, 0xfff1b8, 0.45, 1.2, { x: (i % 2 ? 1 : -1) * (2 + i * 0.5), y: -1, z: 2 + i * 0.35 });
     }
     g.notify("toast", "FLARES / LOCK BROKEN");
     g.audio.play("pickup");

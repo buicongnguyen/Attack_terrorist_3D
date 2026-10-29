@@ -1582,7 +1582,10 @@ export class StrikeOperation {
     const radius = def.radius;
     const breakRadius = def.breakRadius;
     const p = V(point.x, point.y, point.z);
-    g.blast(p, radius, def.color, { quiet: bomb.kind === "bomblet" && Math.random() < 0.6 });
+    // A scorch only where it went off on a surface (a roof or the street), never for an airburst.
+    const roof = buildingAt(this.buildings, point.x, point.z),
+      surface = roof ? roof.top : CITY.ground;
+    g.blast(p, radius, def.color, { quiet: bomb.kind === "bomblet" && Math.random() < 0.6, scorch: Math.abs(point.y - surface) < 0.6 ? surface : null });
     // Break structure first; people behind freshly broken walls are exposed to the blast.
     for (const block of blocksNear(this.blocks, point, breakRadius * 1.5)) {
       const limit = block.kind === "glass" ? breakRadius * 1.5 : breakRadius;

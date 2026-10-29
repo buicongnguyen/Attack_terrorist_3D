@@ -122,17 +122,22 @@ export class FxPool {
     this.dirtyTo = Math.max(this.dirtyTo, i);
   }
 
-  // Advance the clock (frozen while paused) and upload only the slots written since last time.
+  // Advance the clock (frozen while paused) and queue the slots written since the last call for
+  // upload. Several sim steps run per rendered frame, so ranges must accumulate: three uploads
+  // and clears them when it next renders (clearing here lost every earlier step's particles).
   update(dt) {
     this.time += dt;
     this.uniforms.uTime.value = this.time;
+    this.flush();
+  }
+
+  flush() {
     if (this.dirtyTo < 0) return;
     const from = this.dirtyFrom,
       count = this.dirtyTo - from + 1;
     for (const attribute of [this.start, this.vel, this.shape, this.tint]) {
       if (!attribute) continue;
       const size = attribute.itemSize;
-      attribute.clearUpdateRanges();
       attribute.addUpdateRange(from * size, count * size);
       attribute.needsUpdate = true;
     }
@@ -143,8 +148,11 @@ export class FxPool {
   // A new mission: every particle dies at once.
   reset() {
     for (let i = 0; i < this.capacity; i++) this.start.array[i * 4 + 3] = -1e6;
+    this.time = 0;
+    this.uniforms.uTime.value = 0;
     this.dirtyFrom = 0;
     this.dirtyTo = this.capacity - 1;
+    this.flush();
   }
 
   // Particles alive now (for QA).
@@ -200,7 +208,8 @@ varying float vInner;
 void main() {
   float d = length(vLocal);
   float edge = fwidth(d);
-  float band = smoothstep(vInner - edge, vInner + edge, d) * (1.0 - smoothstep(1.0 - edge, 1.0 + edge, d));
+  float inner = min(vInner, 1.0 - 2.0 * edge);
+  float band = smoothstep(inner - edge, inner + edge, d) * (1.0 - smoothstep(1.0 - edge, 1.0 + edge, d));
   if (band < 0.01) discard;
   gl_FragColor = vec4(vTint.rgb, vTint.a * band);
   #include <tonemapping_fragment>
@@ -261,4 +270,109 @@ export class RingPool {
     this.dirtyTo = Math.max(this.dirtyTo, i);
   }
 }
-for (const name of ["update", "reset", "alive"]) RingPool.prototype[name] = FxPool.prototype[name];
+for (const name of ["update", "flush", "reset", "alive"]) RingPool.prototype[name] = FxPool.prototype[name];
+
+// Scorch marks where blasts hit the ground (3.1): soft dark blots lying flat, held at full
+// strength for most of their life, then fading. One draw for all of them.
+const SCORCH_VERTEX = `
+attribute vec4 aStart;
+attribute vec4 aShape;
+attribute vec3 aTint;
+uniform float uTime;
+varying vec2 vLocal;
+varying float vAlpha;
+varying vec3 vTint;
+#include <fog_pars_vertex>
+void main() {
+  float t = uTime - aStart.w;
+  float age = t / aShape.z;
+  if (t < 0.0 || age >= 1.0) {
+    gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
+    return;
+  }
+  // A quick spread over the first fifth of a second, then it lies still.
+  float r = aShape.x * min(1.0, 0.35 + t * 3.25);
+  float c = cos(aShape.y), s = sin(aShape.y);
+  vec2 q = vec2(position.x * c - position.y * s, position.x * s + position.y * c);
+  vec3 p = aStart.xyz + vec3(q.x * r, 0.0, q.y * r);
+  vec4 mvPosition = viewMatrix * vec4(p, 1.0);
+  gl_Position = projectionMatrix * mvPosition;
+  vLocal = position.xy;
+  vAlpha = aShape.w * (1.0 - smoothstep(0.7, 1.0, age));
+  vTint = aTint;
+  #include <fog_vertex>
+}`;
+const SCORCH_FRAGMENT = `
+varying vec2 vLocal;
+varying float vAlpha;
+varying vec3 vTint;
+#include <fog_pars_fragment>
+void main() {
+  float d = length(vLocal);
+  // A ragged edge: the radius wobbles with the angle.
+  float a = atan(vLocal.y, vLocal.x);
+  float edge = 0.82 + 0.1 * sin(a * 5.0) + 0.06 * sin(a * 11.0 + 1.7);
+  float blot = 1.0 - smoothstep(edge * 0.35, edge, d);
+  if (blot < 0.01) discard;
+  gl_FragColor = vec4(vTint, vAlpha * blot);
+  #include <tonemapping_fragment>
+  #include <colorspace_fragment>
+  #include <fog_fragment>
+}`;
+
+export class ScorchPool {
+  constructor({ capacity = 64 } = {}) {
+    this.capacity = capacity;
+    this.next = 0;
+    this.time = 0;
+    this.spawned = 0;
+    const quad = new THREE.PlaneGeometry(2, 2);
+    const geometry = new THREE.InstancedBufferGeometry();
+    geometry.index = quad.index;
+    geometry.setAttribute("position", quad.getAttribute("position"));
+    const attribute = (size) => new THREE.InstancedBufferAttribute(new Float32Array(capacity * size), size).setUsage(THREE.DynamicDrawUsage);
+    this.start = attribute(4);
+    this.shape = attribute(4);
+    this.tint = attribute(3);
+    for (let i = 0; i < capacity; i++) {
+      this.start.array[i * 4 + 3] = -1e6;
+      this.shape.array[i * 4 + 2] = 1;
+    }
+    geometry.setAttribute("aStart", this.start);
+    geometry.setAttribute("aShape", this.shape);
+    geometry.setAttribute("aTint", this.tint);
+    geometry.instanceCount = capacity;
+    this.uniforms = { ...THREE.UniformsUtils.clone(THREE.UniformsLib.fog), uTime: { value: 0 } };
+    this.material = new THREE.ShaderMaterial({
+      uniforms: this.uniforms,
+      vertexShader: SCORCH_VERTEX,
+      fragmentShader: SCORCH_FRAGMENT,
+      transparent: true,
+      depthWrite: false,
+      fog: true,
+      // Drawn just over the surface it lies on, never fighting it for depth.
+      polygonOffset: true,
+      polygonOffsetFactor: -2,
+      polygonOffsetUnits: -2,
+    });
+    this.mesh = new THREE.Mesh(geometry, this.material);
+    this.mesh.frustumCulled = false;
+    this.mesh.renderOrder = 1;
+    this.mesh.name = "fx-scorch";
+    this.color = new THREE.Color();
+    this.dirtyFrom = Infinity;
+    this.dirtyTo = -1;
+  }
+
+  spawn(p, radius, life = 9, color = 0x2b2420, opacity = 0.6) {
+    const i = this.next;
+    this.next = (this.next + 1) % this.capacity;
+    this.spawned++;
+    this.start.array.set([p.x, p.y, p.z, this.time], i * 4);
+    this.shape.array.set([radius, Math.random() * Math.PI * 2, life, opacity], i * 4);
+    this.color.set(color).toArray(this.tint.array, i * 3);
+    this.dirtyFrom = Math.min(this.dirtyFrom, i);
+    this.dirtyTo = Math.max(this.dirtyTo, i);
+  }
+}
+for (const name of ["update", "flush", "reset", "alive"]) ScorchPool.prototype[name] = FxPool.prototype[name];

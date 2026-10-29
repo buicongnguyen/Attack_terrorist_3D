@@ -34,9 +34,17 @@ export async function checkFx(browser, url, check) {
     const busy = calls();
     r.blastsStayCheap = view.fx.glow.alive() > 200 && view.fx.smoke.alive() > 100 && view.fx.rings.alive() >= 30 && busy - quiet <= 2;
     r.summary = `${quiet} -> ${busy} draws with ${view.fx.glow.alive()} glows, ${view.fx.smoke.alive()} smoke, ${view.fx.rings.alive()} rings`;
+    // Street blasts leave scorch marks that fade; one in the air leaves none.
+    const scorchBefore = view.fx.scorch.spawned;
+    g.blast({ x: f.x, y: 1.05, z: f.z }, 1.6, 0xff8a2b, { quiet: true, scorch: 1 });
+    g.blast({ x: f.x, y: 9, z: f.z }, 1.6, 0xff8a2b, { quiet: true, scorch: 1 });
+    run(0.2);
+    const scorched = view.fx.scorch.spawned - scorchBefore === 1 && view.fx.scorch.alive() >= 1;
+    run(10);
+    r.scorchMarks = scorched && view.fx.scorch.alive() === 0;
     // A new mission starts with no particles left over.
     ui.start(9);
-    r.newMissionClears = view.fx.glow.alive() + view.fx.smoke.alive() + view.fx.rings.alive() === 0;
+    r.newMissionClears = view.fx.glow.alive() + view.fx.smoke.alive() + view.fx.rings.alive() + view.fx.scorch.alive() === 0;
     enter(9);
     // On the canal: wakes behind the boats, a plume where a blast hits the water.
     const before = view.fx.smoke.spawned;
@@ -45,6 +53,17 @@ export async function checkFx(browser, url, check) {
     const s0 = view.fx.smoke.spawned;
     g.blast({ x: g.player.position.x - 4, y: 0.2, z: g.player.position.z - 10 }, 1, 0xffc62b, { quiet: true });
     r.waterBlastSplashes = view.fx.smoke.spawned - s0 >= 16;
+    // Several sim steps between renders (2-4 per frame): a blast's slots stay queued for upload
+    // while wakes keep spawning, until the frame renders.
+    view.render(g.time);
+    const glow = view.fx.glow,
+      first = glow.next;
+    g.blast({ x: g.player.position.x + 3, y: 1, z: g.player.position.z - 6 }, 1.4, 0xff8a2b, { quiet: true });
+    const last = (glow.next - 1 + glow.capacity) % glow.capacity;
+    for (let i = 0; i < 4; i++) g.update(1 / 120);
+    const queued = (slot) => glow.start.updateRanges.some((r) => r.start <= slot * 4 && r.start + r.count >= slot * 4 + 4);
+    r.stepsKeepUploads = last >= first && queued(first) && queued(last);
+    view.render(g.time);
     // Reduced motion: no ongoing wakes.
     g.reducedMotion = true;
     const s1 = view.fx.smoke.spawned;
@@ -59,7 +78,7 @@ export async function checkFx(browser, url, check) {
     return r;
   });
   console.log(`  fx: ${out.summary}`);
-  for (const key of ["blastsStayCheap", "newMissionClears", "wakes", "waterBlastSplashes", "reducedMotionStopsTrails", "rotorWash"]) check(`fx ${key}`, out[key] === true);
+  for (const key of ["blastsStayCheap", "newMissionClears", "wakes", "waterBlastSplashes", "reducedMotionStopsTrails", "rotorWash", "scorchMarks", "stepsKeepUploads"]) check(`fx ${key}`, out[key] === true);
   check(`fx page errors${errors.length ? ": " + errors[0].slice(0, 60) : ""}`, errors.length === 0);
   await page.close();
 }

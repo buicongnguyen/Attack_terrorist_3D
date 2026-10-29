@@ -666,6 +666,18 @@ On a 390×844 phone at 3×, with 30 blasts in two seconds:
 
 The new peak equals the quiet count: blasts, splashes and wakes add no draw calls. Median frame time fell in every paired run (for example 22.6 → 17.7 ms in the city and 28.0 → 23.8 ms on the canal, CPU slowed 4×).
 
+### 3.1: scorch marks, impact sparks, bow spray, and the review fixes
+
+- **Scorch marks.** Bombs that go off on a roof or in the street, and blasts near the valley floor, leave a soft dark scorch with a ragged edge. It lies flat on the surface and fades out after about nine seconds. Airbursts and the scrolling canal banks get none. Scorches are a fourth pool, one draw.
+- **Impact sparks.** Gun rounds that strike something throw a spit of sparks off it.
+- **Bow spray.** The gunboat throws spray from its bow when it runs fast.
+- **Fixed: particles lost between frames.** Several logic steps run per rendered frame (two at 60 fps, four at 30). Each step cleared the queue of GPU uploads before adding its own, so particles born in an earlier step of the same frame never reached the GPU. A blast followed in the same frame by a wake or a trail puff simply did not show, more often on slow phones. The upload queue now builds up until three uploads it at render, and a browser check fails if an earlier step's slots are dropped.
+- **Fixed:** a new mission now uploads its emptied pools at once, so a paused briefing never shows the last mission's smoke, and the pool clocks restart each mission.
+- **Fixed:** the smoke pool holds 2048 particles, so busy canal fights no longer recycle smoke that is still visible.
+- **Fixed:** shots that hit something on the water splash once, not twice.
+- **Fixed:** reduced motion and the graphics level now also thin the wreck sparks, the missile ribbons and the flare heads.
+- **Fixed:** thin rings keep at least a pixel of band at a distance.
+
 ## 19. Controls
 
 | Action | Desktop | Touch |
