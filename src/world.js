@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import { FxPool, RingPool } from "./fx.js";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { MODELS, ASSET_REVISION } from "./data.js";
 import { createPickupBadgeMaterial, badgeWorldSize } from "./pickups.js";
@@ -162,6 +163,13 @@ export class WorldView {
     this.baseCamera = new THREE.Vector3();
     this.water = this.createWater();
     this.scene.add(this.water);
+    // 3.0: glows and smoke are two GPU particle pools, one draw each, kept across missions.
+    this.fx = {
+      glow: new FxPool(fxTextures().glow, { capacity: 1024, additive: true, renderOrder: 4, name: "fx-glow" }),
+      smoke: new FxPool(fxTextures().smoke, { capacity: 768, renderOrder: 3, name: "fx-smoke" }),
+      rings: new RingPool({ capacity: 256 }),
+    };
+    this.scene.add(this.fx.glow.mesh, this.fx.smoke.mesh, this.fx.rings.mesh);
     this.missing = new Set();
     this.lastRender = 0;
     this.resize();
@@ -341,6 +349,9 @@ export class WorldView {
 
   clear() {
     this.disposeObject(this.level);
+    this.fx?.glow.reset();
+    this.fx?.smoke.reset();
+    this.fx?.rings.reset();
     this.level = new THREE.Group();
     this.scene.add(this.level);
     this.scrollProps = [];

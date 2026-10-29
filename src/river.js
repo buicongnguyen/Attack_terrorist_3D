@@ -603,8 +603,7 @@ export class RiverOperation {
         const p = barge.mesh.position.clone();
         p.y = 0.11;
         p.z += 4;
-        const ring = g.view.ring(p, 0.7, 0xdff9f2, 0.08);
-        g.effects.push({ mesh: ring, life: 1.2, maxLife: 1.2, ring: true, growth: 1.4 });
+        g.shockRing(p, 0.7, 0xdff9f2, 0.08, 1.2, 1.4);
       }
     }
   }
@@ -774,8 +773,7 @@ export class RiverOperation {
       // Skiffs swing round smoothly (the short way) instead of snapping to their course.
       if (Math.hypot(dx, dz) > 1e-4) e.mesh.rotation.y = dampAngle(e.mesh.rotation.y, Math.atan2(-dx, -dz), 9, dt);
       if (Math.floor(g.time * 10) !== Math.floor((g.time - dt) * 10)) {
-        const ring = g.view.ring(V(p.x, 0.11, p.z), 0.4, 0xffffff, 0.08);
-        g.effects.push({ mesh: ring, life: 0.9, maxLife: 0.9, ring: true, growth: 2 });
+        g.shockRing(V(p.x, 0.11, p.z), 0.4, 0xffffff, 0.08, 0.9, 2);
       }
       const ram = this.barges.find((b) => b.alive && Math.hypot(b.position.x - p.x, b.position.z - p.z) < 2.2);
       if (ram) {
@@ -1240,8 +1238,7 @@ export class RiverOperation {
     const g = this.game;
     const at = V(p.x, 0.4, p.z);
     g.blast(at, 3.4, 0xff8a2b);
-    const splash = g.view.ring(V(p.x, 0.12, p.z), 0.6, 0xdff9f2, 0.2);
-    g.effects.push({ mesh: splash, life: 1.1, maxLife: 1.1, ring: true, growth: 6 });
+    g.shockRing(V(p.x, 0.12, p.z), 0.6, 0xdff9f2, 0.2, 1.1, 6);
     if (g.status !== "playing") return;
     for (const e of g.entities) {
       if (!isHostileEntity(e) || struck.has(e)) continue;
@@ -1379,8 +1376,7 @@ export class RiverOperation {
     a.wake -= dt;
     if (a.wake <= 0) {
       a.wake = 0.2;
-      const ring = g.view.ring(V(p.x, 0.11, p.z + 2), 0.5, 0xdff9f2, 0.07);
-      g.effects.push({ mesh: ring, life: 1.1, maxLife: 1.1, ring: true, growth: 1.3 });
+      g.shockRing(V(p.x, 0.11, p.z + 2), 0.5, 0xdff9f2, 0.07, 1.1, 1.3);
     }
     if (leaving) {
       if (p.z > 40) {

@@ -345,9 +345,9 @@ export class RescueOperation {
       if (shot.hostile && shot.missile && distance(shot.position, g.player.position) < 55) shot.distracted = true;
     for (let i = 0; i < 8; i++) {
       const p = g.player.position.clone().add(V((i % 2 ? 1 : -1) * 1.1, -0.3, 0.8));
-      g.puff(p, 0xffe5a2, 0.28, 1.4);
-      const effect = g.effects[g.effects.length - 1];
-      if (effect?.velocity) effect.velocity.set((i % 2 ? 1 : -1) * (2 + i * 0.5), -1, 2 + i * 0.35);
+      g.puff(p, 0xffe5a2, 0.28, 1.4, { x: (i % 2 ? 1 : -1) * (2 + i * 0.5), y: -1, z: 2 + i * 0.35 });
+      // A burning flare head on each smoke trail.
+      g.ember(p, 0xfff1b8, 0.45, 1.2, { x: (i % 2 ? 1 : -1) * (2 + i * 0.5), y: -1, z: 2 + i * 0.35 });
     }
     g.notify("toast", "FLARES / LOCK BROKEN");
     g.audio.play("pickup");

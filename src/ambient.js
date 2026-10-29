@@ -34,6 +34,18 @@ const DUSK = new Set([14, 17]);
 // Reeds repeat every PERIOD metres, so the whole row can slide with the canal and wrap unseen.
 const PERIOD = 44;
 
+// Whether (x, z) is open water in the current mission (splashes, wakes, rotor spray).
+export function waterAt(game, x, z) {
+  if (game.chapter === 1) return Math.abs(x) < RIVER.bank;
+  if (game.chapter === 2) return game.op?.map ? riverEdge(game.op.map, x, z) < 0 : false;
+  const harbour = game.op?.layout?.harbour;
+  if (harbour) {
+    const b = harbour.bounds;
+    return x > b.minX && x < b.maxX && z > b.minZ - 6 && z < b.maxZ + 6 && !onLand(harbour.land, x, z);
+  }
+  return false;
+}
+
 export class Ambient {
   // `budget` scales the counts (the graphics level), `quiet` is reduced motion.
   constructor(game, { budget = 1, quiet = false } = {}) {

@@ -11,7 +11,7 @@ import { createPhysics, addBox, movement, segmentSphere, segmentCircle, clamp } 
 import { DEFAULT_DIFFICULTY, difficulty, hitChance, seededRandom } from "./difficulty.js";
 import { ROUNDS, ROUND_ORDER, emptyRounds, bestRound, spendRound, addRounds, roundEffect } from "./armoury.js";
 import { dampAngle } from "./harbour.js";
-import { Ambient } from "./ambient.js";
+import { Ambient, waterAt } from "./ambient.js";
 
 const V = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
 const forward = V(0, 0, -1);
@@ -240,6 +240,7 @@ export class Game {
     else {
       this.updateVehicle(dt);
       this.op.update(dt);
+      this.updateTrails(dt);
       this.updateProjectiles(dt);
       if (this.debrisActive) this.physics.world.step(dt);
     }
@@ -304,8 +305,7 @@ export class Game {
       const p = this.player.position.clone();
       p.y = river ? 0.11 : 1.3;
       if (river) p.z += 2;
-      const ring = this.view.ring(p, river ? 0.55 : 2, 0xdff9f2, river ? 0.07 : 0.025);
-      this.effects.push({ mesh: ring, life: river ? 1.2 : 1.8, maxLife: river ? 1.2 : 1.8, ring: true, growth: river ? 1.2 : 2 });
+      this.shockRing(p, river ? 0.55 : 2, 0xdff9f2, river ? 0.07 : 0.025, river ? 1.2 : 1.8, river ? 1.2 : 2);
     }
   }
 
@@ -418,8 +418,7 @@ export class Game {
     if (!info.rounds) this.notify("toast", pickup.kind === "ammo" ? `ROCKETS +${WEAPONS.rocket.refill}` : info.toast);
     this.audio.play("pickup");
     this.puff(pickup.position, info.color, 0.8);
-    const ring = this.view.ring(this.player.position.clone().add(V(0, 0.3, 0)), 0.9, info.color, 0.11);
-    this.effects.push({ mesh: ring, life: 0.75, maxLife: 0.75, ring: true, growth: 4 });
+    this.shockRing(this.player.position.clone().add(V(0, 0.3, 0)), 0.9, info.color, 0.11, 0.75, 4);
   }
 
   updateBoatLoadout() {
@@ -638,6 +637,7 @@ export class Game {
           : Math.abs(shot.position.z) > 90 || Math.abs(shot.position.x) > 45)
       )
         shot.dead = true;
+      if (shot.dead && shot.position.y < 0.3 && waterAt(this, shot.position.x, shot.position.z)) this.splash(shot.position, shot.missile ? 0.8 : 0.25);
     }
     this.projectiles = this.projectiles.filter((shot) => {
       if (!shot.dead) return true;
@@ -668,9 +668,10 @@ export class Game {
     }
     shot.trail -= dt;
     if (shot.trail <= 0) {
-      this.puff(shot.position, shot.hostile ? 0xffb396 : 0xe8fbff, 0.24, 0.7);
+      // Puffs that swell as they age, so a fast missile leaves a ribbon rather than beads.
+      this.view.fx.smoke.spawn(shot.position, { x: (Math.random() - 0.5) * 0.3, y: 0.35, z: (Math.random() - 0.5) * 0.3 }, 0.45, 2.4, 1.1, shot.hostile ? 0xffb396 : 0xe8fbff, 0.8);
       this.ember(shot.position, shot.hostile ? 0xff7a2b : 0x9ff3ff, 0.5, 0.18);
-      shot.trail = 0.05;
+      shot.trail = 0.03;
     }
     const threat = shot.hostile ? clamp(1 - shot.position.distanceTo(this.player.position) / 28, 0, 1) : 0;
     shot.mesh.scale.setScalar((shot.hostile ? 1.5 : 1.1) * (1 + threat * 0.25 + Math.sin(shot.age * 7) * 0.025));
@@ -893,79 +894,129 @@ export class Game {
 
   // ------------------------------------------------------------------ effects
 
-  puff(position, color, size = 0.4, life = 0.45) {
-    if (this.effects.length > 260) return;
-    const sprite = this.view.fxSprite("smoke", color, 0.85);
-    sprite.position.copy(position);
-    sprite.scale.setScalar(size * 2);
-    this.effects.push({
-      mesh: sprite,
-      life,
-      maxLife: life,
-      size: size * 2,
-      grow: 0.8,
-      fade: 0.85,
-      velocity: V((Math.random() - 0.5) * 0.8, 0.6 + Math.random(), (Math.random() - 0.5) * 0.8),
-    });
+  // 3.0: glows and smoke are GPU particles (fx.js), one draw per pool however busy the fight.
+  puff(position, color, size = 0.4, life = 0.45, velocity = null) {
+    this.view.fx.smoke.spawn(position, velocity || { x: (Math.random() - 0.5) * 0.8, y: 0.6 + Math.random(), z: (Math.random() - 0.5) * 0.8 }, size * 2, 0.8, life, color, 0.85);
   }
 
-  ember(position, color, size, life) {
-    // Embers are garnish: they stop well short of the cap, so explosions always have room.
-    if (this.effects.length > 180) return;
-    const sprite = this.view.fxSprite("glow", color, 0.9, true);
-    sprite.position.copy(position);
-    sprite.scale.setScalar(size);
-    this.effects.push({ mesh: sprite, life, maxLife: life, size, grow: -0.6, fade: 0.9, velocity: V() });
+  ember(position, color, size, life, velocity = null, gravity = 0) {
+    this.view.fx.glow.spawn(position, velocity, size, -0.6, life, color, 0.9, gravity);
   }
 
   flash(position, color, size) {
-    if (this.effects.length > 260) return;
-    const sprite = this.view.fxSprite("glow", color, 1, true);
-    sprite.position.copy(position);
-    sprite.scale.setScalar(size);
-    this.effects.push({ mesh: sprite, life: 0.1, maxLife: 0.1, size, grow: 0.5, fade: 1, velocity: V() });
+    this.view.fx.glow.spawn(position, null, size, 0.5, 0.1, color, 1);
   }
 
-  // Layered explosion: flash, fireballs, sparks, lingering smoke and a ground shock ring.
+  // Layered explosion: flash, fireballs, sparks, lingering smoke and a ground shock ring; big
+  // ones also roll a ring of dust along the ground and loft embers that drift up and fade.
   blast(position, radius, color, options = {}) {
     const p = position.clone ? position.clone() : V(position.x, position.y, position.z);
-    // Birds take off and fish scatter whatever the effects budget.
+    // Birds take off and fish scatter whatever happens to the effects.
     this.ambient?.disturb(p.x, p.y, p.z, radius);
-    const budget = 260 - this.effects.length;
-    if (budget < 6) return;
-    const ring = this.view.ring(p.clone().add(V(0, 0.08, 0)), 0.3, color, 0.12);
-    this.effects.push({ mesh: ring, life: 0.5, maxLife: 0.5, ring: true, growth: radius * 3 });
+    const { glow, smoke } = this.view.fx;
+    {
+      this.shockRing(p.clone().add(V(0, 0.08, 0)), 0.3, color, 0.12, 0.5, radius * 3);
+    }
     this.flash(p, 0xfff4c2, radius * (options.small ? 1.2 : 2.2));
     const fire = options.small ? 2 : Math.min(7, 2 + Math.round(radius * 1.2));
     for (let i = 0; i < fire; i++) {
-      const sprite = this.view.fxSprite("glow", i % 2 ? 0xff8a2b : i % 3 ? color : 0xffc62b, 1, true);
-      const offset = V((Math.random() - 0.5) * radius * 0.6, Math.random() * radius * 0.35, (Math.random() - 0.5) * radius * 0.6);
-      sprite.position.copy(p).add(offset);
-      const size = radius * (0.7 + Math.random() * 0.6);
-      sprite.scale.setScalar(size);
-      this.effects.push({ mesh: sprite, life: 0.45 + Math.random() * 0.3, maxLife: 0.7, size, grow: 0.7, fade: 1, velocity: offset.multiplyScalar(1.5).add(V(0, 1.4, 0)) });
+      const o = { x: (Math.random() - 0.5) * radius * 0.6, y: Math.random() * radius * 0.35, z: (Math.random() - 0.5) * radius * 0.6 };
+      glow.spawn({ x: p.x + o.x, y: p.y + o.y, z: p.z + o.z }, { x: o.x * 1.5, y: o.y * 1.5 + 1.4, z: o.z * 1.5 }, radius * (0.7 + Math.random() * 0.6), 0.7, 0.45 + Math.random() * 0.3, i % 2 ? 0xff8a2b : i % 3 ? color : 0xffc62b, 1);
     }
-    const smoke = options.small ? 1 : Math.min(7, 2 + Math.round(radius));
-    for (let i = 0; i < smoke; i++) {
-      const sprite = this.view.fxSprite("smoke", options.smoke ? 0x2f2c35 : i % 2 ? 0x5a4f55 : 0x7c6f6a, 0.8);
-      sprite.position.copy(p).add(V((Math.random() - 0.5) * radius * 0.7, Math.random() * 0.6, (Math.random() - 0.5) * radius * 0.7));
-      const size = radius * (0.6 + Math.random() * 0.5);
-      sprite.scale.setScalar(size);
-      this.effects.push({ mesh: sprite, life: 1.3 + Math.random() * 0.9, maxLife: 2.2, size, grow: 1.1, fade: 0.75, velocity: V((Math.random() - 0.5) * 0.6, 1.1 + Math.random() * 0.8, (Math.random() - 0.5) * 0.6) });
-    }
+    const puffs = options.small ? 1 : Math.min(7, 2 + Math.round(radius));
+    for (let i = 0; i < puffs; i++)
+      smoke.spawn(
+        { x: p.x + (Math.random() - 0.5) * radius * 0.7, y: p.y + Math.random() * 0.6, z: p.z + (Math.random() - 0.5) * radius * 0.7 },
+        { x: (Math.random() - 0.5) * 0.6, y: 1.1 + Math.random() * 0.8, z: (Math.random() - 0.5) * 0.6 },
+        radius * (0.6 + Math.random() * 0.5),
+        1.1,
+        1.3 + Math.random() * 0.9,
+        options.smoke ? 0x2f2c35 : i % 2 ? 0x5a4f55 : 0x7c6f6a,
+        0.8,
+      );
     const sparks = options.small ? 0 : Math.min(8, Math.round(radius * 2));
     for (let i = 0; i < sparks; i++) {
-      const sprite = this.view.fxSprite("glow", 0xffe08a, 1, true);
-      sprite.position.copy(p);
-      sprite.scale.setScalar(0.25);
       const a = Math.random() * Math.PI * 2;
-      this.effects.push({ mesh: sprite, life: 0.5 + Math.random() * 0.4, maxLife: 0.9, size: 0.25, grow: -0.5, fade: 1, gravity: 14, velocity: V(Math.cos(a) * radius * 2.2, 3 + Math.random() * radius * 2, Math.sin(a) * radius * 2.2) });
+      glow.spawn(p, { x: Math.cos(a) * radius * 2.2, y: 3 + Math.random() * radius * 2, z: Math.sin(a) * radius * 2.2 }, 0.25, -0.5, 0.5 + Math.random() * 0.4, 0xffe08a, 1, 14);
     }
+    if (!options.small && radius >= 1.4 && !this.reducedMotion) {
+      // Dust rolling out along the ground, and embers drifting up out of the smoke.
+      const dust = Math.min(10, Math.round(radius * 3));
+      for (let i = 0; i < dust; i++) {
+        const a = (i / dust) * Math.PI * 2 + Math.random() * 0.4,
+          speed = radius * (1.6 + Math.random() * 0.8);
+        smoke.spawn({ x: p.x + Math.cos(a) * radius * 0.4, y: p.y + 0.15, z: p.z + Math.sin(a) * radius * 0.4 }, { x: Math.cos(a) * speed, y: 0.25, z: Math.sin(a) * speed }, radius * 0.45, 1.6, 0.9 + Math.random() * 0.4, 0xcdb79a, 0.55);
+      }
+      for (let i = 0; i < Math.min(8, Math.round(radius * 2.5)); i++)
+        glow.spawn(
+          { x: p.x + (Math.random() - 0.5) * radius, y: p.y + Math.random() * radius * 0.5, z: p.z + (Math.random() - 0.5) * radius },
+          { x: (Math.random() - 0.5) * 1.2, y: 1.8 + Math.random() * 1.6, z: (Math.random() - 0.5) * 1.2 },
+          0.16 + Math.random() * 0.12,
+          -0.4,
+          1.2 + Math.random() * 0.9,
+          Math.random() < 0.5 ? 0xffb347 : 0xff7a2b,
+          1,
+        );
+    }
+    if (p.y < 1.6 && waterAt(this, p.x, p.z)) this.splash(p, radius);
     if (radius > 2) {
       this.shake = Math.max(this.shake, Math.min(0.45, 0.08 + radius * 0.05));
       this.view.lightFlash(p, radius);
     }
     if (!options.quiet) this.audio.play(radius > 3.5 ? "bigblast" : "blast");
+  }
+
+  // A ring spreading on the ground or the water (shock rings, wakes, pickups): pooled, one draw.
+  shockRing(position, radius, color, thickness, life, growth) {
+    this.view.fx.rings.spawn(position, radius, color, thickness, life, growth);
+  }
+
+  // A plume of spray where something hits the water, and a ring of foam (3.0).
+  splash(position, radius = 0.4) {
+    const { smoke } = this.view.fx,
+      drops = Math.min(16, 5 + Math.round(radius * 4)),
+      height = 2.6 + radius * 2.2;
+    for (let i = 0; i < drops; i++) {
+      const a = Math.random() * Math.PI * 2,
+        out = Math.random() * radius * 0.9;
+      smoke.spawn({ x: position.x + Math.cos(a) * out * 0.3, y: 0.15, z: position.z + Math.sin(a) * out * 0.3 }, { x: Math.cos(a) * out, y: height * (0.6 + Math.random() * 0.6), z: Math.sin(a) * out }, 0.22 + radius * 0.12, 0.9, 0.7 + Math.random() * 0.3, 0xeefaff, 0.85, 9.8);
+    }
+    for (let i = 0; i < 6; i++) {
+      const a = (i / 6) * Math.PI * 2;
+      smoke.spawn({ x: position.x, y: 0.12, z: position.z }, { x: Math.cos(a) * (1 + radius), y: 0.05, z: Math.sin(a) * (1 + radius) }, 0.35 + radius * 0.2, 1.8, 1, 0xdff6f2, 0.5);
+    }
+    this.shockRing({ x: position.x, y: 0.12, z: position.z }, 0.4 + radius * 0.3, 0xe6fbf6, 0.12, 0.9, 3);
+    this.ambient?.disturb(position.x, 0, position.z, radius * 0.6);
+  }
+
+  // Ongoing water and dust (3.0): the gunboat's and barges' wakes, Lantern's rotor wash. Purely
+  // visual (Math.random, never the mission's random numbers), thinned by the graphics level.
+  updateTrails(dt) {
+    if (this.reducedMotion || !this.player) return;
+    this.wakeClock = (this.wakeClock || 0) - dt;
+    if (this.wakeClock > 0) return;
+    const density = this.ambientBudget ?? 1;
+    this.wakeClock = 0.05 / Math.max(0.4, density);
+    const { smoke } = this.view.fx,
+      p = this.player.position;
+    if (this.chapter === 1) {
+      const flow = this.op.flow || 0;
+      const wake = (x, z, width, strength) => {
+        for (const side of [-1, 1])
+          smoke.spawn({ x: x + side * width * 0.5, y: 0.12, z }, { x: side * (0.5 + Math.random() * 0.5), y: 0.02, z: flow * 0.9 + 0.4 }, 0.3 * strength, 1.6, 1.4, 0xf2fbfa, 0.42 * strength);
+      };
+      wake(p.x, p.z + 1.7, 1.2, 1);
+      for (const barge of this.op.barges || []) if (barge.alive) wake(barge.mesh.position.x, barge.mesh.position.z + 2.6, 2.2, 0.8);
+    } else if (this.chapter === 2) {
+      // The rotor wash fans out over whatever is below: spray on the river, dust on land.
+      const wet = waterAt(this, p.x, p.z),
+        ground = wet ? 0.12 : (this.op.groundAt?.(p.x, p.z) ?? 1.2) + 0.15;
+      for (let i = 0; i < 2; i++) {
+        const a = Math.random() * Math.PI * 2,
+          speed = 3 + Math.random() * 1.5;
+        smoke.spawn({ x: p.x + Math.cos(a) * 1.4, y: ground, z: p.z + Math.sin(a) * 1.4 }, { x: Math.cos(a) * speed, y: 0.35, z: Math.sin(a) * speed }, 0.4, 1.5, 0.8, wet ? 0xf2fbff : 0xd6c09a, wet ? 0.45 : 0.3);
+      }
+    }
   }
 
   // Pieces of whatever was destroyed, thrown up into the sky (2.7): they spin, fall, bounce once
@@ -1064,13 +1115,13 @@ export class Game {
     this.emitters = this.emitters.filter((e) => {
       e.t -= dt;
       e.next -= dt;
-      if (e.next <= 0 && this.effects.length < 220) {
+      if (e.next <= 0) {
         e.next = 0.14;
         const base = e.anchor.clone().add(e.offset);
-        this.puff(base.clone().add(V((Math.random() - 0.5) * 0.6 * e.size, 0, (Math.random() - 0.5) * 0.6 * e.size)), Math.random() < 0.5 ? 0x3b3440 : 0x5a4f55, 0.55 * e.size, 1.6);
-        const smoke = this.effects[this.effects.length - 1];
-        if (smoke?.velocity) smoke.velocity.set((Math.random() - 0.5) * 0.4, 1.6 + Math.random() * 0.8, (Math.random() - 0.5) * 0.4);
+        this.puff(base.clone().add(V((Math.random() - 0.5) * 0.6 * e.size, 0, (Math.random() - 0.5) * 0.6 * e.size)), Math.random() < 0.5 ? 0x3b3440 : 0x5a4f55, 0.55 * e.size, 1.6, { x: (Math.random() - 0.5) * 0.4, y: 1.6 + Math.random() * 0.8, z: (Math.random() - 0.5) * 0.4 });
         if (e.fire && Math.random() < 0.6) this.ember(base.clone().add(V((Math.random() - 0.5) * 0.8 * e.size, -0.3, (Math.random() - 0.5) * 0.8 * e.size)), Math.random() < 0.5 ? 0xff8a2b : 0xffc62b, 0.7 * e.size, 0.35);
+        // A spark lifting out of the fire now and then.
+        if (e.fire && Math.random() < 0.3) this.ember(base.clone().add(V((Math.random() - 0.5) * 0.5 * e.size, 0, (Math.random() - 0.5) * 0.5 * e.size)), 0xffc062, 0.14, 1.4, { x: (Math.random() - 0.5) * 0.8, y: 2 + Math.random() * 1.5, z: (Math.random() - 0.5) * 0.8 });
       }
       return e.t > 0;
     });
@@ -1093,6 +1144,9 @@ export class Game {
 
   updateEffects(dt) {
     this.updateFragments(dt);
+    this.view.fx.glow.update(dt);
+    this.view.fx.smoke.update(dt);
+    this.view.fx.rings.update(dt);
     this.effects = this.effects.filter((e) => {
       e.life -= dt;
       if (e.life <= 0) {

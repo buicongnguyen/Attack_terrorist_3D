@@ -184,8 +184,7 @@ export class Fleet {
       ship.wake = 0.35;
       const back = ship.def.length * 0.5;
       const p = V(ship.position.x - Math.cos(ship.heading) * back, 0.1, ship.position.z - Math.sin(ship.heading) * back);
-      const ring = g.view.ring(p, 0.45, 0xdff9f2, 0.08);
-      g.effects.push({ mesh: ring, life: 1.4, maxLife: 1.4, ring: true, growth: 1.8 });
+      g.shockRing(p, 0.45, 0xdff9f2, 0.08, 1.4, 1.8);
     }
     if (ship.hp < ship.maxHp) {
       ship.smoke -= dt;

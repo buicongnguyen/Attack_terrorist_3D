@@ -631,7 +631,42 @@ Counted from the detail meshes at 1280×800 (Sharp). Showing and hiding them cha
 
 On a phone at Balanced the canvas is 487×1055 instead of 682×1477: about half the pixels, with no antialiasing.
 
-## 18. Controls
+## 18. Tidelock 3.0: more effects, fewer draws
+
+### The brief
+
+Add visual effects, without making the game slower.
+
+### Evaluation
+
+Every glow, spark and puff of smoke was its own sprite with its own material, and every shock ring its own 56-segment mesh. Under heavy fire on a 390×844 phone, that peaked at 364 draw calls in the city and 321 on the canal (against about 215 in a quiet moment), and every effect created and destroyed a material. The cheapest way to add effects was to remove that cost first.
+
+### What changed
+
+- **Three GPU pools** (`src/fx.js`): glows (additive), smoke (soft) and rings. Each pool is one instanced draw. A particle is written once, when it is born: where, how fast, how it falls, grows and fades, its colour. The vertex shader moves it from its age, so the CPU does nothing per frame but advance one time uniform and upload the slots written since the last frame. A full pool overwrites its oldest particle; a new mission clears all three.
+- **Same look.** The explosions, embers, muzzle flashes, missile smoke and wreck smoke keep their colours, sizes, motion and timing. Measured against the old build with the same random numbers, a blast adds the same light around it (within 2–4% at 0.05 to 0.5 s).
+- **New effects**, all in the pools:
+  - big blasts roll a ring of dust along the ground and loft embers that drift up and fade;
+  - wrecks shed sparks that climb out of their smoke;
+  - missiles leave a smoke ribbon (puffs that swell as they age) instead of a row of beads;
+  - anything that hits the water (shells, rockets, bombs in the harbour, blasts on the canal) throws up a plume of spray and a ring of foam, and scatters the fish;
+  - the gunboat and the barges leave foam wakes that drift with the current;
+  - Lantern's rotor wash fans out below her: spray over the river, dust over land;
+  - flares burn with a bright head on each smoke trail.
+- Ongoing trails (wakes, rotor wash) are thinned by the graphics level and stop with reduced motion. All of it uses `Math.random`, never the mission's random numbers, so every scripted run plays out exactly as before.
+
+### Cost
+
+On a 390×844 phone at 3×, with 30 blasts in two seconds:
+
+| Scene | Old peak draw calls | New peak draw calls |
+| --- | ---: | ---: |
+| City 1.1 | 364–455 | 214 |
+| Canal 2.1 | 321–420 | 197–260 |
+
+The new peak equals the quiet count: blasts, splashes and wakes add no draw calls. Median frame time fell in every paired run (for example 22.6 → 17.7 ms in the city and 28.0 → 23.8 ms on the canal, CPU slowed 4×).
+
+## 19. Controls
 
 | Action | Desktop | Touch |
 | --- | --- | --- |

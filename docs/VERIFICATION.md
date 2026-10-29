@@ -1,5 +1,20 @@
 # Release Verification
 
+## Tidelock 3.0 (more effects, fewer draws)
+
+The effect pools and new effects ([REDESIGN.md §18](REDESIGN.md#18-tidelock-30-more-effects-fewer-draws)) were verified on 2026-10-29 against the production build (`vite preview`).
+
+- **97 Node tests** unchanged.
+- **388 browser checks**, zero runtime or resource errors, including 7 new effect checks:
+  - thirty blasts at once add no draw calls (214 before and after, with 360 glows, 276 smoke puffs and 30 rings alive);
+  - a new mission starts with every pool empty;
+  - the canal has wakes, and a blast on the water throws up a plume;
+  - reduced motion stops the ongoing trails;
+  - Lantern's rotor wash appears over the valley.
+- **Same look:** a blast adds the same light around it as on 2.9.1 when both use the same random numbers.
+- **Scripted pilots, skippers and rescue runs:** the same results as recorded for 2.7–2.9: 1, 4, 5, 8, 9 and 13 bombs in 11–173 s, the harbour quota with 20, 15 and 20 bombs in 190–323 s, three stars on every canal mission, and the three sorties home in 25, 29 and 33 s.
+- **Cost under heavy fire** (390×844 phone, 30 blasts in two seconds): peak draw calls 364–455 → 214 in the city, 321–420 → 197–260 on the canal; median frame time lower in every paired run.
+
 ## Tidelock 2.9.1
 
 Graphics and reduced-motion changes made in Mission Control now apply to the wildlife of the mission in progress, not just the next one. Verified on 2026-10-01: 97 Node tests and 381 browser checks (one new: Battery saver halves the canal fish at once, reduced motion drops the swallows at once, and both come back), zero errors, and the 18 scripted runs unchanged.
