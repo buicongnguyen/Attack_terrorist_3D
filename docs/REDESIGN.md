@@ -678,7 +678,43 @@ The new peak equals the quiet count: blasts, splashes and wakes add no draw call
 - **Fixed:** reduced motion and the graphics level now also thin the wreck sparks, the missile ribbons and the flare heads.
 - **Fixed:** thin rings keep at least a pixel of band at a distance.
 
-## 19. Controls
+## 19. Tidelock 3.2: a game you can lose
+
+### The brief
+
+Is the game too easy? Fix it as recommended.
+
+### Evaluation
+
+Measured on the live 3.1 with a do-nothing player (no input for two minutes per mission) and the scripted pilots on each mode:
+
+- **Doing nothing won four of the six canal missions on Easy**, and two on Normal. The barges reached the end by themselves: on Easy they had 1.5× health and took 0.6× damage (2.5 times as tough), and the enemy reloaded slower.
+- On Easy, enemy fire could not hurt you at all in canal missions 2.1 and 2.2, and never landed more than one time in ten anywhere.
+- The scripted pilots took three stars on nearly every mission, even on Hard; the canal's third star asked only for the barges at 60 % health.
+- Easy was the default, so a new player met all of this first.
+
+### What changed
+
+| Change | Why |
+| --- | --- |
+| New players start on **Normal** (existing saves keep their mode). | The campaign was designed around Normal's payloads; Easy stays one tap away in Mission Control. |
+| Barges have their own damage lever (Easy and Normal 1.25×, Hard 1.5×, Crazy 1.9×); Easy barge health 1.0× (was 1.5×), Normal 0.9×. | The convoy needs escorting. Your own hull still takes the mode's normal damage. |
+| Easy enemy damage 0.8× (was 0.6×), reload 1.15× (was 1.35×). | Easy is still kind, no longer harmless. |
+| Enemy fire can now land in every canal and valley mission on Easy (3–13 %); only the two tutorial city missions stay safe. The valley's chances rise to 7, 10 and 13 %. | No mission is damage-proof once you know the controls. |
+| The canal's third star needs the barges at 80 % (was 60 %) and at most 2 damage to Marlin (was 4). | Three stars should mean a clean escort. |
+
+### Result (do-nothing player, canal)
+
+| Mission | Normal (before → after) | Easy (before → after) |
+| --- | --- | --- |
+| 2.1 | won → **lost** | won → won, barges 10 and 20 of 24 (2 stars) |
+| 2.2 | won → **lost** | won → won, barges 18 and 18 of 24 (2 stars) |
+| 2.3 | lost → lost | won → won, barges 4 and 4 of 24 (2 stars) |
+| 2.4–2.6 | lost → lost | lost → lost |
+
+On Normal you now lose every canal mission if you don't fight. Easy stays forgiving by design, but leaves the convoy badly damaged. The scripted pilots still win every mission on Easy, Normal and Hard.
+
+## 20. Controls
 
 | Action | Desktop | Touch |
 | --- | --- | --- |

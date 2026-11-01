@@ -1,8 +1,8 @@
-// Difficulty (2.5). Easy is the default and really is easy; each harder mode pulls the same few
+// Difficulty (2.5; 3.2 made Normal the default and the barges need escorting on every mode). Each mode pulls the same few
 // levers across all three chapters, so a mission plays the same way, only more or less kindly.
 
 export const DIFFICULTIES = ["easy", "normal", "hard", "crazy"];
-export const DEFAULT_DIFFICULTY = "easy";
+export const DEFAULT_DIFFICULTY = "normal";
 
 export const DIFFICULTY = Object.freeze({
   easy: {
@@ -13,9 +13,10 @@ export const DIFFICULTY = Object.freeze({
     assist: 1.3,
     hit: 1,
     hitFloor: 0,
-    enemyReload: 1.35,
-    enemyDamage: 0.6,
-    bargeHp: 1.5,
+    enemyReload: 1.15,
+    enemyDamage: 0.8,
+    bargeHp: 1,
+    bargeDamage: 1.25,
     rockets: 1.5,
     strikes: 3,
     score: 1,
@@ -30,7 +31,8 @@ export const DIFFICULTY = Object.freeze({
     hitFloor: 0.05,
     enemyReload: 1,
     enemyDamage: 1,
-    bargeHp: 1,
+    bargeHp: 0.9,
+    bargeDamage: 1.25,
     rockets: 1,
     strikes: 2,
     score: 1.25,
@@ -46,6 +48,7 @@ export const DIFFICULTY = Object.freeze({
     enemyReload: 0.8,
     enemyDamage: 1.25,
     bargeHp: 0.85,
+    bargeDamage: 1.5,
     rockets: 0.75,
     strikes: 1,
     score: 1.5,
@@ -61,6 +64,7 @@ export const DIFFICULTY = Object.freeze({
     enemyReload: 0.6,
     enemyDamage: 1.6,
     bargeHp: 0.7,
+    bargeDamage: 1.9,
     rockets: 0.5,
     strikes: 1,
     score: 2,
@@ -76,7 +80,7 @@ export function difficulty(name) {
 // more each mission (the harbour and the rescue start at 5 %). City 1.1-1.6, harbour 1.7-1.9,
 // canal 2.1-2.6, rescue 3.1-3.3. (`enemyReload` multiplies the enemy's reload time.)
 export const BASE_HIT = Object.freeze([
-  0, 0, 0.03, 0.05, 0.05, 0.08, 0.05, 0.05, 0.08, 0, 0, 0.05, 0.05, 0.08, 0.1, 0.05, 0.08, 0.1,
+  0, 0, 0.03, 0.05, 0.05, 0.08, 0.05, 0.05, 0.08, 0.03, 0.04, 0.05, 0.06, 0.08, 0.1, 0.07, 0.1, 0.13,
 ]);
 
 // The chance for mission `index` in mode `name`: never more than certain.

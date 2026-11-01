@@ -421,7 +421,8 @@ export function skiffPath(order, t) {
 
 export function riverStars({ success, bargesLost, bargeHealth, damage }) {
   if (!success) return 0;
-  return 1 + (bargesLost === 0 ? 1 : 0) + (bargeHealth >= 0.6 && damage <= 4 ? 1 : 0);
+  // 3.2: the third star is for a convoy brought through nearly unscathed, not merely afloat.
+  return 1 + (bargesLost === 0 ? 1 : 0) + (bargeHealth >= 0.8 && damage <= 2 ? 1 : 0);
 }
 
 // Where an air strike's line of bombs falls: across the whole canal at `z`, clamped ahead of

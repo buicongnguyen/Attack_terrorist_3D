@@ -147,7 +147,7 @@ export async function checkRiver(page, check) {
     const before = { hp: rammed.hp, score: g.score, kills: g.kills };
     for (let i = 0; i < 120 * 5 && !ram.dead; i++) g.update(1 / 120);
     out.ramKillsTheSkiffWithoutReward =
-      ram.dead && Math.abs(rammed.hp - (before.hp - 3 * g.mode.enemyDamage)) < 1e-9 && g.score === before.score && g.kills === before.kills;
+      ram.dead && Math.abs(rammed.hp - (before.hp - 3 * (g.mode.bargeDamage ?? g.mode.enemyDamage))) < 1e-9 && g.score === before.score && g.kills === before.kills;
     // The gate towers take hits from base to top, and the medal floats out once the gate opens.
     ui.start(14);
     g.paused = false;

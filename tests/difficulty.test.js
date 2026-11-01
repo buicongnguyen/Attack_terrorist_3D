@@ -5,19 +5,20 @@ import { MISSIONS, chapterStart } from "../src/data.js";
 
 test("four modes, Easy first and the default", () => {
   assert.deepEqual(DIFFICULTIES, ["easy", "normal", "hard", "crazy"]);
-  assert.equal(DEFAULT_DIFFICULTY, "easy");
+  // 3.2: new players start on Normal; Easy stays one tap away.
+  assert.equal(DEFAULT_DIFFICULTY, "normal");
   assert.equal(BASE_HIT.length, MISSIONS.length);
 });
 
-test("on Easy nothing can hit you in a chapter's first two missions, and later only a little", () => {
+test("on Easy only the two tutorial city missions are safe, and fire elsewhere lands only a little", () => {
   for (const chapter of [0, 1, 2]) {
     const first = chapterStart(chapter);
     const indices = MISSIONS.map((m, i) => (m.chapter === chapter ? i : -1)).filter((i) => i >= 0);
-    if (chapter !== 2) {
+    if (chapter === 0) {
       assert.equal(hitChance(first, "easy"), 0);
       assert.equal(hitChance(first + 1, "easy"), 0);
-    }
-    for (const i of indices) assert.ok(hitChance(i, "easy") <= 0.1, `mission ${i}: ${hitChance(i, "easy")}`);
+    } else for (const i of indices) assert.ok(hitChance(i, "easy") > 0, `mission ${i} can't hurt you`);
+    for (const i of indices) assert.ok(hitChance(i, "easy") <= 0.13, `mission ${i}: ${hitChance(i, "easy")}`);
   }
 });
 
@@ -36,7 +37,7 @@ test("the levers point the right way from Easy to Crazy", () => {
   for (const key of ["bombs", "power", "assist", "enemyReload", "bargeHp", "rockets", "strikes"]) {
     assert.ok(easy[key] >= normal[key] && normal[key] >= hard[key] && hard[key] >= crazy[key], key);
   }
-  for (const key of ["hit", "enemyDamage", "score"]) {
+  for (const key of ["hit", "enemyDamage", "bargeDamage", "score"]) {
     assert.ok(easy[key] <= normal[key] && normal[key] <= hard[key] && hard[key] <= crazy[key], key);
   }
   assert.equal(normal.bombs, 1, "Normal keeps the designed payloads");

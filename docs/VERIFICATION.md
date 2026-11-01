@@ -1,5 +1,14 @@
 # Release Verification
 
+## Tidelock 3.2 (a game you can lose)
+
+The difficulty changes ([REDESIGN.md §19](REDESIGN.md#19-tidelock-32-a-game-you-can-lose)) were verified on 2026-11-02 against the production build (`vite preview`).
+
+- **97 Node tests**: Normal is the default; on Easy only the two tutorial city missions are damage-proof; barge damage rises from Easy to Crazy; the canal third star wants 80 % barges and at most 2 damage.
+- **390 browser checks**, zero runtime or resource errors (the ram check now follows the barge damage lever).
+- **Do-nothing player, canal:** on Normal every mission is lost (2.1 and 2.2 were won before); on Easy 2.1 to 2.3 survive with the convoy badly damaged, 2.4 to 2.6 are lost.
+- **Scripted pilots:** every mission won on Easy, Normal and Hard. On Normal and Hard even the scripted skipper drops to two stars on some canal missions (2.5 on Normal; 2.3 and 2.5 on Hard).
+
 ## Tidelock 3.1 (scorch marks, sparks, spray, and upload fix)
 
 Verified on 2026-10-29 against the production build (`vite preview`).

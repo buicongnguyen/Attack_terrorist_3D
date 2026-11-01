@@ -611,7 +611,8 @@ export class RiverOperation {
   hurtBarge(barge, amount, position) {
     if (!barge.alive || this.game.status !== "playing") return;
     const g = this.game;
-    amount *= g.mode.enemyDamage;
+    // 3.2: barges have their own damage lever, so the convoy needs escorting on every mode.
+    amount *= g.mode.bargeDamage ?? g.mode.enemyDamage;
     barge.hp = Math.max(0, barge.hp - amount);
     this.bargeDamage += amount;
     g.puff(position || barge.mesh.position.clone().add(V(0, 1.5, 0)), 0xffb35c, 0.5, 0.6);

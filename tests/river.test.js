@@ -118,6 +118,9 @@ test("river stars reward protecting the barges", () => {
   assert.equal(riverStars({ success: false, bargesLost: 0, bargeHealth: 1, damage: 0 }), 0);
   assert.equal(riverStars({ success: true, bargesLost: 0, bargeHealth: 0.9, damage: 2 }), 3);
   assert.equal(riverStars({ success: true, bargesLost: 1, bargeHealth: 0.4, damage: 2 }), 1);
+  // 3.2: the third star wants the convoy nearly unscathed and Marlin barely touched.
+  assert.equal(riverStars({ success: true, bargesLost: 0, bargeHealth: 0.7, damage: 0 }), 2);
+  assert.equal(riverStars({ success: true, bargesLost: 0, bargeHealth: 0.95, damage: 3 }), 2);
 });
 
 test("the Lock Gate medal floats out after the gate opens, with room to reach Marlin", () => {
