@@ -92,7 +92,6 @@ export class Game {
     ground.userData = { terrain: true };
     this.entities = [];
     this.projectiles = [];
-    this.effects = [];
     this.debris = [];
     this.debrisActive = false;
     this.time = 0;
@@ -1156,28 +1155,8 @@ export class Game {
 
   updateEffects(dt) {
     this.updateFragments(dt);
-    this.view.fx.glow.update(dt);
-    this.view.fx.smoke.update(dt);
-    this.view.fx.rings.update(dt);
-    this.view.fx.scorch.update(dt);
-    this.effects = this.effects.filter((e) => {
-      e.life -= dt;
-      if (e.life <= 0) {
-        this.view.disposeObject(e.mesh);
-        return false;
-      }
-      const age = 1 - e.life / e.maxLife;
-      if (e.ring) {
-        e.mesh.scale.setScalar(1 + age * e.growth);
-        e.mesh.material.opacity = (1 - age) * 0.6;
-      } else {
-        if (e.gravity) e.velocity.y -= e.gravity * dt;
-        e.mesh.position.addScaledVector(e.velocity, dt);
-        e.mesh.scale.setScalar(Math.max(0.01, e.size * (1 + age * e.grow)));
-        e.mesh.material.opacity = e.fade * Math.min(1, e.life / (e.maxLife * 0.5));
-      }
-      return true;
-    });
+    // Glows, smoke, rings and scorches live in the GPU pools (fx.js); only their clocks advance here.
+    for (const pool of Object.values(this.view.fx)) pool.update(dt);
     this.debris = this.debris.filter((e) => {
       e.life -= dt;
       e.mesh.position.copy(e.body.position);

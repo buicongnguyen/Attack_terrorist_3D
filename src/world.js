@@ -350,10 +350,7 @@ export class WorldView {
 
   clear() {
     this.disposeObject(this.level);
-    this.fx?.glow.reset();
-    this.fx?.smoke.reset();
-    this.fx?.rings.reset();
-    this.fx?.scorch.reset();
+    for (const pool of Object.values(this.fx || {})) pool.reset();
     this.level = new THREE.Group();
     this.scene.add(this.level);
     this.scrollProps = [];
