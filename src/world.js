@@ -79,6 +79,8 @@ const MISSION_MOODS = {
   // Broken Crossing: the storm's outer bands, grey and green.
   16: { top: 0x3a4a62, horizon: 0xa9b8b4, sun: 0xe6eeff, sunIntensity: 2.1, sky: 0xb4c2c8, ground: 0x6a5a48, hemi: 1.6, rim: 0xb8d0e0, water: [0.06, 0.2, 0.24, 0.2, 0.36, 0.38], exposure: 0.98, sunOffset: [-20, 50, 20] },
   // North Ridge: last light, low and orange.
+  // Eye of the Storm: night under the typhoon, a very dark blue sky and black-blue water.
+  18: { top: 0x050b24, horizon: 0x1b2f5e, sun: 0x9fb8ff, sunIntensity: 1.9, sky: 0x6f86c8, ground: 0x2a3350, hemi: 1.25, rim: 0x6fa8ff, water: [0.01, 0.04, 0.1, 0.03, 0.1, 0.2], exposure: 1.05, sunOffset: [-30, 46, 22] },
   17: { top: 0x2b2d6e, horizon: 0xff7a45, sun: 0xffa46a, sunIntensity: 2.6, sky: 0xb0a0ff, ground: 0x5a4a6a, hemi: 1.45, rim: 0xff9a7a, water: [0.1, 0.16, 0.32, 0.4, 0.34, 0.46], exposure: 1.03, sunOffset: [-60, 20, 12] },
 };
 

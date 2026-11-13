@@ -50,7 +50,7 @@ export class RescueHUD {
     $("rescue-signal").textContent = r.objective.name;
     $("rescue-distance").textContent = `${Math.round(r.distance)} m`;
     $("rescue-status").textContent = r.state;
-    $("rescue-count").textContent = `${r.rescued} / ${r.total}`;
+    $("rescue-count").textContent = r.siege ? `${Math.floor(r.siege.gate * 100)}%` : `${r.rescued} / ${r.total}`;
     $("rocket-stock").textContent = r.gear.rockets;
     $("guided-stock").textContent = r.gear.guided;
     $("flare-stock").textContent = r.gear.flares;

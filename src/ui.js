@@ -50,7 +50,7 @@ import {
 import { CHAPTERS, MISSIONS, missionNumber, chapterSize, saveResult, migrateSave } from "./data.js";
 import { BOMBS, BOMB_ORDER, FLIGHT, STRIKE_MISSIONS, isPattern } from "./strike-data.js";
 import { patternDiagram, ROTATION_STEP } from "./harbour-data.js";
-import { CAST, PROLOGUE, CHAPTER_STORY, MISSION_STORY, FINALE, speaker } from "./story.js";
+import { CAST, PROLOGUE, CHAPTER_STORY, MISSION_STORY, FINALE, INQUIRY_FILES, finaleRecord, speaker } from "./story.js";
 import { activeBonuses } from "./pickups.js";
 import { DIFFICULTIES, DIFFICULTY, DEFAULT_DIFFICULTY, difficulty, percent } from "./difficulty.js";
 import { RescueHUD } from "./rescue-hud.js";
@@ -147,6 +147,7 @@ export function readSave() {
       reducedMotion: Boolean(saved.reducedMotion),
       seenPrologue: Boolean(saved.seenPrologue),
       difficulty: DIFFICULTIES.includes(saved.difficulty) ? saved.difficulty : DEFAULT_DIFFICULTY,
+      ending: saved.ending in FINALE.choices ? saved.ending : null,
     };
   } catch {
     return { records: {}, muted: false, reducedMotion: false, seenPrologue: false, difficulty: DEFAULT_DIFFICULTY };
@@ -426,6 +427,10 @@ window.addEventListener('mobile-game-interruption', () => this.touches.clear());
     $("result-next").onclick = () =>
       this.start(this.game.status === "success" ? (this.game.index + 1) % MISSIONS.length : this.game.index);
     $("result-dialog").addEventListener("cancel", (e) => e.preventDefault());
+    for (const button of [$("finale-broadcast"), $("finale-seal")]) {
+      button.querySelector("span").textContent = FINALE.choices[button.dataset.ending].label;
+      button.onclick = () => this.chooseEnding(button.dataset.ending);
+    }
     $("brief-launch").onclick = () => this.launch();
     this.brief.addEventListener("cancel", (e) => {
       e.preventDefault();
@@ -1043,7 +1048,35 @@ window.addEventListener('mobile-game-interruption', () => {
     this.fillMissions();
     const story = MISSION_STORY[this.game.index];
     $("mission-briefing").textContent = `${this.game.mission.name}: ${story.goals.join(". ")}.`;
+    this.fillFiles();
     this.dialog.showModal();
+  }
+
+  // The inquiry files recovered so far (a file comes with its mission's first win).
+  fillFiles() {
+    const found = INQUIRY_FILES.filter((file) => this.save.records[file.index]);
+    $("files-count").textContent = `${found.length} / ${INQUIRY_FILES.length}`;
+    const ending = FINALE.choices[this.save.ending];
+    $("files-list").innerHTML =
+      (found.length
+        ? found.map((file) => `<article><strong>${escape(file.title)}</strong><p>${escape(file.text)}</p></article>`).join("")
+        : "<p>No files yet. Echo team is still inside the Glass District.</p>") +
+      (ending ? `<p class="files-ending">Your ending: ${escape(ending.title)}.</p>` : "");
+  }
+
+  // The finale's choice: what happens to the files. The epilogue follows, with the campaign's record.
+  chooseEnding(key) {
+    const ending = FINALE.choices[key];
+    if (!ending) return;
+    this.save.ending = key;
+    this.persist();
+    const stars = MISSIONS.reduce((sum, _, i) => sum + (this.save.records[i]?.stars || 0), 0);
+    $("result-title").textContent = ending.title;
+    $("result-story").textContent = `${ending.text} ${finaleRecord(stars, MISSIONS.length * 3)}`;
+    $("finale-choice").hidden = true;
+    $("result-file").hidden = true;
+    document.querySelector("#result-dialog .result-actions").hidden = false;
+    $("result-next").focus();
   }
 
   resume() {
@@ -1242,9 +1275,19 @@ window.addEventListener('mobile-game-interruption', () => {
     $("result-targets").textContent = result.kills;
     $("result-best").textContent = (this.save.records[result.index]?.score || 0).toLocaleString();
     $("result-next").innerHTML = `${finale ? "Play again" : result.success ? "Next mission" : "Try again"}<i data-lucide="arrow-right"></i>`;
+    const file = result.success ? story.file : null;
+    $("result-file").hidden = !file;
+    if (file) {
+      $("result-file-title").textContent = `RECOVERED / ${file.title}`;
+      $("result-file-text").textContent = file.text;
+    }
+    // The finale asks its question first; the usual buttons come back with the epilogue.
+    $("finale-choice").hidden = !finale;
+    $("finale-question").textContent = FINALE.question;
+    document.querySelector("#result-dialog .result-actions").hidden = finale;
     refreshIcons();
     $("result-dialog").showModal();
-    $("result-next").focus();
+    (finale ? $("finale-broadcast") : $("result-next")).focus();
   }
 
   failureText(result, story) {
@@ -1254,6 +1297,7 @@ window.addEventListener('mobile-game-interruption', () => {
         ferry: `A bomb struck the ${this.game.op?.abortedBy || "Island Belle"} and the strike was aborted. When the pattern turns blue, a civilian boat is inside it: hold your release.`,
         flight: "Kestrel Flight was shot down. Silence the flak first and change lane when a red lock line appears.",
         barges: "Both barges sank before reaching the lock. Shield them with Marlin and steer them clear of mines.",
+        station: "The control room was destroyed and the gates stopped. Shoot the sappers with the gold rings before they reach the motors, and bring Marrow down quickly once he arrives.",
       }[result.reason] || story.failure
     );
   }
@@ -1272,9 +1316,15 @@ window.addEventListener('mobile-game-interruption', () => {
       return [
         [result.success, "Deliver the convoy"],
         [result.success && lost === 0, "Both barges survive"],
-        [result.stars >= 3, "Barges above 60% with Marlin barely scratched"],
+        [result.stars >= 3, "Barges above 80% and Marlin hit at most twice"],
       ];
     }
+    if (g.op?.siege)
+      return [
+        [result.success, "The Tidelock is closed"],
+        [result.success && g.op.siege.integrity / g.op.siege.max >= 0.7, "Station kept above 70%"],
+        [result.success && g.hitsTaken <= 2, "Take at most two hits"],
+      ];
     return [
       [result.success, "Everyone aboard and home"],
       [result.stars >= 2, "Take at most one hit"],
@@ -1310,7 +1360,11 @@ window.addEventListener('mobile-game-interruption', () => {
       this.updateRounds(state.round);
     }
     if (chapter === 1) this.updateRiver(state, op);
-    if (chapter === 2) {
+    if (chapter === 2 && op.siege) {
+      // The finale: the gates are the objective; the station and Marrow carry world labels.
+      $("objective-count").textContent = `${Math.floor(op.siege.gate * 100)}%`;
+      $("objective-unit").textContent = "GATES CLOSED";
+    } else if (chapter === 2) {
       $("objective-count").textContent = `${op.rescued} / ${op.total}`;
       $("objective-unit").textContent = "SOLDIERS ABOARD";
     }

@@ -1,5 +1,14 @@
 # Release Verification
 
+## Tidelock 4.0 (the third act)
+
+The Wall Inquiry, the finale mission and the ending choice ([REDESIGN.md §20](REDESIGN.md#20-tidelock-40-the-third-act), plan in [PLAN-4.0.md](PLAN-4.0.md)) were verified on 2026-11-13 against the production build (`vite preview`).
+
+- **99 Node tests.** New: six inquiry files spread over all three chapters, Okafor named by file 4 and the hinge in file 6; the finale's radio covers every beat; two endings with different epilogues; the siege's waves are ordered, Marrow arrives before the gates stall, sappers can out-damage the station, and the motors stand on dry land.
+- **421 browser checks**, zero runtime or resource errors. New: the finale starts as a siege; a sapper at the motor hurts the station and one shot on the way does not; the gates close with time, stall at 90 % while Marrow flies and finish once he is down; Marrow strafes the station; closed gates win and a destroyed station loses; only the camp pad repairs; a player who does nothing loses; the scripted pilot wins with Marrow shot down; the finale asks its question, each choice shows its epilogue and is saved, a result screen shows its recovered file, and Mission Control keeps the files; phone layout checks cover the finale and file screens.
+- **Earlier missions unchanged:** the 18 scripted runs give the same results as 3.2.
+- **Finale, scripted pilot:** won in 170 s on Normal (station 46 %, Marrow down, one star); a do-nothing player loses on every mode.
+
 ## Tidelock 3.2 (a game you can lose)
 
 The difficulty changes ([REDESIGN.md §19](REDESIGN.md#19-tidelock-32-a-game-you-can-lose)) were verified on 2026-11-02 against the production build (`vite preview`).

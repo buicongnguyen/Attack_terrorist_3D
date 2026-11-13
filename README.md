@@ -10,11 +10,13 @@ Solace Harbor lies three metres below the tide. Only the Tidelock, a storm barri
 
 ## Campaign
 
+Under the missions runs the Wall Inquiry: six files, recovered as you go, about who really let the old sea wall fail. The finale asks you what to do with them, and the ending follows your choice.
+
 | Chapter | You command | The job |
 | --- | --- | --- |
 | **1 Breakwater** (9 missions) | Kestrel Flight: up to three strike aircraft | Break the Front's hold on the Glass District, then its flotilla in the harbour. Echo recon reads the enemy's patrol schedules; time your passes so the gatherings are hit together. |
 | **2 Relief Run** (6 missions) | The gunboat *Marlin* | Escort Dr. Okafor's relief barges up the Verde River, across the floodplain, past the sawmill and through the Cut, then break the Highwater lock gate. |
-| **3 Last Light** (3 missions) | The rescue helicopter *Lantern* | Winch Echo team out of Cinder Valley and bring the override key home before the storm. |
+| **3 Last Light** (4 missions) | The rescue helicopter *Lantern* | Winch Echo team out of Cinder Valley, bring the override key home, then hold Highwater Station against Marrow himself while the Tidelock closes. |
 
 ![The Floodplain: Marlin's laser, the Hornet gunship on her wing and the escort launch beside the barges](docs/chapter2.png)
 

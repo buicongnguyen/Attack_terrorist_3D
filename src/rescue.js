@@ -14,6 +14,7 @@ import {
   THREATS,
   rescueProgress,
   isHostileEntity,
+  riverAt,
 } from "./rescue-data.js";
 import { LAND, terrainHeight } from "./rescue-world.js";
 import { clamp } from "./physics.js";
@@ -132,6 +133,192 @@ export class RescueOperation {
     this.cable = view.box(V(), V(0.025, 1, 0.025), 0xdbe6d3);
     this.cable.visible = false;
     this.ripples = new Ripples(view, 60);
+    this.siege = null;
+    if (this.map.siege) this.startSiege();
+  }
+
+  // ------------------------------------------------------------------ the siege (4.0)
+
+  // Eye of the Storm: the Tidelock's gates cross the river beside the station and close over
+  // `seconds`; the station has an integrity that sappers and Marrow's gunship wear down.
+  startSiege() {
+    const view = this.game.view,
+      cfg = this.map.siege;
+    const river = riverAt(this.map, cfg.gate.z),
+      half = river.width / 2;
+    const leaves = [-1, 1].map((side) => {
+      const open = river.x + side * half * 1.5,
+        shut = river.x + side * half * 0.5;
+      const leaf = new THREE.Group();
+      leaf.position.set(open, 0, cfg.gate.z);
+      view.level.add(leaf);
+      view.box(V(0, 1.6, 0), V(half, 3.4, 1.4), 0x2f86e8, leaf);
+      view.box(V(0, 3.45, 0), V(half, 0.3, 1.6), 0xffc62b, leaf);
+      view.box(V(0, 2, 0.72), V(half * 0.9, 0.5, 0.06), 0x7fd8ff, leaf);
+      view.box(V(side * (half + 1.2) + river.x, 1.5, cfg.gate.z), V(2.6, 3.8, 3.2), 0xd9cdb8);
+      return { leaf, open, shut };
+    });
+    for (const m of cfg.motors) {
+      view.box(V(m.x, LAND + 0.9, m.z), V(2.2, 1.8, 2.2), 0x3a4048);
+      view.box(V(m.x, LAND + 1.95, m.z), V(2.5, 0.25, 2.5), 0xffc62b);
+      view.ring(V(m.x, LAND + 0.06, m.z), 2.6, 0x7fe8ff, 0.12);
+    }
+    this.siege = { cfg, t: 0, gate: 0, integrity: cfg.integrity, max: cfg.integrity, next: 0, boss: null, bossDown: false, held: 0, flip: false, leaves };
+    this.state = "STATION 100%";
+  }
+
+  hurtStation(amount, text) {
+    const s = this.siege,
+      g = this.game;
+    if (g.status !== "playing") return;
+    s.integrity = Math.max(0, s.integrity - amount * g.mode.enemyDamage);
+    g.audio.play("hit");
+    g.notify("toast", `${text} / STATION ${Math.round((s.integrity / s.max) * 100)}%`);
+  }
+
+  spawnWave(w) {
+    const g = this.game,
+      s = this.siege,
+      cfg = s.cfg;
+    if (w.sappers) {
+      for (let i = 0; i < w.sappers; i++) {
+        const e = this.soldier(w.from[0] + (i % 2) * 1.8, w.from[1] + i * 1.5);
+        e.hp = THREATS.sapper.hp;
+        e.alert = true;
+        e.sapper = cfg.motors[i % cfg.motors.length];
+        // Gold rings: these are the ones to stop.
+        e.ring?.material.color.set(0xffc62b);
+      }
+      g.notify("toast", `SAPPERS FROM THE ${w.from[1] > -34 ? "SOUTH" : "NORTH"} / STOP THEM AT THE MOTORS`);
+      this.say("sappers");
+    }
+    if (w.drones) {
+      for (let i = 0; i < w.drones; i++) {
+        const at = V(w.from[0] + i * 3, 7.7, w.from[1] + i * 2);
+        const e = g.entity("drone", "drone", at, { hp: THREATS.drone.hp, radius: 1, cooldown: 2 + i * 0.6, range: THREATS.drone.range, alert: true });
+        e.home = V(cfg.station.x + (i - 1) * 9, 7.7, cfg.station.z + 8);
+      }
+      this.say("drones");
+    }
+    if (w.truck) this.spawnThreat({ type: "missile-truck", route: w.truck });
+    if (w.boss) this.spawnBoss();
+  }
+
+  // Marrow, in a Hornet gunship taken at Highwater: he circles the station, hunts Lantern with
+  // missiles and gun bursts, and strafes the control room.
+  spawnBoss() {
+    const g = this.game,
+      s = this.siege,
+      spec = s.cfg.boss,
+      c = s.cfg.station;
+    const e = g.entity("gunship", "gunship", V(c.x + 30, 8.2, c.z - 70), {
+      hp: spec.hp,
+      maxHp: spec.hp,
+      radius: 2.4,
+      lift: 0,
+      alert: true,
+      angle: -Math.PI / 2,
+      missile: 3,
+      burst: 1.5,
+      strafe: spec.strafe,
+    });
+    e.rotor = e.mesh.getObjectByName("Rotor");
+    e.tail = e.mesh.getObjectByName("TailRotor");
+    g.view.ring(V(0, -0.5, 0), 3.4, 0xff4b2b, 0.18, e.mesh);
+    s.boss = e;
+    this.say("boss");
+    g.notify("toast", "MARROW / HORNET TWO INBOUND");
+  }
+
+  updateBoss(e, dt, d) {
+    const g = this.game,
+      s = this.siege,
+      spec = s.cfg.boss,
+      c = s.cfg.station;
+    if (e.rotor) e.rotor.rotation.y += dt * 35;
+    if (e.tail) e.tail.rotation.x += dt * 44;
+    const rage = e.hp < e.maxHp / 2;
+    e.angle += dt * spec.speed * (rage ? 1.5 : 1);
+    const tx = c.x + 6 + Math.cos(e.angle) * spec.orbit,
+      tz = c.z + Math.sin(e.angle) * spec.orbit * 0.8;
+    const px = e.position.x,
+      pz = e.position.z,
+      k = 1 - Math.exp(-dt * 1.2);
+    e.position.x += (tx - px) * k;
+    e.position.z += (tz - pz) * k;
+    e.position.y = 8.2 + Math.sin(g.time * 1.7) * 0.4;
+    const hx = e.position.x - px,
+      hz = e.position.z - pz;
+    if (Math.hypot(hx, hz) > 1e-4) e.mesh.rotation.y = dampAngle(e.mesh.rotation.y, Math.atan2(-hx, -hz), 5, dt);
+    if (rage && !e.raged) {
+      e.raged = true;
+      this.say("rage");
+      this.spawnWave({ drones: 2, from: [e.position.x, e.position.z] });
+    }
+    e.missile -= dt;
+    if (e.missile <= 0 && d < 46) {
+      this.shoot(e, -0.4, true);
+      e.missile = spec.missile * g.mode.enemyReload * (rage ? 0.75 : 1);
+    }
+    e.burst -= dt;
+    if (e.burst <= 0 && d < 30) {
+      this.shoot(e, -0.4);
+      e.burst = spec.burst * g.mode.enemyReload;
+    }
+    e.strafe -= dt;
+    if (e.strafe <= 0) {
+      e.strafe = spec.strafe;
+      for (let i = 0; i < 3; i++) g.blast(V(c.x + (i - 1) * 2.6, LAND + 1.6, c.z - 3), 1.1, 0xff4b2b, { quiet: i > 0, small: true });
+      this.hurtStation(spec.strafeDamage, "MARROW STRAFES THE CONTROL ROOM");
+    }
+    this.labels.push({ id: "boss", x: e.position.x, y: e.position.y + 2.8, z: e.position.z, text: `MARROW / ${Math.max(1, Math.ceil((e.hp / e.maxHp) * 100))}%`, hot: true });
+  }
+
+  // A sapper runs for his gate motor; if he gets there, the charge goes off.
+  updateSapper(e, dt) {
+    const m = e.sapper;
+    e.running = true;
+    if (!this.moveTowards(e, m.x - 1.7, m.z, THREATS.sapper.speed, dt)) return;
+    this.game.blast(V(m.x, LAND + 1, m.z), 2.2, 0xff8a2b);
+    this.hurtStation(THREATS.sapper.damage, "CHARGE ON THE GATE MOTOR");
+    this.say("charge");
+    this.game.kill(e, false);
+  }
+
+  updateSiege(dt) {
+    const g = this.game,
+      s = this.siege,
+      cfg = s.cfg;
+    const u = smooth(s.gate);
+    for (const { leaf, open, shut } of s.leaves) leaf.position.x = open + (shut - open) * u;
+    if (g.status !== "playing") return;
+    s.t += dt;
+    const stalled = Boolean(s.boss && !s.boss.dead) && s.gate >= cfg.stall;
+    if (!stalled) s.gate = Math.min(1, s.gate + dt / cfg.seconds);
+    else {
+      // Marrow holds the gates: every few seconds more sappers come.
+      this.say("stall");
+      s.held += dt;
+      if (s.held >= cfg.stallWave) {
+        s.held = 0;
+        s.flip = !s.flip;
+        this.spawnWave({ sappers: 3, from: s.flip ? [-38, 6] : [-38, -72] });
+      }
+    }
+    while (s.next < cfg.waves.length && cfg.waves[s.next].at <= s.t) this.spawnWave(cfg.waves[s.next++]);
+    if (s.gate > 0.5) this.say("half");
+    const river = riverAt(this.map, cfg.gate.z);
+    this.labels.push({ id: "gates", x: river.x, y: 5.2, z: cfg.gate.z, text: stalled ? "GATES STALLED / SHOOT DOWN MARROW" : `GATES ${Math.floor(s.gate * 100)}%`, hot: stalled });
+    const health = Math.round((s.integrity / s.max) * 100);
+    this.labels.push({ id: "station", x: cfg.station.x - 6, y: 6.2, z: cfg.station.z - 4.4, text: `STATION ${health}%`, hot: health < 35 });
+    this.state = `${stalled ? "GATES STALLED / " : ""}STATION ${health}%`;
+    if (s.integrity <= 0) {
+      g.blast(V(cfg.station.x, LAND + 2, cfg.station.z - 3), 4.5, 0xff8a2b);
+      g.finish(false, "station");
+    } else if (s.gate >= 1) {
+      this.say("success");
+      g.finish(true);
+    }
   }
 
   // ------------------------------------------------------------------ the enemy
@@ -323,6 +510,7 @@ export class RescueOperation {
   }
 
   objective() {
+    if (this.siege) return { ...this.siege.cfg.station, name: "HIGHWATER STATION", sector: "HOLD THE STATION" };
     if (this.rescued === this.soldiers.length)
       return { ...this.layout.landing, name: this.layout.landing.name, sector: "LAND HERE" };
     if (this.soldiers[this.selected]?.rescued || this.soldiers[this.selected]?.lift !== undefined)
@@ -405,6 +593,15 @@ export class RescueOperation {
         if (d < 4) this.collect(e);
         continue;
       }
+      // The siege's sappers and Marrow act wherever Lantern is.
+      if (e.sapper) {
+        this.updateSapper(e, dt);
+        continue;
+      }
+      if (e.type === "gunship") {
+        this.updateBoss(e, dt, d);
+        continue;
+      }
       if (d > 64) continue;
       if (e.type === "enemy") this.updateSoldier(e, dt, d);
       else if (e.type === "missile-site") this.updateSite(e, dt, d);
@@ -418,6 +615,7 @@ export class RescueOperation {
     this.updateCaves(dt);
     this.updateSurvivors(dt);
     this.updateBases(dt);
+    if (this.siege) this.updateSiege(dt);
     this.updateMarks();
     g.entities = g.entities.filter((e) => !e.dead || e.fallTime !== undefined);
   }
@@ -755,7 +953,7 @@ export class RescueOperation {
     const g = this.game,
       heli = g.player.position,
       { start, landing } = this.layout;
-    const aboard = this.rescued === this.soldiers.length;
+    const aboard = !this.siege && this.rescued === this.soldiers.length;
     if (this.landing) {
       this.landing.t += dt;
       const u = smooth(this.landing.t / LAND_SECONDS);
@@ -770,7 +968,8 @@ export class RescueOperation {
       }
       return;
     }
-    for (const base of [start, landing]) {
+    // In the siege only the camp pad repairs: leaving the station is the price.
+    for (const base of this.siege ? [landing] : [start, landing]) {
       if (distance(heli, base) > LAND_RADIUS) continue;
       if (base === landing && aboard && g.status === "playing") {
         this.landing = { t: 0, from: heli.clone() };
@@ -784,6 +983,7 @@ export class RescueOperation {
         g.notify("toast", "BASE / REPAIRED AND REARMED");
       }
     }
+    if (this.siege) return;
     this.state = aboard
       ? "ALL ABOARD / LAND"
       : this.soldiers.some((s) => s.lift !== undefined && !s.rescued)
@@ -829,6 +1029,14 @@ export class RescueOperation {
       g.score += 60 * e.parked.length;
       g.notify("toast", `DRONES GROUNDED / +${60 * e.parked.length}`);
       e.parked = [];
+    }
+    if (e.type === "gunship" && this.siege) {
+      this.siege.bossDown = true;
+      g.score += 1500;
+      g.shatter(at, [0x2f86e8, 0x2f2c35, 0xff4b2b, 0xd8c6aa], 24, 2);
+      g.smokeColumn(V(at.x, LAND, at.z), 6, 1.6, V(0, 1, 0));
+      g.notify("toast", "MARROW IS DOWN / +1500");
+      this.say("bossDown");
     }
     if (e.type === "barracks" && e.crewLeft > 0) {
       g.score += 50 * e.crewLeft;
@@ -908,6 +1116,8 @@ export class RescueOperation {
     if (!success) return 0;
     // Hits taken, not damage points (harder modes make a hit cost more).
     const hits = this.game.hitsTaken;
+    // The siege: a star for the win, one for the station kept above 70 %, one for at most two hits.
+    if (this.siege) return 1 + (this.siege.integrity / this.siege.max >= 0.7 ? 1 : 0) + (hits <= 2 ? 1 : 0);
     return hits === 0 ? 3 : hits <= 1 ? 2 : 1;
   }
 
@@ -928,7 +1138,10 @@ export class RescueOperation {
       state: this.state,
       flareCooldown: this.flareCooldown,
       labels: this.labels,
-      progress: rescueProgress(this.rescued, this.soldiers.length, distance(g.player.position, this.layout.landing)),
+      progress: this.siege ? Math.min(0.99, this.siege.gate) : rescueProgress(this.rescued, this.soldiers.length, distance(g.player.position, this.layout.landing)),
+      siege: this.siege
+        ? { gate: this.siege.gate, integrity: this.siege.integrity / this.siege.max, boss: this.siege.boss && !this.siege.boss.dead ? this.siege.boss.hp / this.siege.boss.maxHp : null, bossDown: this.siege.bossDown }
+        : null,
     };
   }
 }

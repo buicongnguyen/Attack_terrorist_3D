@@ -30,7 +30,7 @@ const HERONS = [0x6f8098, 0x7d8fa8, 0x5c6b82, 0xffffff];
 // The canal's flowing stretch: the props wrap at the same near end (river.js).
 const CANAL = { minZ: -64, maxZ: 34 };
 // Missions at dusk swap swallows and gulls for bats.
-const DUSK = new Set([14, 17]);
+const DUSK = new Set([14, 17, 18]);
 // Reeds repeat every PERIOD metres, so the whole row can slide with the canal and wrap unseen.
 const PERIOD = 44;
 

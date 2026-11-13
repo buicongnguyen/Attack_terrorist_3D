@@ -37,6 +37,8 @@ export const THREATS = Object.freeze({
   barracks: { hp: 10, detect: 28, every: 1.2, crew: 4 },
   soldier: { hp: 2, detect: 24, range: 24, every: 3.4, speed: 3.2 },
   cannon: { hp: 3, range: 30, every: 3 },
+  // 4.0: sappers run for the gate motors with charges; each one that arrives costs the station.
+  sapper: { hp: 2, speed: 3.6, damage: 9 },
   // The alarm spreads to every unit this close to one that has been shot at.
   alarm: 16,
 });
@@ -219,9 +221,68 @@ export const RESCUE_MAPS = [
       { x: 10, z: -192, kind: "health" },
     ],
   },
+  {
+    // 3.4 Eye of the Storm (4.0): Highwater Station at night, at the height of the typhoon. The
+    // Verde runs down the east side; the Tidelock's gates cross it beside the station. Nobody to
+    // pick up: hold the station while the gates are walked shut.
+    name: "HIGHWATER STATION",
+    biome: "ridge",
+    bounds: { left: -41, right: 41, near: 26, far: -84 },
+    start: { x: -8, z: -34, name: "HIGHWATER STATION" },
+    landing: { x: -16, z: 12, name: "RIDGE CAMP" },
+    river: [
+      [26, 20, 22],
+      [-90, 20, 22],
+    ],
+    road: [
+      [-30, 22],
+      [-26, -20],
+      [-30, -84],
+    ],
+    bridges: [],
+    sites: [],
+    threats: [],
+    supplies: [
+      { x: -24, z: -8, kind: "health" },
+      { x: -34, z: -36, kind: "ap" },
+      { x: -22, z: -58, kind: "ammo" },
+      { x: -2, z: -64, kind: "health" },
+      { x: -2, z: -6, kind: "he" },
+    ],
+    siege: {
+      // Seconds to walk the gates shut, and the station's integrity.
+      seconds: 150,
+      integrity: 100,
+      // The gates stall here while Marrow is in the air, and sappers keep coming every stallWave s.
+      stall: 0.9,
+      stallWave: 12,
+      station: { x: -8, z: -34 },
+      gate: { z: -34 },
+      motors: [
+        { x: 4.5, z: -29 },
+        { x: 4.5, z: -39 },
+      ],
+      // The assault, by seconds on the clock.
+      waves: [
+        { at: 5, sappers: 3, from: [-38, -72] },
+        { at: 16, drones: 2, from: [36, -80] },
+        { at: 28, sappers: 4, from: [-38, 8] },
+        { at: 40, truck: [[-30, -82], [-27, -58]] },
+        { at: 52, sappers: 4, from: [-38, -74] },
+        { at: 54, drones: 2, from: [-36, -80] },
+        { at: 66, boss: true },
+        { at: 80, sappers: 4, from: [-38, 4] },
+        { at: 94, drones: 3, from: [36, 14] },
+        { at: 106, sappers: 5, from: [-38, -72] },
+        { at: 118, truck: [[-30, 20], [-27, -4]] },
+        { at: 128, sappers: 5, from: [-38, 6] },
+      ],
+      boss: { hp: 64, orbit: 25, speed: 0.4, missile: 4.5, burst: 1.3, strafe: 9, strafeDamage: 6 },
+    },
+  },
 ];
 
-// The map for a rescue mission, by its index in the chapter (0-2).
+// The map for a rescue mission, by its index in the chapter (0-3).
 export const rescueMap = (index = 0) => RESCUE_MAPS[Math.max(0, Math.min(RESCUE_MAPS.length - 1, index))];
 
 // The river's centre and width at `z`, from the map's control points (flat beyond the ends).
@@ -271,7 +332,7 @@ export function rescueLayout(index = 0, crew = []) {
   const survivors = map.sites.map((s, i) => ({ ...s, person: crew[i] || s.name }));
   return {
     map,
-    bounds: { ...RESCUE_BOUNDS },
+    bounds: { ...(map.bounds || RESCUE_BOUNDS) },
     start: { ...map.start },
     landing: { ...map.landing },
     survivors,
@@ -305,6 +366,7 @@ const HOSTILE_TYPES = new Set([
   "missile-truck",
   "drone-pad",
   "barracks",
+  "gunship",
 ]);
 
 export const isHostileEntity = (e) =>

@@ -295,6 +295,10 @@
           <span>Pause / Retry</span><kbd>Esc / R</kbd>
         </div>
       </details>
+      <details id="files-details">
+        <summary>Inquiry files <b id="files-count">0 / 6</b></summary>
+        <div id="files-list"></div>
+      </details>
     </dialog>
 
     <dialog id="result-dialog" aria-labelledby="result-title" aria-describedby="result-story">
@@ -302,6 +306,17 @@
       <p class="eyebrow" id="result-eyebrow">MISSION COMPLETE</p>
       <h2 id="result-title">Jammer down</h2>
       <p id="result-story"></p>
+      <aside id="result-file" hidden>
+        <strong id="result-file-title"></strong>
+        <p id="result-file-text"></p>
+      </aside>
+      <div id="finale-choice" hidden>
+        <p id="finale-question"></p>
+        <div class="finale-buttons">
+          <button id="finale-broadcast" class="primary-button" data-ending="broadcast"><i data-lucide="radio-tower"></i><span></span></button
+          ><button id="finale-seal" class="secondary-button" data-ending="seal"><i data-lucide="lock"></i><span></span></button>
+        </div>
+      </div>
       <div id="result-stars" role="img" aria-label="Mission rating"></div>
       <ul id="result-criteria"></ul>
       <div class="result-stats">

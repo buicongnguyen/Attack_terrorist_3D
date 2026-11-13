@@ -27,9 +27,12 @@ const points = (map) => [
 
 test("each sortie has its own map, with a signal for every member of its team", () => {
   assert.equal(RESCUE_MAPS.length, RESCUES.length);
-  assert.equal(new Set(RESCUE_MAPS.map((m) => m.biome)).size, RESCUE_MAPS.length, "three different kinds of country");
+  const sorties = RESCUE_MAPS.filter((m) => !m.siege);
+  assert.equal(new Set(sorties.map((m) => m.biome)).size, sorties.length, "three different kinds of country");
   RESCUES.forEach((mission, i) => {
     const layout = rescueLayout(i, mission.crew);
+    // The finale (4.0) has nobody to pick up.
+    if (layout.map.siege) return assert.equal(layout.survivors.length, 0);
     assert.equal(layout.survivors.length, mission.team);
     assert.deepEqual(layout.survivors.map((s) => s.person), mission.crew);
     // Routes run north: every signal between the start and the landing base.
@@ -40,7 +43,7 @@ test("each sortie has its own map, with a signal for every member of its team", 
 test("each sortie lands at a different base from the one it started at, and the next starts there", () => {
   for (const [i, map] of RESCUE_MAPS.entries()) {
     assert.notEqual(map.landing.name, map.start.name);
-    assert.ok(Math.hypot(map.landing.x - map.start.x, map.landing.z - map.start.z) > 200);
+    if (!map.siege) assert.ok(Math.hypot(map.landing.x - map.start.x, map.landing.z - map.start.z) > 200);
     if (i > 0) assert.equal(map.start.name, RESCUE_MAPS[i - 1].landing.name);
   }
 });
@@ -155,4 +158,23 @@ test("a base rearms to the standard load without taking extra stock away", () =>
   assert.equal(stocked.rockets, 20);
   assert.equal(stocked.guided, RESCUE_GEAR.guided);
   assert.equal(stocked.flares, 9);
+});
+
+test("the finale is a siege: an ordered assault, Marrow in the middle of it, and motors on dry land", () => {
+  const map = RESCUE_MAPS.at(-1),
+    siege = map.siege;
+  assert.ok(siege, "the last map is the siege");
+  assert.equal(RESCUE_MAPS.filter((m) => m.siege).length, 1);
+  const times = siege.waves.map((w) => w.at);
+  assert.deepEqual([...times].sort((a, b) => a - b), times);
+  assert.ok(times.at(-1) < siege.seconds, "the assault ends before the gates would close");
+  const boss = siege.waves.find((w) => w.boss);
+  assert.ok(boss.at > 30 && boss.at < siege.seconds * siege.stall, "Marrow arrives mid-fight, before the gates stall");
+  // Sappers can do more damage than the station has: they have to be stopped.
+  const sappers = siege.waves.reduce((sum, w) => sum + (w.sappers || 0), 0);
+  assert.ok(sappers * THREATS.sapper.damage > siege.integrity);
+  for (const m of siege.motors) assert.ok(riverEdge(map, m.x, m.z) >= 3, "a motor stands in the river");
+  // The arena is small, and inside the valley.
+  const layout = rescueLayout(RESCUE_MAPS.length - 1, []);
+  assert.ok(layout.bounds.far > -100 && layout.bounds.left >= -41 && layout.bounds.right <= 41);
 });

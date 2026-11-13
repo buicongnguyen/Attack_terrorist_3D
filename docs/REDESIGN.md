@@ -714,7 +714,34 @@ Measured on the live 3.1 with a do-nothing player (no input for two minutes per 
 
 On Normal you now lose every canal mission if you don't fight. Easy stays forgiving by design, but leaves the convoy badly damaged. The scripted pilots still win every mission on Easy, Normal and Hard.
 
-## 20. Controls
+## 20. Tidelock 4.0: the third act
+
+The evaluation and the three-phase plan are in [PLAN-4.0.md](PLAN-4.0.md). This release is Phase 1.
+
+### What was wrong
+
+The campaign had a setting but no plot: Marrow had five taunts and no motive, Okafor had no secret, the player learned and decided nothing, and the story ended in a sentence. The last act was also the weakest play: three helicopter sorties a scripted pilot finished in 25 to 33 seconds, and no final confrontation.
+
+### What changed
+
+| Part | Change |
+| --- | --- |
+| The Wall Inquiry | Twelve years ago the old sea wall failed and the Lower Quays drowned; the inquiry blamed its designer, Dr. Elias Marrow. Six inquiry files are recovered through the campaign (after 1.6, 1.9, 2.2, 2.6, 3.2 and 3.3), shown on the result screen and kept in Mission Control. They show that the Harbour Authority swapped Marrow's concrete for a cheaper mix, that his deputy signed for it and testified against him, that the deputy was Okafor, and that the Tidelock's east hinge was poured from the same mix. |
+| The cast | Marrow is still the villain, but he is right about the wall, and his lines now argue it. Okafor confesses before the finale. Ines Duarte's father died in the Lower Quays. Briefings and radio lines in eight missions were rewritten to carry this; no earlier mission's mechanics changed. |
+| 3.4 Eye of the Storm | The story reason is the mechanic: slammed against a full surge, the east hinge shears, so the gates must be walked shut over two and a half minutes. Lantern holds Highwater Station at night in the typhoon. Sappers (gold rings) run for the two gate motors with charges; drones and missile trucks hunt Lantern; the station has an integrity that charges and strafing wear down. Marrow arrives at 66 seconds in a Hornet gunship taken at Highwater: he circles, fires missiles and bursts, strafes the control room, and launches drones at half health. The gates stall at 90 % while he flies, and sappers keep coming, until he is shot down. Only the camp pad repairs Lantern, so repairing means leaving the station. |
+| The ending | With the gates shut, the last screen asks what happens to the inquiry files: broadcast them, or seal them. Each choice has its own epilogue, followed by a line on how the city remembers Kestrel from the campaign's stars. The choice is saved and shown in Mission Control. |
+| Stars for the finale | One for closing the gates, one for a station kept above 70 %, one for taking at most two hits. |
+
+### How it plays (measured)
+
+| Player | Easy | Normal | Hard |
+| --- | --- | --- | --- |
+| Does nothing | station lost at 95 s | Lantern lost at 65 s | Lantern lost at 49 s |
+| Scripted pilot (shoots sappers first, turns on Marrow when the gates stall, repairs at the camp) | won in 183 s, station 47 %, 1 star | won in 165 s, station 46 %, 1 star | lost at 117 s |
+
+The pilot is simple; a win with two or three stars needs better play than it has.
+
+## 21. Controls
 
 | Action | Desktop | Touch |
 | --- | --- | --- |

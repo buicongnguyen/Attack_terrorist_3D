@@ -80,7 +80,7 @@ export function difficulty(name) {
 // more each mission (the harbour and the rescue start at 5 %). City 1.1-1.6, harbour 1.7-1.9,
 // canal 2.1-2.6, rescue 3.1-3.3. (`enemyReload` multiplies the enemy's reload time.)
 export const BASE_HIT = Object.freeze([
-  0, 0, 0.03, 0.05, 0.05, 0.08, 0.05, 0.05, 0.08, 0.03, 0.04, 0.05, 0.06, 0.08, 0.1, 0.07, 0.1, 0.13,
+  0, 0, 0.03, 0.05, 0.05, 0.08, 0.05, 0.05, 0.08, 0.03, 0.04, 0.05, 0.06, 0.08, 0.1, 0.07, 0.1, 0.13, 0.13,
 ]);
 
 // The chance for mission `index` in mode `name`: never more than certain.

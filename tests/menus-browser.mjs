@@ -28,7 +28,7 @@ export async function checkMenus(browser, url, check) {
       "mission control": () => {
         document.querySelectorAll("dialog[open]").forEach((d) => d.close());
         __TIDELOCK__.ui.menu();
-        document.querySelector("#menu-dialog details").open = true;
+        document.querySelectorAll("#menu-dialog details").forEach((d) => (d.open = true));
       },
       victory: () => {
         const { ui, game } = __TIDELOCK__;
@@ -37,6 +37,21 @@ export async function checkMenus(browser, url, check) {
         document.querySelectorAll("dialog[open]").forEach((d) => d.close());
         game.paused = false;
         ui.showResult({ success: true, score: 12345, stars: 3, index: 3, kills: 14, reason: null, accuracy: 72 });
+      },
+      // 4.0: the finale's question, and a result screen with a recovered file.
+      finale: () => {
+        const { ui } = __TIDELOCK__;
+        document.querySelectorAll("dialog[open]").forEach((d) => d.close());
+        ui.start(18);
+        document.querySelectorAll("dialog[open]").forEach((d) => d.close());
+        ui.showResult({ success: true, score: 9000, stars: 2, index: 18, kills: 40, reason: null, accuracy: 60 });
+      },
+      "file found": () => {
+        const { ui } = __TIDELOCK__;
+        document.querySelectorAll("dialog[open]").forEach((d) => d.close());
+        ui.start(5);
+        document.querySelectorAll("dialog[open]").forEach((d) => d.close());
+        ui.showResult({ success: true, score: 5000, stars: 3, index: 5, kills: 9, reason: null, accuracy: 70 });
       },
       defeat: () => {
         const { ui } = __TIDELOCK__;
@@ -51,7 +66,7 @@ export async function checkMenus(browser, url, check) {
       await page
         .waitForFunction(() => [...document.querySelectorAll("dialog[open] img.emblem, dialog[open] .result-emblem img")].every((img) => img.hidden || img.complete), null, { timeout: 5000 })
         .catch(() => {});
-      const expected = { briefing: "brief-dialog", "mission control": "menu-dialog", victory: "result-dialog", defeat: "result-dialog" }[name];
+      const expected = { briefing: "brief-dialog", "mission control": "menu-dialog", victory: "result-dialog", finale: "result-dialog", "file found": "result-dialog", defeat: "result-dialog" }[name];
       const problems = await page.evaluate((expected) => {
         const out = [];
         const expectDialog = (d) => (d.id === expected ? [] : [`wrong dialog open: ${d.id}`]);

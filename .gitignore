@@ -7,3 +7,6 @@ test-results/
 __pycache__/
 # Blender review renders (tools/blender --review default)
 .tools/review/
+
+# Temporary scripts and probe output for this project (never commit)
+.scratch/

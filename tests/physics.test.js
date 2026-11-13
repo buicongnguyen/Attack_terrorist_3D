@@ -69,7 +69,7 @@ test("mission records store bests instead of accumulating retry scores", () => {
   assert.deepEqual(records[0], { score: 600, stars: 3 });
   assert.deepEqual(
     [0, 1, 2].map((c) => MISSIONS.filter((m) => m.chapter === c).length),
-    [9, 6, 3],
+    [9, 6, 4],
   );
 });
 

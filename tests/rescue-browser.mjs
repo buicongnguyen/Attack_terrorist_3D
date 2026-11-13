@@ -9,7 +9,7 @@ export function rescuePilot(index) {
   ui.start(index);
   g.paused = false;
   const r = g.rescue;
-  const kinds = ["enemy", "cannon", "aa-truck", "drone", "cave", "missile-site", "missile-truck", "drone-pad", "barracks"];
+  const kinds = ["enemy", "cannon", "aa-truck", "drone", "cave", "missile-site", "missile-truck", "drone-pad", "barracks", "gunship"];
   for (let steps = 0; steps < 120 * 240 && g.status === "playing"; steps++) {
     const p = g.player.position;
     const goal = r.objective();
@@ -25,7 +25,7 @@ export function rescuePilot(index) {
         Math.hypot(e.position.x - p.x, e.position.z - p.z) < 32,
     );
     const urgency = (e) =>
-      (e.site && e.alert ? 0 : e.type === "missile-truck" && e.state === "erect" ? 1 : e.type === "drone-pad" && e.state === "spin" ? 1 : e.type === "drone" ? 2 : 3) * 100 +
+      (e.sapper || (e.site && e.alert) ? 0 : e.type === "missile-truck" && e.state === "erect" ? 1 : e.type === "drone-pad" && e.state === "spin" ? 1 : e.type === "drone" ? 2 : 3) * 100 +
       Math.hypot(e.position.x - p.x, e.position.z - p.z);
     hostiles.sort((a, b) => urgency(a) - urgency(b));
     const missile = g.projectiles
@@ -44,6 +44,48 @@ export function rescuePilot(index) {
   g.input.fire = false;
   g.paused = true;
   return { status: g.status, rescued: r.rescued, total: r.soldiers.length, time: g.time, hits: g.hitsTaken };
+}
+
+export function siegePilot(index) {
+  const { game: g, ui } = window.__TIDELOCK__;
+  ui.start(index);
+  g.paused = false;
+  const r = g.rescue,
+    station = r.siege.cfg.station,
+    camp = r.layout.landing;
+  let repairing = false;
+  for (let steps = 0; steps < 120 * 400 && g.status === "playing"; steps++) {
+    const p = g.player.position;
+    const shields = g.shields.reduce((a, b) => a + b, 0);
+    if (shields <= 4) repairing = true;
+    if (shields >= 8) repairing = false;
+    const hostiles = g.entities.filter((e) => !e.dead && !e.friendly && ["enemy", "drone", "missile-truck", "gunship"].includes(e.type));
+    // Sappers closest to their motors come first; then whatever is nearest.
+    const sappers = hostiles.filter((e) => e.sapper).sort((a, b) => Math.hypot(a.position.x - a.sapper.x, a.position.z - a.sapper.z) - Math.hypot(b.position.x - b.sapper.x, b.position.z - b.sapper.z));
+    const others = hostiles.filter((e) => !e.sapper && Math.hypot(e.position.x - p.x, e.position.z - p.z) < 34).sort((a, b) => a.position.distanceToSquared(p) - b.position.distanceToSquared(p));
+    const missile = g.projectiles.filter((s) => s.hostile && s.missile && !s.dead).sort((a, b) => a.position.distanceToSquared(p) - b.position.distanceToSquared(p))[0];
+    if (missile && missile.position.distanceTo(p) < 18) r.flare();
+    // A sapper about to reach a motor comes first; while the gates are stalled, Marrow does.
+    const boss = hostiles.find((e) => e.type === "gunship");
+    const urgent = sappers[0] && Math.hypot(sappers[0].position.x - sappers[0].sapper.x, sappers[0].position.z - sappers[0].sapper.z) < 16 ? sappers[0] : null;
+    const target = missile && missile.position.distanceTo(p) < 16 ? missile : urgent || (r.siege.gate >= r.siege.cfg.stall && boss) || sappers[0] || boss || others[0];
+    // Stand between the station and the nearest sapper, or go to the camp pad to repair.
+    const goal = repairing ? camp : sappers[0] ? { x: (station.x + sappers[0].position.x) / 2, z: (station.z + sappers[0].position.z) / 2 } : { x: station.x + 6, z: station.z };
+    const dx = goal.x - p.x,
+      dz = goal.z - p.z,
+      d = Math.hypot(dx, dz);
+    g.input.x = d > 1 ? (dx / d) * Math.min(1, d / 6) : 0;
+    g.input.z = d > 1 ? (dz / d) * Math.min(1, d / 6) : 0;
+    g.weapon = "gun";
+    g.input.fire = Boolean(target);
+    g.input.pointerAim = Boolean(target);
+    if (target) g.input.aim.set(target.position.x, 1.2, target.position.z);
+    g.update(1 / 120);
+  }
+  g.input.fire = false;
+  g.paused = true;
+  const s = r.siege;
+  return { status: g.status, reason: g.reason, time: Math.round(g.time), hits: g.hitsTaken, gate: Math.round(s.gate * 100), station: Math.round(s.integrity), boss: s.bossDown, stars: r.stars(g.status === "success"), kills: g.kills };
 }
 
 export async function checkRescue(page, browser, url, check, errors) {
@@ -361,6 +403,113 @@ export async function checkRescue(page, browser, url, check, errors) {
     console.log(`  rescue 3.${index - 14}: ${sortie.status} ${sortie.rescued}/${sortie.total} in ${sortie.time.toFixed(0)}s, ${sortie.hits} hits`);
     check(`full rescue sortie ${index - 14}: ${sortie.rescued}/${sortie.total}`, sortie.status === "success" && sortie.rescued === sortie.total);
   }
+
+  // 4.0: the finale, Eye of the Storm. The rules first, then a full run, then the ending.
+  const siege = await page.evaluate(() => {
+    const { game: g, ui } = __TIDELOCK__;
+    const out = {};
+    const run = (seconds) => {
+      for (let i = 0; i < 120 * seconds; i++) g.update(1 / 120);
+    };
+    const enter = () => {
+      document.querySelectorAll("dialog[open]").forEach((d) => d.close());
+      ui.start(18);
+      document.querySelectorAll("dialog[open]").forEach((d) => d.close());
+      g.paused = false;
+      g.hurtPlayer = () => {};
+      return g.op.siege;
+    };
+    g.difficulty = "normal";
+    let s = enter();
+    const motor = s.cfg.motors[0];
+    out.startsAsASiege = Boolean(s) && g.op.soldiers.length === 0 && g.op.objective().name === "HIGHWATER STATION" && g.op.snapshot().siege.integrity === 1;
+    // A sapper who reaches a motor costs the station; one shot on the way costs nothing.
+    g.op.spawnWave({ sappers: 1, from: [motor.x - 6, motor.z] });
+    run(3);
+    const afterCharge = s.integrity;
+    out.sapperAtTheMotorHurtsTheStation = afterCharge < s.max;
+    g.op.spawnWave({ sappers: 1, from: [motor.x - 30, motor.z] });
+    const sapper = g.entities.find((e) => e.sapper && !e.dead);
+    g.kill(sapper);
+    run(3);
+    out.sapperShotOnTheWayDoesNot = s.integrity === afterCharge;
+    // The gates close with time, stall at 90 % while Marrow flies, and finish once he is down.
+    const g0 = s.gate;
+    run(2);
+    out.gatesCloseWithTime = s.gate > g0;
+    s.gate = s.cfg.stall;
+    g.op.spawnBoss();
+    run(3);
+    out.gatesStallWhileMarrowFlies = s.gate === s.cfg.stall && g.op.state.includes("STALLED") && g.op.snapshot().siege.boss === 1;
+    const before = s.integrity;
+    s.boss.strafe = 0;
+    run(0.1);
+    out.marrowStrafesTheStation = s.integrity < before;
+    g.kill(s.boss);
+    run(1);
+    out.gatesMoveOnceHeIsDown = s.bossDown && s.gate > s.cfg.stall;
+    s.gate = 0.9995;
+    run(1);
+    out.closedGatesWinTheCampaign = g.status === "success";
+    // A destroyed station loses.
+    s = enter();
+    s.integrity = 1;
+    g.op.hurtStation(5, "TEST");
+    run(0.1);
+    out.aDestroyedStationLoses = g.status === "failed" && g.reason === "station";
+    // Only the camp pad repairs: leaving the station is the price.
+    s = enter();
+    g.shields = [1, 1, 1];
+    run(0.5);
+    const atStation = g.shields.join("");
+    const camp = g.op.layout.landing;
+    g.player.position.x = camp.x;
+    g.player.position.z = camp.z;
+    run(0.2);
+    out.onlyTheCampPadRepairs = atStation === "111" && g.shields.join("") === "333";
+    delete g.hurtPlayer;
+    return out;
+  });
+  for (const [name, value] of Object.entries(siege)) check(`finale ${name}`, value === true);
+
+  const idle = await page.evaluate(() => {
+    const { game: g, ui } = __TIDELOCK__;
+    document.querySelectorAll("dialog[open]").forEach((d) => d.close());
+    ui.start(18);
+    document.querySelectorAll("dialog[open]").forEach((d) => d.close());
+    g.paused = false;
+    for (let i = 0; i < 120 * 200 && g.status === "playing"; i++) g.update(1 / 120);
+    return g.status;
+  });
+  check("finale lost by a player who does nothing", idle === "failed");
+  const last = await page.evaluate(`(${siegePilot.toString()})(18)`);
+  console.log(`  rescue 3.4: ${last.status} ${last.reason || ""} in ${last.time}s, gates ${last.gate}%, station ${last.station}, Marrow ${last.boss ? "down" : "up"}, ${last.hits} hits, ${last.stars} stars`);
+  check("finale won by the scripted pilot, with Marrow shot down", last.status === "success" && last.boss && last.gate === 100);
+
+  // The ending: the question first, then the epilogue of the choice, saved for Mission Control.
+  const ending = await page.evaluate(() => {
+    const { game: g, ui } = __TIDELOCK__;
+    const $ = (id) => document.getElementById(id);
+    const out = {};
+    ui.showResult({ ...g.result(), success: true, index: 18, stars: 2 });
+    const actions = document.querySelector("#result-dialog .result-actions");
+    out.finaleAsksItsQuestion = !$("finale-choice").hidden && actions.hidden && $("finale-question").textContent.includes("inquiry files");
+    $("finale-seal").click();
+    out.choiceShowsItsEpilogue = $("finale-choice").hidden && !actions.hidden && $("result-title").textContent === "A quiet repair" && /Kestrel's record: \d+ of 57 stars/.test($("result-story").textContent);
+    out.choiceIsSaved = JSON.parse(localStorage.getItem("tidelock-v4")).ending === "seal";
+    $("result-dialog").close();
+    // A mission with a file shows it on its result screen; Mission Control keeps what was found.
+    ui.start(5);
+    document.querySelectorAll("dialog[open]").forEach((d) => d.close());
+    ui.showResult({ success: true, score: 100, stars: 3, index: 5, kills: 3, reason: null, accuracy: 50 });
+    out.resultShowsTheRecoveredFile = !$("result-file").hidden && $("result-file-title").textContent.includes("Inquiry file 1") && $("finale-choice").hidden;
+    $("result-dialog").close();
+    ui.menu();
+    out.missionControlKeepsTheFiles = /^[1-6] \/ 6$/.test($("files-count").textContent) && $("files-list").querySelectorAll("article").length >= 1 && $("files-list").textContent.includes("Your ending: A quiet repair");
+    ui.resume();
+    return out;
+  });
+  for (const [name, value] of Object.entries(ending)) check(`ending ${name}`, value === true);
 
   await page.evaluate(() => {
     __TIDELOCK__.ui.start(15);

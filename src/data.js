@@ -104,6 +104,8 @@ export const MISSIONS = [
     team: 4,
     crew: ["Pvt. Teo Brandt", "Spc. Juno Park", "Pvt. Pell Ashby", "Sgt. Mara Reyes"],
   },
+  // 4.0: the finale. Nobody to pick up: hold Highwater Station while the Tidelock closes.
+  { chapter: 2, name: "Eye of the Storm", team: 0, crew: [] },
 ];
 
 export const STEP = 1 / 120;
