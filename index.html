@@ -77,7 +77,7 @@
           <i data-lucide="scan"></i><strong id="objective-count">03</strong><span id="objective-unit">TARGETS LEFT</span>
         </div>
         <div class="mission-progress"><span id="mission-progress"></span></div>
-        <div class="mission-meta"><span id="mission-index">MISSION 01 / 06</span><span id="difficulty-chip" class="mode-chip">EASY</span><span id="mission-percent">0%</span></div>
+        <div class="mission-meta"><span id="mission-index">MISSION 01 / 06</span><span id="surge-chip" class="mode-chip" hidden>SURGE 0:00</span><span id="difficulty-chip" class="mode-chip">EASY</span><span id="mission-percent">0%</span></div>
       </aside>
 
       <section id="comms" aria-live="polite" aria-label="Radio"></section>
@@ -294,6 +294,11 @@
           <span>Pick up / land (helicopter)</span><kbd>Fly over</kbd><span>Flares</span><kbd>F</kbd>
           <span>Pause / Retry</span><kbd>Esc / R</kbd>
         </div>
+      </details>
+      <details id="req-details">
+        <summary>Requisition <b id="req-points">0 points</b></summary>
+        <p id="req-note">Stars you earn become points. Spend them on upgrades; they apply from the next mission you start.</p>
+        <div id="req-list"></div>
       </details>
       <details id="files-details">
         <summary>Inquiry files <b id="files-count">0 / 6</b></summary>

@@ -10,6 +10,8 @@ Solace Harbor lies three metres below the tide. Only the Tidelock, a storm barri
 
 ## Campaign
 
+The storm does not wait: each city and harbour mission has a surge window, and when it closes the mission is lost. The stars you earn become requisition points to spend on upgrades for the flight, the gunboat and the helicopter between missions.
+
 Under the missions runs the Wall Inquiry: six files, recovered as you go, about who really let the old sea wall fail. The finale asks you what to do with them, and the ending follows your choice.
 
 | Chapter | You command | The job |

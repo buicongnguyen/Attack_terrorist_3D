@@ -19,6 +19,7 @@ import { PICKUPS } from "./pickups.js";
 import { COLORS, chapterStart } from "./data.js";
 import { clamp, segmentSphere } from "./physics.js";
 import { dampAngle } from "./harbour.js";
+import { bonuses } from "./requisition.js";
 import { Ripples, healthMaterial } from "./ripples.js";
 
 // The laser beam: a white-hot core inside two additive glows, stretched from muzzle to hit.
@@ -66,6 +67,7 @@ export class RiverOperation {
     this.holding = false;
     this.said = new Set();
     this.lines = [];
+    this.perks = bonuses(this.game.upgrades);
     this.barges = RIVER.bargeZ.map((z, i) => this.createBarge(z, i));
     this.orders = [];
     this.boss = null;
@@ -74,7 +76,7 @@ export class RiverOperation {
     this.combo = { count: 0, timer: 0 };
     // Marlin's arsenal and the help that can join from crates.
     // The difficulty sets the stock, the air strikes, the barges' armour and the enemy's rate of fire.
-    this.rockets = Math.round(WEAPONS.rocket.stock * g.mode.rockets);
+    this.rockets = Math.round(WEAPONS.rocket.stock * g.mode.rockets * this.perks.rockets);
     this.strikes = g.mode.strikes;
     this.fireRate = this.data.fireRate * g.mode.enemyReload;
     this.laser = { heat: 0, locked: false, beam: false };
@@ -143,8 +145,8 @@ export class RiverOperation {
       index: i,
       mesh,
       position: mesh.position,
-      hp: RIVER.bargeHp * this.game.mode.bargeHp,
-      max: RIVER.bargeHp * this.game.mode.bargeHp,
+      hp: RIVER.bargeHp * this.game.mode.bargeHp * this.perks.bargeHp,
+      max: RIVER.bargeHp * this.game.mode.bargeHp * this.perks.bargeHp,
       alive: true,
       smoke: 0,
       sink: 0,

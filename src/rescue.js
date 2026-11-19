@@ -19,6 +19,7 @@ import {
 import { LAND, terrainHeight } from "./rescue-world.js";
 import { clamp } from "./physics.js";
 import { MISSION_STORY } from "./story.js";
+import { bonuses } from "./requisition.js";
 import { chapterStart } from "./data.js";
 import { ROUNDS } from "./armoury.js";
 import { Ripples } from "./ripples.js";
@@ -95,7 +96,10 @@ export class RescueOperation {
     };
     this.story = MISSION_STORY[game.index];
     this.said = new Set();
-    this.gear = { ...RESCUE_GEAR };
+    // 5.0: requisition raises the load Lantern starts with and is topped up to at a base.
+    const perks = bonuses(game.upgrades);
+    this.load = { rockets: RESCUE_GEAR.rockets + perks.heliRockets, guided: RESCUE_GEAR.guided + perks.heliGuided, flares: RESCUE_GEAR.flares + perks.flares };
+    this.gear = { ...this.load };
     this.rescued = 0;
     this.selected = 0;
     this.countermeasures = 0;
@@ -549,10 +553,10 @@ export class RescueOperation {
     g.view.disposeObject(pickup.mesh);
     if (pickup.kind === "health") g.shields = [3, 3, 3];
     const before = { ...this.gear };
-    if (pickup.kind === "ammo") this.gear.rockets = Math.min(24, this.gear.rockets + 10);
+    if (pickup.kind === "ammo") this.gear.rockets = Math.min(this.load.rockets + 10, this.gear.rockets + 10);
     if (pickup.kind === "support") {
-      this.gear.guided = Math.min(12, this.gear.guided + 4);
-      this.gear.flares = Math.min(6, this.gear.flares + 2);
+      this.gear.guided = Math.min(this.load.guided + 6, this.gear.guided + 4);
+      this.gear.flares = Math.min(this.load.flares + 2, this.gear.flares + 2);
     }
     const added = (key) => this.gear[key] - before[key];
     const rounds = ROUNDS[pickup.kind] ? pickup.kind : null;
@@ -975,10 +979,10 @@ export class RescueOperation {
         this.landing = { t: 0, from: heli.clone() };
         return;
       }
-      const needs = g.shields.some((s) => s < 3) || Object.keys(RESCUE_GEAR).some((k) => this.gear[k] < RESCUE_GEAR[k]);
+      const needs = g.shields.some((s) => s < 3) || Object.keys(this.load).some((k) => this.gear[k] < this.load[k]);
       if (needs && this.baseCooldown <= 0) {
         g.shields = [3, 3, 3];
-        this.gear = rearm(this.gear);
+        this.gear = rearm(this.gear, this.load);
         this.baseCooldown = REPAIR_COOLDOWN;
         g.notify("toast", "BASE / REPAIRED AND REARMED");
       }

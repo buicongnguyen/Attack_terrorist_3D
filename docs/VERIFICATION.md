@@ -1,5 +1,15 @@
 # Release Verification
 
+## Tidelock 5.0 (pressure and progression)
+
+The surge clock and requisition ([REDESIGN.md §21](REDESIGN.md#21-tidelock-50-pressure-and-progression), plan in [PLAN-5.0.md](PLAN-5.0.md)) were verified on 2026-11-19 against the production build (`vite preview`).
+
+- **105 Node tests.** New: six upgrades, two per vehicle, costing 45 in all; stars are the points (best result per mission, capped at three); buying spends points in order and cannot overspend or pass the top level; a hand-edited save is cleaned; levels turn into the numbers the game applies and a fresh save changes nothing; every strike mission has a window that Easy stretches and Hard and Crazy shrink.
+- **Browser suite**, zero runtime or resource errors, with 20 new checks: the window follows the rule and the HUD clock shows it; modes change it; the warning comes at 60 s, the clock turns urgent, and a closed window loses the mission; the harbour has the longer window and the canal no clock; the points equal the stars; buttons follow the points; purchases spend points and an unaffordable upgrade stays locked; each upgrade applies at the next mission start (an extra bomb and wider blasts, rockets and barge strength, flares); the upgrades are saved and a hand-edited save is cleaned on load.
+- **A player who does nothing** loses all nine strike missions on Normal and Hard (see REDESIGN §21).
+- **Earlier missions unchanged:** the 18 scripted runs give the same results as 4.0.
+- **Found by the new checks:** loading a canal mission crashed while reading the upgrades, because the barges were built before the upgrades were read. Fixed before release.
+
 ## Tidelock 4.0 (the third act)
 
 The Wall Inquiry, the finale mission and the ending choice ([REDESIGN.md §20](REDESIGN.md#20-tidelock-40-the-third-act), plan in [PLAN-4.0.md](PLAN-4.0.md)) were verified on 2026-11-13 against the production build (`vite preview`).

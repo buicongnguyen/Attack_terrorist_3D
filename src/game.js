@@ -77,6 +77,8 @@ export class Game {
     this.paused = false;
     this.reducedMotion = false;
     this.difficulty = DEFAULT_DIFFICULTY;
+    // 5.0: requisition levels from the save, applied at each mission's start (see requisition.js).
+    this.upgrades = {};
   }
 
   start(index) {

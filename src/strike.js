@@ -46,6 +46,7 @@ import {
   cityBounds,
   isPattern,
   groundAt,
+  surgeWindow,
 } from "./strike-data.js";
 import { patternPoints, patternDiagram, predictHits, ROTATION_STEP, SHAPES } from "./harbour-data.js";
 import { Fleet, dampAngle } from "./harbour.js";
@@ -53,6 +54,7 @@ import { CityView } from "./city.js";
 import { MISSION_STORY, STRIKE_RADIO } from "./story.js";
 import { clamp } from "./physics.js";
 import { scalePayload } from "./difficulty.js";
+import { bonuses } from "./requisition.js";
 import { Ripples, healthMaterial } from "./ripples.js";
 
 const V = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
@@ -154,7 +156,11 @@ export class StrikeOperation {
     this.bounds = cityBounds(this.layout);
     // Early missions hit harder, and every bomb homes a little onto a target near its impact.
     // Blast power and homing scale with the difficulty (pattern bomblets never grow: blastDef).
-    this.power = (this.layout.power ?? 1) * g.mode.power;
+    this.perks = bonuses(g.upgrades);
+    this.power = (this.layout.power ?? 1) * g.mode.power * this.perks.power;
+    // 5.0: the surge window. The storm does not wait: when it closes, the water is in the streets.
+    this.surge = Math.round(surgeWindow(this.layout, g.mode));
+    this.surgeWarned = 0;
     this.assistRadius = (this.layout.assist ?? 0) * g.mode.assist;
     this.aim = null;
     // Floor tiles by building, storey and grid cell: support checks are O(1) per person.
@@ -384,7 +390,7 @@ export class StrikeOperation {
     view.level.add(cells);
     return {
       ...data,
-      payload: scalePayload(data.payload, this.game.difficulty),
+      payload: Object.fromEntries(Object.entries(scalePayload(data.payload, this.game.difficulty)).map(([kind, n]) => [kind, n + this.perks.bombs])),
       index: i,
       slot: { ...slot },
       hp: 3,
@@ -1906,6 +1912,20 @@ export class StrikeOperation {
   checkOutcome(dt) {
     const g = this.game;
     if (g.status !== "playing") return;
+    const surgeLeft = this.surge - g.time;
+    if (surgeLeft <= 60 && this.surgeWarned < 1) {
+      this.surgeWarned = 1;
+      g.notify("toast", "SURGE WINDOW / 60 SECONDS");
+      this.say("surge");
+    } else if (surgeLeft <= 20 && this.surgeWarned < 2) {
+      this.surgeWarned = 2;
+      g.notify("toast", "SURGE WINDOW / 20 SECONDS");
+    }
+    if (surgeLeft <= 0) {
+      g.blast(V(0, 0.3, 0), 6, 0x7fd8ff, { quiet: true });
+      g.finish(false, "surge");
+      return;
+    }
     const left = this.remaining();
     const total = left.enemies + left.aa + left.masts + left.trucks + left.ships;
     if (total === 0) {
@@ -1967,6 +1987,7 @@ export class StrikeOperation {
     const total = this.totalTargets();
     return {
       mode: "strike",
+      surge: Math.max(0, this.surge - this.game.time),
       aircraft: this.aircraft.map((a) => ({
         callsign: a.callsign,
         crew: a.crew,

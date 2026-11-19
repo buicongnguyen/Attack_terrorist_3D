@@ -741,7 +741,36 @@ The campaign had a setting but no plot: Marrow had five taunts and no motive, Ok
 
 The pilot is simple; a win with two or three stars needs better play than it has.
 
-## 21. Controls
+## 21. Tidelock 5.0: pressure and progression
+
+The evaluation, the new ideas and the refined scope are in [PLAN-5.0.md](PLAN-5.0.md).
+
+### What was wrong
+
+Eleven of the nineteen missions could not be lost by doing nothing, so "the storm is coming" was only a line of dialogue. And stars were only scores: nothing a player earned carried into the next mission, so there was no sense of growing and no purpose in replaying a mission for a missing star.
+
+### What changed
+
+| Part | Change |
+| --- | --- |
+| Surge clock | Every strike mission (the nine city and harbour missions) has a surge window: 240 s plus 30 s per par bomb in the city, 360 s plus 30 s per par bomb in the harbour, times a mode factor (Easy 1.5, Normal 1, Hard 0.8, Crazy 0.65). A countdown chip sits in the mission panel and turns red in the last minute; a toast and a radio call warn at 60 s, and another toast at 20 s. When it closes the mission is lost. The scripted pilots need a third of the window or less. |
+| Requisition | Stars become points: the best result of each mission counts, up to 57. Six upgrades, two per vehicle, two levels each, 45 points for the lot, so a build has to be chosen. Kestrel: spare ordnance (+1 bomb of every type) and wide-bore charges (+8 % blast reach). Marlin: barge plating (+15 % barge strength) and rocket pods (+30 % rockets). Lantern: a flare rack (+2 flares) and ammunition racks (+4 rockets, +2 guided missiles). Buying happens in Mission Control and applies from the next mission you start. The saved levels are cleaned on load, so a hand-edited save cannot exceed the limits. |
+
+A fresh save has no upgrades, so every earlier mission plays exactly as in 4.0.
+
+### Measured
+
+A player who does nothing, by mode (seconds survived before the surge):
+
+| Mode | City 1.1 | City 1.6 | Harbour 1.9 |
+| --- | ---: | ---: | ---: |
+| Easy | 405 | 900 or more | 945 |
+| Normal | 270 | 600 | 630 |
+| Hard | 216 | 480 | 504 |
+
+On Normal and Hard every strike mission is lost by waiting (on Hard 1.9 falls to flak first, at 215 s).
+
+## 22. Controls
 
 | Action | Desktop | Touch |
 | --- | --- | --- |

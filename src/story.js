@@ -801,6 +801,7 @@ export const STRIKE_RADIO = {
   ferry: line("iona", "A civilian boat is in your pattern. Hold your release."),
   ferryHit: line("iona", "The ferry is hit! Abort the strike, Kestrel."),
   freed: line("ines", "The ferry is free!"),
+  surge: line("iona", "Surge window closing, Kestrel. One minute, then the water is in the streets."),
 };
 
 // Canal lines that can come in any Chapter 2 mission: the help that joins from crates, and

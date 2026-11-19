@@ -1319,3 +1319,10 @@ export function strikeStars({ success, used, par, damaged }) {
   if (!success) return 0;
   return 1 + (used <= par ? 1 : 0) + (damaged ? 0 : 1);
 }
+
+// 5.0: the surge window of a strike mission, in seconds: the storm closes the streets.
+// City missions get 240 s plus 30 per par bomb, harbour missions 360 s plus 30 per par bomb;
+// the mode stretches it (Easy) or shrinks it (Hard, Crazy).
+export function surgeWindow(layout, mode) {
+  return ((layout.harbour ? 360 : 240) + 30 * layout.par) * (mode?.surge ?? 1);
+}

@@ -17,8 +17,8 @@ export const REPAIR_COOLDOWN = 15;
 export const RESCUE_GEAR = Object.freeze({ rockets: 14, guided: 6, flares: 4 });
 
 // The base tops every rack up to the standard load and never takes away extra stock.
-export const rearm = (gear) =>
-  Object.fromEntries(Object.keys(RESCUE_GEAR).map((key) => [key, Math.max(gear?.[key] ?? 0, RESCUE_GEAR[key])]));
+export const rearm = (gear, load = RESCUE_GEAR) =>
+  Object.fromEntries(Object.keys(load).map((key) => [key, Math.max(gear?.[key] ?? 0, load[key])]));
 
 // The enemy on the ground (2.7). Launch sites, missile trucks and drone stations all need time
 // to fire: kill a site's crew before they reach it, a truck before its rack is up, a station

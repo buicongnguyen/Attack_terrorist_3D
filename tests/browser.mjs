@@ -5,6 +5,7 @@ import { checkRescue } from "./rescue-browser.mjs";
 import { checkMenus } from "./menus-browser.mjs";
 import { checkAmbient } from "./ambient-browser.mjs";
 import { checkFx } from "./fx-browser.mjs";
+import { checkProgress } from "./progress-browser.mjs";
 import { checkStrike } from "./strike-browser.mjs";
 import { checkRiver } from "./river-browser.mjs";
 import { checkHarbour } from "./harbour-browser.mjs";
@@ -341,6 +342,7 @@ try {
   await checkMenus(browser, url, check);
   await checkAmbient(browser, url, check);
   await checkFx(browser, url, check);
+  await checkProgress(browser, url, check);
   const flow = await page.evaluate(() => {
     const { game: g, ui } = __TIDELOCK__,
       out = {};

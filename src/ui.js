@@ -56,6 +56,7 @@ import { DIFFICULTIES, DIFFICULTY, DEFAULT_DIFFICULTY, difficulty, percent } fro
 import { RescueHUD } from "./rescue-hud.js";
 import { isHostileEntity } from "./rescue-data.js";
 import { saveGovernor } from "./quality.js";
+import { UPGRADES, available, buy, level, nextCost, sanitize } from "./requisition.js";
 
 const iconSet = {
   Crosshair,
@@ -148,6 +149,7 @@ export function readSave() {
       seenPrologue: Boolean(saved.seenPrologue),
       difficulty: DIFFICULTIES.includes(saved.difficulty) ? saved.difficulty : DEFAULT_DIFFICULTY,
       ending: saved.ending in FINALE.choices ? saved.ending : null,
+      upgrades: sanitize(saved.upgrades),
     };
   } catch {
     return { records: {}, muted: false, reducedMotion: false, seenPrologue: false, difficulty: DEFAULT_DIFFICULTY };
@@ -257,6 +259,7 @@ export class UI {
     this.dialog = $("menu-dialog");
     this.brief = $("brief-dialog");
     this.game.difficulty = save.difficulty || DEFAULT_DIFFICULTY;
+    this.game.upgrades = save.upgrades || {};
     this.buildDifficulty();
     this.game.reducedMotion = save.reducedMotion || matchMedia("(prefers-reduced-motion: reduce)").matches;
     $("reduced-motion").checked = this.game.reducedMotion;
@@ -1049,6 +1052,7 @@ window.addEventListener('mobile-game-interruption', () => {
     const story = MISSION_STORY[this.game.index];
     $("mission-briefing").textContent = `${this.game.mission.name}: ${story.goals.join(". ")}.`;
     this.fillFiles();
+    this.fillRequisition();
     this.dialog.showModal();
   }
 
@@ -1062,6 +1066,30 @@ window.addEventListener('mobile-game-interruption', () => {
         ? found.map((file) => `<article><strong>${escape(file.title)}</strong><p>${escape(file.text)}</p></article>`).join("")
         : "<p>No files yet. Echo team is still inside the Glass District.</p>") +
       (ending ? `<p class="files-ending">Your ending: ${escape(ending.title)}.</p>` : "");
+  }
+
+  // Requisition (5.0): the points the stars bought, and what they can buy. A purchase applies from
+  // the next mission start, like a change of difficulty.
+  fillRequisition() {
+    const points = available(this.save.records, this.save.upgrades);
+    $("req-points").textContent = `${points} point${points === 1 ? "" : "s"}`;
+    const rows = UPGRADES.map((u) => {
+      const have = level(this.save.upgrades, u.id),
+        cost = nextCost(u.id, this.save.upgrades),
+        full = cost === null;
+      const pips = u.costs.map((_, i) => `<i class="${i < have ? "on" : ""}"></i>`).join("");
+      return `<div class="req-row"><div><strong>${escape(u.name)}</strong><small>${["Kestrel", "Marlin", "Lantern"][u.chapter]}: ${escape(u.blurb)}</small><span class="req-pips">${pips}</span></div><button data-upgrade="${u.id}" class="secondary-button" ${full || cost > points ? "disabled" : ""}>${full ? "Maxed" : `Buy ${cost}`}</button></div>`;
+    });
+    $("req-list").innerHTML = rows.join("");
+    for (const button of $("req-list").querySelectorAll("[data-upgrade]"))
+      button.onclick = () => {
+        const next = buy(button.dataset.upgrade, this.save.records, this.save.upgrades);
+        if (!next) return;
+        this.save.upgrades = next;
+        this.game.upgrades = next;
+        this.persist();
+        this.fillRequisition();
+      };
   }
 
   // The finale's choice: what happens to the files. The epilogue follows, with the campaign's record.
@@ -1295,6 +1323,7 @@ window.addEventListener('mobile-game-interruption', () => {
       {
         shelter: "A bomb struck the civilian shelter and the strike was aborted. Keep every pipper off the blue roof.",
         ferry: `A bomb struck the ${this.game.op?.abortedBy || "Island Belle"} and the strike was aborted. When the pattern turns blue, a civilian boat is inside it: hold your release.`,
+        surge: "The surge window closed and the water reached the streets. Strike the key targets first, and use Reverse and the map marks to waste no passes.",
         flight: "Kestrel Flight was shot down. Silence the flak first and change lane when a red lock line appears.",
         barges: "Both barges sank before reaching the lock. Shield them with Marlin and steer them clear of mines.",
         station: "The control room was destroyed and the gates stopped. Shoot the sappers with the gold rings before they reach the motors, and bring Marrow down quickly once he arrives.",
@@ -1360,6 +1389,13 @@ window.addEventListener('mobile-game-interruption', () => {
       this.updateRounds(state.round);
     }
     if (chapter === 1) this.updateRiver(state, op);
+    const surge = $("surge-chip");
+    surge.hidden = chapter !== 0 || op.surge === undefined;
+    if (!surge.hidden) {
+      const left = Math.ceil(op.surge);
+      surge.textContent = `SURGE ${Math.floor(left / 60)}:${String(left % 60).padStart(2, "0")}`;
+      surge.classList.toggle("urgent", left <= 60);
+    }
     if (chapter === 2 && op.siege) {
       // The finale: the gates are the objective; the station and Marrow carry world labels.
       $("objective-count").textContent = `${Math.floor(op.siege.gate * 100)}%`;
