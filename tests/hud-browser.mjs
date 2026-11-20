@@ -136,7 +136,10 @@ export async function checkHud(browser, url, check) {
       g.notify("toast", "SALVO x2");
       ui.updateHUD(true);
       await wait(450);
-      const rects = ["combo", "toast", "coach"].map((id) => [id, $(id)]).filter(([, el]) => getComputedStyle(el).display !== "none" && Number(getComputedStyle(el).opacity) > 0);
+      // The banner and toast count as shown by their class: under SwiftShader their fade may not have
+      // advanced by now. The coach line has no fade.
+      const shown = (id, el) => (id === "coach" ? Number(getComputedStyle(el).opacity) > 0 : el.classList.contains("visible"));
+      const rects = ["combo", "toast", "coach"].map((id) => [id, $(id)]).filter(([id, el]) => getComputedStyle(el).display !== "none" && shown(id, el));
       const boxes = rects.map(([id, el]) => [id, el.getBoundingClientRect()]);
       const clashes = [];
       for (const [i, [a, r]] of boxes.entries())
