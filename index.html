@@ -43,8 +43,10 @@
     </div>
     <div id="app" hidden>
       <!-- World tags first, so the top bar and every HUD panel cover them. -->
-      <div id="world-labels" aria-hidden="true"></div>
+      <div id="world-labels" aria-hidden="true"><div id="pops"></div></div>
       <div id="edge-markers" aria-hidden="true"></div>
+      <!-- Where a hit came from, and a slow red pulse while the shields are low (5.1). -->
+      <div id="hurt-edge" aria-hidden="true"></div>
       <header class="topbar">
         <div class="brand">
           <div class="brand-mark"><i data-lucide="crosshair"></i></div>
@@ -319,6 +321,13 @@
       <details id="files-details">
         <summary>Inquiry files <b id="files-count">0 / 6</b></summary>
         <div id="files-list"></div>
+      </details>
+      <!-- QA only (?qa&listen=1, 5.1): the Sound test, every cue of the CUES table with a Play button. -->
+      <details id="listen-details" hidden>
+        <summary>Sound test <b id="listen-count"></b></summary>
+        <p id="listen-note">Every cue as it sounds in a mission. The cues new in 5.1 come first.</p>
+        <button id="listen-all" class="secondary-button"><i data-lucide="volume-2"></i>Play all</button>
+        <div id="listen-list"></div>
       </details>
     </dialog>
 

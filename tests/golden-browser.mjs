@@ -70,7 +70,7 @@ export function goldenRuns() {
 // Runs in the page: one scripted run from a clean start, then its row (schema 1, FIELDS order).
 // spec.attempt picks the attempt number (the seed); without it the run is attempt 1.
 export function playRow(play, spec) {
-  const { game: g, ui, view } = window.__TIDELOCK__;
+  const { game: g, ui, view, loop } = window.__TIDELOCK__;
   for (const index of spec.prelude || []) {
     ui.start(index);
     g.paused = false;
@@ -92,15 +92,17 @@ export function playRow(play, spec) {
     Object.getPrototypeOf(this).update.call(this, dt);
     ui.director.tick(dt);
     // Interleave: the frame loop's HUD and render between every second step (past the HUD's
-    // 80 ms throttle, so it redraws each time): code on the render side must never feed back into
-    // the simulation. Nothing reads the frames back, so the WebGL draw calls do nothing here. All
+    // 80 ms throttle, so it redraws each time), at a real time of the steps run so far, after the
+    // loop has taken the steps' hit requests (5.1 J1: with &feel=1 they become hit-stops): code on
+    // the render side must never feed back into the simulation. Nothing reads the frames back, so the WebGL draw calls do nothing here. All
     // the game's render code and three.js up to each draw (culling, sorting, uniforms, uploads)
     // still run; only the draws are skipped, which took 85% of the 1.8 check's time under
     // SwiftShader.
     if (!gl || ++steps % 2) return;
     ui.lastHUD = -Infinity;
-    ui.updateHUD();
-    view.render(this.time, this.reducedMotion ? 0 : this.shake);
+    const now = (steps * 1000) / 120;
+    loop.settle(now);
+    loop.draw(now);
   };
   if (spec.fixture === "cosmetic-draw") {
     // Test only: the first wake ring, a cosmetic effect, also draws once from the mission's source.
@@ -192,8 +194,9 @@ export async function launchBrowser() {
 }
 
 // A fresh context with the game loaded and held still; `work(page)` runs, then it closes.
-// `graphics` picks a graphics level ("low" is Battery saver) as Mission Control would.
-export async function inFreshPage(browser, url, viewport, work, graphics = null) {
+// `graphics` picks a graphics level ("low" is Battery saver) as Mission Control would; `query`
+// adds to ?qa=1 (5.1 J1: "&feel=1" turns the hit-stops on).
+export async function inFreshPage(browser, url, viewport, work, graphics = null, query = "") {
   const context = await browser.newContext({ viewport, deviceScaleFactor: 1 });
   const errors = [];
   try {
@@ -203,7 +206,7 @@ export async function inFreshPage(browser, url, viewport, work, graphics = null)
     page.on("console", (message) => message.type() === "error" && errors.push(message.text()));
     const loading = Date.now();
     try {
-      await page.goto(`${url}?qa=1`, { timeout: 300000 });
+      await page.goto(`${url}?qa=1${query}`, { timeout: 300000 });
       await page.waitForFunction(() => document.documentElement.dataset.ready === "true", null, { timeout: 300000 });
     } catch (error) {
       error.loading = true;
@@ -280,14 +283,18 @@ const summary = (row) =>
 async function measure(browser, url, runs, missions, jobs, recorded) {
   const estimate = new Map((recorded?.rows || []).map((row) => [row.key, row.endTime]));
   const plain = runs.map((run) => ({ name: run.key, run, viewport: VIEWPORT }));
-  const variant = (key, name, extra, viewport = VIEWPORT, graphics = null) => {
+  const variant = (key, name, extra, viewport = VIEWPORT, graphics = null, query = "") => {
     const run = runs.find((r) => r.key === key);
-    return run ? [{ name, run: { ...run, ...extra }, viewport, graphics }] : [];
+    return run ? [{ name, run: { ...run, ...extra }, viewport, graphics, query }] : [];
   };
   const checks = [
     ...variant("11/skipper/normal", "isolation: 11/skipper/normal after missions 3, 0 and 9 were started", { prelude: [3, 0, 9] }),
     ...["11/skipper/normal", "7/harbour/normal", "14/skipper/normal", "18/siege/normal"].flatMap((key) =>
       variant(key, `interleave: ${key}, HUD and render between every second step (480x320, Battery saver)`, { interleave: true }, SMALL, "low"),
+    ),
+    // The same with the hit-stops and shake of 5.1 J1 on.
+    ...["11/skipper/normal", "7/harbour/normal", "14/skipper/normal", "18/siege/normal"].flatMap((key) =>
+      variant(key, `interleave &feel=1: ${key}, hit-stops on, HUD and render between every second step`, { interleave: true }, SMALL, "low", "&feel=1"),
     ),
     ...variant("15/rescue/normal", "a cosmetic draw from game.random shows in randomCalls", { fixture: "cosmetic-draw" }),
     ...(missions.has(15) ? [{ name: "draws made inside Game.start are counted", start: 15, viewport: VIEWPORT }] : []),
@@ -315,6 +322,7 @@ async function measure(browser, url, runs, missions, jobs, recorded) {
               job.viewport,
               (page) => (job.run ? playIn(page, job.run) : page.evaluate(`(${startDraws})(${job.start})`)),
               job.graphics,
+              job.query,
             ),
           job.name,
         );

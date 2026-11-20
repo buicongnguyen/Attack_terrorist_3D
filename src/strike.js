@@ -63,6 +63,13 @@ import { bonuses } from "./requisition.js";
 import { Ripples, healthMaterial } from "./ripples.js";
 
 const V = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
+// A building's four walls: outward normal (x, z) and the box side it stands on (5.1 J1 blowouts).
+const WALLS = [
+  [1, 0],
+  [-1, 0],
+  [0, 1],
+  [0, -1],
+];
 // Live targets counted without building a list (the outcome check runs every step).
 const standing = (t) => !t.dead,
   firing = (t) => !t.dead && !t.mounted;
@@ -1440,7 +1447,7 @@ export class StrikeOperation {
         volley,
       });
     }
-    g.audio.play("shot");
+    g.sound("shellWhistle", origin);
   }
 
   hitAircraft(a) {
@@ -1448,7 +1455,7 @@ export class StrikeOperation {
     const g = this.game;
     a.hp--;
     this.damaged = true;
-    g.shake = Math.max(g.shake, 0.25);
+    g.jolt(null, "hurt");
     g.audio.play("hit");
     if (a.hp <= 0) {
       a.alive = false;
@@ -1610,6 +1617,7 @@ export class StrikeOperation {
             ? 0xeadbc2
             : 0xfff3dc;
     this.game.debrisChunk(centre, size, color, V(origin.x, origin.y, origin.z));
+    if (block.kind === "glass") this.game.sound("glassTinkle", centre);
     if (building.kind === "shelter") this.abort();
   }
 
@@ -1626,13 +1634,19 @@ export class StrikeOperation {
     const roof = buildingAt(this.buildings, point.x, point.z),
       surface = roof ? roof.top : CITY.ground;
     g.blast(p, radius, def.color, { quiet: bomb.kind === "bomblet" && Math.random() < 0.6, scorch: Math.abs(point.y - surface) < 0.6 ? surface : null });
+    if (roof && point.y < roof.top - 0.6) this.blowout(roof, point.y);
     // Break structure first; people behind freshly broken walls are exposed to the blast.
     for (const block of blocksNear(this.blocks, point, breakRadius * 1.5)) {
       const limit = block.kind === "glass" ? breakRadius * 1.5 : breakRadius;
       if (boxDistance(block.min, block.max, point) < limit) this.breakBlock(block, point);
     }
     if (shelterStruck(this.blocks, this.buildings, point, bomb.kind, 0, def.pattern ? 1 : this.power)) this.abort();
-    let kills = 0;
+    // What this burst kills, for its score pop and hit-stop (5.1 J1): a key target is one the gold
+    // ring marks (an officer, a jammer, a key ship).
+    let kills = 0,
+      key = false,
+      label = "";
+    const before = g.score;
     const exposed = (target, lift) => {
       const chest = { x: target.position.x, y: target.position.y + inStorey(lift), z: target.position.z };
       return blastDistance(chest, point) < radius && !lineBlocked(this.blocks, this.buildings, point, chest);
@@ -1646,19 +1660,33 @@ export class StrikeOperation {
       e.marker.visible = false;
       kills++;
       g.score += e.officer ? 200 : 100;
+      if (e.officer) {
+        key = true;
+        label = "OFFICER";
+      }
     }
     // Hulls in reach take the bomb's ship damage; the Island Belle aborts the strike.
-    if (this.fleet) kills += this.fleet.hit(point, def, def.shipDamage ?? 1).length;
+    if (this.fleet) {
+      const sunk = this.fleet.hit(point, def, def.shipDamage ?? 1);
+      kills += sunk.length;
+      if (sunk.some((ship) => this.layout.required?.includes(ship.group.data.id))) {
+        key = true;
+        label = "KEY SHIP";
+      }
+    }
     for (const nest of this.aa) {
       if (nest.dead || nest.mounted || !exposed(nest, 0.6)) continue;
       this.destroy(nest, 150);
       this.say("aa");
       kills++;
+      label = "FLAK NEST";
     }
     for (const mast of this.masts) {
       if (mast.dead || !exposed(mast, 0.8)) continue;
       this.destroy(mast, 250);
       kills++;
+      key = true;
+      label = "JAMMER";
     }
     for (const truck of this.trucks) {
       if (truck.dead || !exposed(truck, 0.9)) continue;
@@ -1666,6 +1694,7 @@ export class StrikeOperation {
       if (truck.hp <= 0) {
         this.destroy(truck, 200);
         kills++;
+        label = "TRUCK";
       }
     }
     // The teaching coach offers Reverse only after a bomb that hit nothing (5.1 H1).
@@ -1675,7 +1704,12 @@ export class StrikeOperation {
       g.hits++;
       this.combo.count += kills;
       this.combo.timer = 1.1;
+      g.audio.play("comboTick", this.combo.count - 1);
+      if (kills >= 5 || key) g.jolt("heavy", key ? "key" : null);
+      else if (kills >= 3) g.jolt("burst");
     }
+    const gained = g.score - before;
+    if (gained > 0) g.pop(point, kills > 1 ? `+${gained} x${kills}` : label ? `+${gained} ${label}` : `+${gained}`);
     if (this.layout.alert) {
       let fled = 0;
       for (const e of this.enemies) {
@@ -1688,6 +1722,42 @@ export class StrikeOperation {
       if (fled) this.say("alert");
     }
     this.checkSupport();
+  }
+
+  // An indoor blowout (5.1 J1): a burst inside a building throws fire and smoke out of each wall
+  // of its storey that faces the camera, and curtain glass showers shards. Pools only, no draws.
+  blowout(building, y) {
+    const g = this.game,
+      { glow, smoke } = g.view.fx,
+      camera = g.view.camera.position,
+      floor = Math.max(0, Math.floor((y - storyY(0)) / CITY.floorH)),
+      mid = storyY(floor) + CITY.floorH / 2,
+      cx = (building.min[0] + building.max[0]) / 2,
+      cz = (building.min[2] + building.max[2]) / 2;
+    const walls = WALLS.filter(([nx, nz]) => (camera.x - cx) * nx + (camera.z - cz) * nz > 0);
+    for (const [nx, nz] of walls) {
+      // 0.3 m outside the wall, anywhere along it, at mid-storey.
+      const face = (along, lift) => ({
+        x: nx ? (nx > 0 ? building.max[0] : building.min[0]) + nx * 0.3 : cx + along,
+        y: mid + lift,
+        z: nz ? (nz > 0 ? building.max[2] : building.min[2]) + nz * 0.3 : cz + along,
+      });
+      const span = nx ? building.max[2] - building.min[2] : building.max[0] - building.min[0];
+      for (let i = 0; i < 2; i++) {
+        const at = face((Math.random() - 0.5) * span * 0.7, (Math.random() - 0.5) * 0.5),
+          speed = 2 + Math.random();
+        glow.spawn(at, { x: nx * speed, y: 0.5, z: nz * speed }, 1.2, 0.8, 0.5 + Math.random() * 0.2, i ? 0xff8a2b : 0xffc62b, 1);
+        smoke.spawn(at, { x: nx * speed, y: 0.8, z: nz * speed }, 1.3, 1.1, 1.3 + Math.random() * 0.5, 0x5a4f55, 0.8);
+      }
+      if (building.kind === "glass")
+        for (let i = 0; i < 10 / walls.length; i++) {
+          const speed = 2.5 + Math.random() * 2;
+          glow.spawn(face((Math.random() - 0.5) * span * 0.8, (Math.random() - 0.5) * 0.6), { x: nx * speed, y: 1.5 + Math.random() * 2, z: nz * speed }, 0.2, -0.2, 0.9 + Math.random() * 0.4, 0x9fe8ff, 1, 14);
+        }
+    }
+    // The whole floor glows for a moment.
+    glow.spawn({ x: cx, y: mid, z: cz }, null, (building.max[0] - building.min[0]) * 0.9, 0.3, 0.35, 0xffb347, 0.8);
+    g.view.lightFlash(V(cx, mid, cz), 2.6);
   }
 
   destroy(target, score) {

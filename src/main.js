@@ -45,7 +45,9 @@ async function boot() {
   document.getElementById("app").hidden = false;
   view.resize();
   const clock = new FixedClock();
-  const loop = createLoop({ clock, governor, game, ui, view, radio: ui.director, now: performance.now(), hidden: () => document.hidden });
+  // Hit-stops (5.1 J1) are off under ?qa unless &feel=1, so scripted checks run in step time.
+  const feel = !qa || params.get("feel") === "1";
+  const loop = createLoop({ clock, governor, game, ui, view, radio: ui.director, now: performance.now(), hidden: () => document.hidden, feel });
   const animate = (now) => {
     loop.frame(now);
     requestAnimationFrame(animate);
@@ -53,7 +55,7 @@ async function boot() {
   requestAnimationFrame(animate);
   window.addEventListener("resize", () => view.resize());
   if (qa) {
-    window.__TIDELOCK__ = { game, view, ui, clock, governor };
+    window.__TIDELOCK__ = { game, view, ui, clock, governor, loop };
     window.__TIDELOCK_STRIKE__ = strikeData;
     window.__TIDELOCK_RESCUE__ = rescueData;
     window.__TIDELOCK_HARBOUR__ = harbourData;

@@ -265,7 +265,11 @@ export class RiverOperation {
     } else if (event.type === "barracks") this.spawnBarracks(event, z);
     else if (event.type === "bridge") this.spawnBridge(z);
     else if (event.type === "radio") this.say(event.key);
-    else if (event.type === "checkpoint") g.notify("checkpoint", event.name);
+    else if (event.type === "checkpoint") {
+      g.notify("checkpoint", event.name);
+      // A stretch cleared (not the name of the next one) plays the objective stinger (5.1 J1).
+      if (event.d > 0) g.audio.play("objectiveMet");
+    }
   }
 
   // A barracks on the bank, its door to the water; once in sight it sends riflemen down to the
@@ -618,7 +622,7 @@ export class RiverOperation {
     barge.hp = Math.max(0, barge.hp - amount);
     this.bargeDamage += amount;
     g.puff(position || barge.mesh.position.clone().add(V(0, 1.5, 0)), 0xffb35c, 0.5, 0.6);
-    g.audio.play("hit");
+    g.sound("bargeClang", barge.mesh.position);
     this.say("barge");
     if (barge.hp <= 0) {
       barge.alive = false;
@@ -883,7 +887,7 @@ export class RiverOperation {
       this.blocked++;
       if (glanced) return;
       this.game.score += 20;
-      this.game.notify("toast", "SHOT BLOCKED +20");
+      this.game.pop(shot.position, "+20 SHOT BLOCKED", "info");
     }
   }
 
@@ -1028,7 +1032,7 @@ export class RiverOperation {
     this.rockets -= n;
     g.rocketCooldown = spec.cooldown;
     g.flash(origin, 0xffd47e, 1.1);
-    g.audio.play("shot");
+    g.audio.play("rocketWhoosh");
     return true;
   }
 
@@ -1057,7 +1061,7 @@ export class RiverOperation {
     view.level.add(group);
     const tip = view.fxSprite("glow", 0x9ff3ff, 1, true);
     tip.visible = false;
-    return { group, tip, spark: 0, sound: 0 };
+    return { group, tip, spark: 0 };
   }
 
   // Laser (key 3): a held beam that burns the first hostile it touches and knocks down enemy
@@ -1074,6 +1078,8 @@ export class RiverOperation {
       this.say("overheat");
     }
     beam.group.visible = beam.tip.visible = this.laser.beam;
+    // Its own hum while it burns, rising with heat (5.1 J1).
+    g.audio.hum(this.laser.beam, this.laser.heat);
     if (!this.laser.beam || !g.aimPoint) return;
     g.aimBoatTurret(g.aimPoint);
     const origin = this.muzzle();
@@ -1130,11 +1136,6 @@ export class RiverOperation {
     if (hit && beam.spark <= 0) {
       beam.spark = 0.05;
       g.ember(end.clone().add(V((Math.random() - 0.5) * 0.6, Math.random() * 0.5, (Math.random() - 0.5) * 0.6)), 0xfff1a8, 0.5, 0.3);
-    }
-    beam.sound -= dt;
-    if (beam.sound <= 0) {
-      beam.sound = 0.14;
-      g.audio.play("shot");
     }
   }
 

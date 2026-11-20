@@ -3679,3 +3679,92 @@ body:has(#result-dialog[open]) #comms {
     display: flex;
   }
 }
+
+/* ---------------------------------------------------------------- hits that land (5.1 J1)
+   Score pops over the world (moved by transform only), the hurt edge (where a hit came from, and a
+   slow red pulse while the shields are low) and the qa Sound test in Mission control. */
+#pops span {
+  position: absolute;
+  left: 0;
+  top: 0;
+  translate: -50% -100%;
+  color: var(--gold);
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  text-shadow:
+    0 2px 0 rgba(11, 22, 40, 0.9),
+    0 0 6px rgba(11, 22, 40, 0.8);
+  will-change: transform, opacity;
+}
+#pops span.info {
+  color: #dff6ff;
+  font-size: 13px;
+}
+#hurt-edge {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+#hurt-edge::before,
+#hurt-edge::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+}
+#hurt-edge[data-dir]::before {
+  opacity: 1;
+  animation: hurt-fade 0.35s ease-out forwards;
+}
+#hurt-edge[data-dir="left"]::before {
+  background: linear-gradient(90deg, rgba(255, 59, 43, 0.6), transparent 24%);
+}
+#hurt-edge[data-dir="right"]::before {
+  background: linear-gradient(270deg, rgba(255, 59, 43, 0.6), transparent 24%);
+}
+#hurt-edge[data-dir="top"]::before {
+  background: linear-gradient(180deg, rgba(255, 59, 43, 0.6), transparent 24%);
+}
+#hurt-edge[data-dir="bottom"]::before {
+  background: linear-gradient(0deg, rgba(255, 59, 43, 0.6), transparent 24%);
+}
+#hurt-edge.low-shield::after {
+  opacity: 0.45;
+  box-shadow: inset 0 0 70px 14px rgba(255, 40, 30, 0.7);
+  animation: low-pulse 1.6s ease-in-out infinite;
+}
+@keyframes hurt-fade {
+  to {
+    opacity: 0;
+  }
+}
+@keyframes low-pulse {
+  50% {
+    opacity: 0.12;
+  }
+}
+#listen-note {
+  margin: 8px 0;
+  font-size: 13px;
+  color: #cfd9ec;
+}
+#listen-count {
+  margin-left: 8px;
+  font-size: 12px;
+  color: var(--gold);
+}
+#listen-all {
+  min-height: 44px;
+}
+.listen-row {
+  border-left-color: #7fe8ff;
+  background: rgba(127, 232, 255, 0.06);
+}
+.listen-row em {
+  margin-left: 6px;
+  font-size: 11px;
+  font-style: normal;
+  color: var(--gold);
+}

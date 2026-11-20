@@ -183,7 +183,9 @@ export class WorldView {
     this.ray = new THREE.Raycaster();
     this.plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
     this.target = new THREE.Vector3();
-    this.baseCamera = new THREE.Vector3();
+    // The unshaken camera, kept while a frame renders shaken (5.1 J1).
+    this.heldCamera = new THREE.Vector3();
+    this.shakeAxis = new THREE.Vector3();
     this.water = this.createWater();
     this.scene.add(this.water);
     // 3.0: glows and smoke are two GPU particle pools, one draw each, kept across missions.
@@ -696,7 +698,6 @@ void main() {
       this.camera.updateProjectionMatrix();
     }
     if (this.distant) this.distant.visible = !mobile;
-    this.baseCamera.copy(this.camera.position);
     if (this.chapter === 2 && this.followPlayerPosition) this.followPlayer(this.followPlayerPosition, 0, true);
     else if (this.strikeWindow) this.applyStrikeCamera();
     else {
@@ -800,7 +801,6 @@ void main() {
     const f = this.strikeFollow;
     this.camera.position.copy(this.strikeCameraBase).add(new THREE.Vector3(f.x, 0, f.z));
     this.camera.updateMatrixWorld();
-    this.baseCamera.copy(this.camera.position);
     // The sun and its shadow map travel with the window.
     this.sun.position.set(f.x, 0, f.z).add(this.sunOffset || SUN_OFFSET);
     this.sun.target.position.set(f.x, 0, f.z);
@@ -834,8 +834,7 @@ void main() {
     const goal = this.followGoal.set(position.x, 0, position.z - 7);
     if (!this.followPosition || snap) this.followPosition = this.followAt.copy(goal);
     else this.followPosition.lerp(goal, 1 - Math.exp(-dt * 5));
-    this.baseCamera.copy(this.followPosition).add(FOLLOW_OFFSET);
-    this.camera.position.copy(this.baseCamera);
+    this.camera.position.copy(this.followPosition).add(FOLLOW_OFFSET);
     this.camera.lookAt(this.followPosition);
     this.camera.updateMatrixWorld();
     this.sun.position.copy(this.followPosition).add(this.sunOffset || SUN_OFFSET);
@@ -886,20 +885,17 @@ void main() {
     return out;
   }
 
-  render(time, shake = 0) {
+  // `shake` (5.1 J1, from the frame loop's shakeOffset): x and y along the camera's right and up
+  // axes, kx and kz a world kick. The camera is shaken for the draw only and put back before this
+  // returns, so project(), steerHeli() and screenDirection() always see the unshaken camera.
+  render(time, shake = null) {
     const delta = Math.max(0, Math.min(0.1, time - this.lastRender));
     this.lastRender = time;
     this.needsRender = false;
     this.water.material.uniforms.time.value = time;
     this.flashLevel = Math.max(0, this.flashLevel - delta * 160);
     this.flashLight.intensity = this.flashLevel;
-    this.camera.position.copy(this.baseCamera);
-    if (shake > 0) {
-      this.camera.position.x += Math.sin(time * 80) * shake;
-      this.camera.position.y += Math.cos(time * 95) * shake * 0.5;
-    }
     this.camera.updateMatrixWorld();
-    this.sky.position.copy(this.camera.position);
     // Keep floating symbols out of HUD text and controls; the supply case stays visible.
     const pixelScale = this.viewHeight / ((this.camera.top - this.camera.bottom) / this.camera.zoom);
     for (const badge of this.pickupBadges) {
@@ -911,6 +907,21 @@ void main() {
           point.x - halfWidth < rect.right && point.x + halfWidth > rect.left && top < rect.bottom && point.y > rect.top,
       );
     }
-    this.renderer.render(this.scene, this.camera);
+    const camera = this.camera,
+      shaken = shake && (shake.x || shake.y || shake.kx || shake.kz);
+    if (shaken) {
+      this.heldCamera.copy(camera.position);
+      camera.position.addScaledVector(this.shakeAxis.setFromMatrixColumn(camera.matrixWorld, 0), shake.x);
+      camera.position.addScaledVector(this.shakeAxis.setFromMatrixColumn(camera.matrixWorld, 1), shake.y);
+      camera.position.x += shake.kx;
+      camera.position.z += shake.kz;
+      camera.updateMatrixWorld();
+    }
+    this.sky.position.copy(camera.position);
+    this.renderer.render(this.scene, camera);
+    if (shaken) {
+      camera.position.copy(this.heldCamera);
+      camera.updateMatrixWorld();
+    }
   }
 }

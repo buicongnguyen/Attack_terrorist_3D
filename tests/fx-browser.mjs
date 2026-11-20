@@ -34,6 +34,21 @@ export async function checkFx(browser, url, check) {
     const busy = calls();
     r.blastsStayCheap = view.fx.glow.alive() > 200 && view.fx.smoke.alive() > 100 && view.fx.rings.alive() >= 30 && busy - quiet <= 2;
     r.summary = `${quiet} -> ${busy} draws with ${view.fx.glow.alive()} glows, ${view.fx.smoke.alive()} smoke, ${view.fx.rings.alive()} rings`;
+    // Indoor blowouts (5.1 J1): ten Drill bursts inside the Glass Tower (1.6) add no draws either.
+    enter(5);
+    const calm = calls();
+    const tower = g.op.buildings.find((b) => b.id === "GT");
+    const { storyY, DRILL_BURST } = __TIDELOCK_STRIKE__;
+    const Vec = view.camera.position.constructor;
+    for (let f = 0; f < 10; f++) {
+      const point = new Vec((tower.min[0] + tower.max[0]) / 2, storyY(f % 7) + DRILL_BURST, (tower.min[2] + tower.max[2]) / 2);
+      g.op.blowout(tower, point.y);
+      g.blast(point, 1.6, 0xff8a2b, { quiet: true });
+    }
+    run(0.05);
+    const blown = calls();
+    r.blowoutsStayCheap = blown - calm <= 2;
+    r.summary += `; blowouts ${calm} -> ${blown}`;
     // Street blasts leave scorch marks that fade; one in the air leaves none.
     const scorchBefore = view.fx.scorch.spawned;
     g.blast({ x: f.x, y: 1.05, z: f.z }, 1.6, 0xff8a2b, { quiet: true, scorch: 1 });
@@ -78,7 +93,7 @@ export async function checkFx(browser, url, check) {
     return r;
   });
   console.log(`  fx: ${out.summary}`);
-  for (const key of ["blastsStayCheap", "newMissionClears", "wakes", "waterBlastSplashes", "reducedMotionStopsTrails", "rotorWash", "scorchMarks", "stepsKeepUploads"]) check(`fx ${key}`, out[key] === true);
+  for (const key of ["blastsStayCheap", "blowoutsStayCheap", "newMissionClears", "wakes", "waterBlastSplashes", "reducedMotionStopsTrails", "rotorWash", "scorchMarks", "stepsKeepUploads"]) check(`fx ${key}`, out[key] === true);
   check(`fx page errors${errors.length ? ": " + errors[0].slice(0, 60) : ""}`, errors.length === 0);
   await page.close();
 }

@@ -14,12 +14,13 @@ import { dampAngle } from "./harbour.js";
 import { Ambient, waterAt } from "./ambient.js";
 import { interceptFor } from "./story.js";
 import { STORY, priorityOf } from "./radio-queue.js";
+import { FEEL } from "./loop.js";
 
 const V = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
 const forward = V(0, 0, -1);
 // Scratch for the per-step paths (shield rings, wakes, aim, shot headings, hit tests, missile
 // steering), so a fight allocates nothing per step. Each is filled and read within one call.
-const scratch = { lift: V(), wake: V(), centre: V(), aim: V(), heading: V(), goal: V(), turn: new THREE.Quaternion(), limited: new THREE.Quaternion() };
+const scratch = { lift: V(), wake: V(), centre: V(), aim: V(), heading: V(), goal: V(), turn: new THREE.Quaternion(), limited: new THREE.Quaternion(), screen: { x: 0, y: 0, visible: false } };
 
 // Shared shot geometry: friendly rounds are bright tracers in a soft halo, hostile rounds are
 // glowing fireballs. Neither is disposed with a shot.
@@ -55,6 +56,33 @@ const CRATER = {
   disc: new THREE.CircleGeometry(1, 22).rotateX(-Math.PI / 2),
   rim: new THREE.RingGeometry(0.78, 1, 22).rotateX(-Math.PI / 2),
 };
+// What a kill pays, and the name its score pop carries (5.1 J1); anything else pays 100.
+const KILL_SCORE = {
+  launcher: 250,
+  "missile-site": 250,
+  "missile-truck": 220,
+  "drone-pad": 220,
+  barracks: 200,
+  mine: 60,
+  skiff: 120,
+  drums: 80,
+  crate: 150,
+  tower: 600,
+  generator: 900,
+};
+const KILL_LABEL = {
+  launcher: "LAUNCHER",
+  "missile-site": "MISSILE SITE",
+  "missile-truck": "MISSILE TRUCK",
+  "drone-pad": "DRONE PAD",
+  barracks: "BARRACKS",
+  tower: "TOWER",
+  generator: "GENERATOR",
+};
+// Key targets: their kill holds the frame (FEEL.stop.heavy) and shakes it hard.
+const KEY_KILLS = new Set(["tower", "generator", "launcher", "missile-site", "drone-pad"]);
+// Radio events that are goals reached: they play the objectiveMet stinger.
+const OBJECTIVE_EVENTS = new Set(["gatheringStruck", "reyesAboard"]);
 const HOSTILE_TARGET_LIFT = {
   cave: 0.45,
   launcher: 1.4,
@@ -88,6 +116,10 @@ export class Game {
     this.attemptsBy = new Map();
     // Lantern's aim point, rewritten each step (steerHeli).
     this.heliAim = V();
+    // 5.1 J1: what the hits of a step ask of the frame loop (jolt), and the trauma it shakes by.
+    // The loop reads and clears them; nothing in the simulation reads them back.
+    this.impact = { stop: 0, slow: 0, kick: false, kickX: 0, kickZ: 0, fresh: false };
+    this.shake = 0;
   }
 
   // QA: the next start of mission `index` plays attempt `n` (the balance sweep walks n = 1..8).
@@ -140,6 +172,8 @@ export class Game {
     this.sentResult = false;
     this.paused = false;
     this.shake = 0;
+    // A new mission: the frame loop drops any stop or slow motion still running (5.1 J1).
+    Object.assign(this.impact, { stop: 0, slow: 0, kick: false, fresh: true });
     this.auto = 0;
     this.twin = 0;
     this.supportCooldown = 0;
@@ -195,13 +229,50 @@ export class Game {
     }
     this.notify("radio", { line, key });
     this.lastRadio = this.time;
-    this.audio.play("radio");
+    // Marrow breaks in with static, not the chirp (5.1 J1).
+    this.audio.play(key === "intercept" ? "intercept" : "radio");
   }
 
-  // An event an intercept can wait for (the chapter's RADIO_EVENTS). Radio only: nothing here
-  // touches the simulation.
+  // An event an intercept can wait for (the chapter's RADIO_EVENTS). Radio and sound only:
+  // nothing here touches the simulation.
   cue(event) {
+    if (OBJECTIVE_EVENTS.has(event)) this.audio.play("objectiveMet");
     if (this.intercept?.event === event) this.sayIntercept();
+  }
+
+  // ------------------------------------------------------------------ feel (5.1 J1)
+  // Presentation only: the frame loop, the view and the UI read these; the simulation never does,
+  // and none of them draws from the mission's random numbers.
+
+  // A hit asks the frame loop for a hit-stop (a FEEL.stop key; the deciding hit also slows the
+  // half second after it), adds FEEL.bump[bump] trauma, and kicks the view away from `from`.
+  jolt(stop, bump = null, from = null) {
+    const impact = this.impact;
+    if (stop) impact.stop = Math.max(impact.stop, FEEL.stop[stop]);
+    if (stop === "decisive") impact.slow = FEEL.slow;
+    if (bump) this.shake = Math.min(1, this.shake + FEEL.bump[bump]);
+    const centre = this.player?.position ?? this.view.strikeFollow;
+    if (!from || !centre) return;
+    const dx = centre.x - from.x,
+      dz = centre.z - from.z,
+      d = Math.hypot(dx, dz);
+    if (d < 1e-3) return;
+    impact.kick = true;
+    impact.kickX = dx / d;
+    impact.kickZ = dz / d;
+  }
+
+  // A score pop at a world point (shown by the UI's #pops layer).
+  pop(at, text, tone = "score") {
+    this.notify("pop", { x: at.x, y: at.y, z: at.z, text, tone });
+  }
+
+  // A cue from a world point, on the bus of the screen third it is in.
+  sound(kind, at) {
+    if (!this.audio.live) return;
+    const p = this.view.projectInto(scratch.screen, at),
+      third = (this.view.viewWidth || 1) / 3;
+    this.audio.play(kind, 0, p.x < third ? 0 : p.x > third * 2 ? 2 : 1);
   }
 
   // An intercept whose moment already carried a story line waits for the next step.
@@ -254,7 +325,6 @@ export class Game {
 
   update(dt) {
     if (this.paused) return;
-    this.shake = Math.max(0, this.shake - dt * 1.5);
     this.updateEffects(dt);
     this.ambient?.update(dt);
     if (this.status !== "playing") {
@@ -582,7 +652,7 @@ export class Game {
       }
     } else this.spawnShot(origin, aim, rocket, false, target, null, rocket ? { flat: heli } : round);
     this.flash(origin, rocket ? 0xffd47e : 0xfff1b8, rocket ? 0.6 : this.chapter === 1 ? 0.7 : 0.35);
-    this.audio.play("shot");
+    this.audio.play(rocket ? "rocketWhoosh" : "shot");
     return true;
   }
 
@@ -647,11 +717,14 @@ export class Game {
     this.projectiles.push(shot);
     // Help from allies doesn't count towards the player's accuracy.
     if (!hostile && !shot.ally) this.shots++;
+    if (hostile) this.sound(missile ? "enemyLaunch" : "enemyShot", origin);
     return shot;
   }
 
   updateProjectiles(dt) {
     let dead = false;
+    // The nearest hostile missile still homing, for the lock tone (5.1 J1).
+    this.lockNear = Infinity;
     for (const shot of this.projectiles) {
       if (shot.dead) {
         dead = true;
@@ -687,6 +760,7 @@ export class Game {
       if (shot.dead && !struck && shot.position.y < 0.3 && waterAt(this, shot.position.x, shot.position.z)) this.splash(shot.position, shot.missile ? 0.8 : 0.25);
       if (shot.dead) dead = true;
     }
+    if (this.lockNear < Infinity) this.audio.lock(this.lockNear);
     // Compact in place, in order, only when a shot died (on this step, or since the last one).
     if (!dead) return;
     const shots = this.projectiles;
@@ -725,7 +799,9 @@ export class Game {
       this.ember(shot.position, shot.hostile ? 0xff7a2b : 0x9ff3ff, 0.5, 0.18);
       shot.trail = this.reducedMotion ? 0.05 : 0.03 / Math.max(0.6, this.ambientBudget ?? 1);
     }
-    const threat = shot.hostile ? clamp(1 - shot.position.distanceTo(this.player.position) / 28, 0, 1) : 0;
+    const near = shot.hostile ? shot.position.distanceTo(this.player.position) : Infinity,
+      threat = shot.hostile ? clamp(1 - near / 28, 0, 1) : 0;
+    if (goal && near < this.lockNear) this.lockNear = near;
     shot.mesh.scale.setScalar((shot.hostile ? 1.5 : 1.1) * (1 + threat * 0.25 + Math.sin(shot.age * 7) * 0.025));
   }
 
@@ -793,10 +869,11 @@ export class Game {
       const bonus =
         90 + Math.round(clamp(1 - hit.missile.position.distanceTo(this.player.position) / 25, 0, 1) * 110);
       this.score += bonus;
-      this.notify("toast", `INTERCEPT +${bonus}`);
+      this.pop(hit.missile.position, `+${bonus} INTERCEPT`);
       this.blast(hit.missile.position, 1.25, COLORS.gold);
       return;
     }
+    const killed = this.kills;
     this.damage(hit.entity, shot.damage ?? (shot.missile ? 5 : 1), shot.missile);
     if (!shot.missile)
       for (let i = 0; i < 4; i++) {
@@ -821,6 +898,9 @@ export class Game {
       for (const e of this.entities) {
         if (e !== hit.entity && !e.dead && isHostileEntity(e) && near(e, shot.splash)) this.damage(e, shot.splashDamage);
       }
+    // Several kills from one shot hold the frame a moment (5.1 J1).
+    const kills = this.kills - killed;
+    if (kills >= 3) this.jolt(kills >= 5 ? "heavy" : "burst");
     // Plasma carries on through, up to its limit, and never strikes the same target twice.
     if (shot.pierce > 1 && !shot.missile) {
       shot.pierce--;
@@ -840,7 +920,10 @@ export class Game {
     )
       return;
     e.hp -= amount;
-    this.puff(this.targetPosition(e), 0xffd88b, 0.3, 0.25);
+    const at = this.targetPosition(e);
+    this.puff(at, 0xffd88b, 0.3, 0.25);
+    // A white flash a little wider than the target (5.1 J1).
+    this.view.fx.glow.spawn(at, null, (e.hitRadius ?? e.radius) * 1.4, 0.5, 0.08, 0xffffff, 1);
     if (e.type === "cave") return this.op.disableCave(e, rocket);
     // A unit that is shot at raises the alarm around it (Lantern's valley, 2.7).
     this.op.onHit?.(e);
@@ -852,21 +935,11 @@ export class Game {
     e.dead = true;
     if (reward) {
       this.kills++;
-      this.score +=
-        {
-          launcher: 250,
-          "missile-site": 250,
-          "missile-truck": 220,
-          "drone-pad": 220,
-          barracks: 200,
-          mine: 60,
-          skiff: 120,
-          drums: 80,
-          crate: 150,
-          tower: 600,
-          generator: 900,
-        }[e.type] ?? 100;
+      const points = KILL_SCORE[e.type] ?? 100;
+      this.score += points;
+      this.pop(this.targetPosition(e), KILL_LABEL[e.type] ? `+${points} ${KILL_LABEL[e.type]}` : `+${points}`);
     }
+    if (KEY_KILLS.has(e.type)) this.jolt("heavy", "key");
     if (e.type === "enemy") {
       e.fallTime = 0;
       if (e.ring) e.ring.visible = false;
@@ -895,10 +968,10 @@ export class Game {
   glance(position) {
     this.flash(position, 0xfff1b8, 0.6);
     this.ember(position, 0x9ff3ff, 0.5, 0.25);
-    // The toast explains the rule now and then; the spark marks every glance.
-    if (this.time - this.lastMiss > 8) {
+    // A pop at the spot says so, at most once a second (5.1 J1).
+    if (this.time - this.lastMiss > 1) {
       this.lastMiss = this.time;
-      this.notify("toast", "GLANCING HIT / NO DAMAGE");
+      this.pop(position, "GLANCING HIT", "info");
     }
   }
 
@@ -908,6 +981,8 @@ export class Game {
     amount = Math.max(1, Math.round(amount * this.mode.enemyDamage));
     this.hitsTaken++;
     const offset = position.clone().sub(this.player.position);
+    // The screen edge the hit came from (5.1 J1; the camera looks up the -z axis).
+    this.notify("hurt", Math.abs(offset.x) >= Math.abs(offset.z) ? (offset.x < 0 ? "left" : "right") : offset.z < 0 ? "top" : "bottom");
     let angle = Math.atan2(offset.z, offset.x);
     if (angle < 0) angle += Math.PI * 2;
     const sector = Math.floor(angle / ((Math.PI * 2) / 3)) % 3;
@@ -916,7 +991,7 @@ export class Game {
       result = damageShields(this.shields, sector, amount);
     this.shields = result.shields;
     this.damageTaken += amount;
-    this.shake = 0.28;
+    this.jolt(null, "hurt", position);
     this.audio.play("hit");
     this.notify("toast", result.breached ? "HULL BREACH" : had > 0 && this.shields[sector] === 0 ? "SHIELD SECTOR LOST" : "SHIELD HIT");
     if (result.breached) this.finish(false, "hull");
@@ -1019,11 +1094,14 @@ export class Game {
     // terrain; the scrolling canal banks and anything in the air get none.
     const ground = options.scorch !== undefined ? options.scorch : (this.chapter === 2 && this.op.groundAt ? this.op.groundAt(p.x, p.z) : null);
     if (!wet && !options.small && ground !== null && p.y - ground < 2.5 && radius >= 0.9) this.view.fx.scorch.spawn({ x: p.x, y: ground + 0.03, z: p.z }, radius * 0.75);
-    if (radius > 2) {
-      this.shake = Math.max(this.shake, Math.min(0.45, 0.08 + radius * 0.05));
-      this.view.lightFlash(p, radius);
+    // Trauma (5.1 J1): a big blast also kicks the view away from itself.
+    if (radius > 3.5) this.jolt(null, "big", p);
+    else if (!options.small && radius >= 1.4) this.jolt(null, "small");
+    if (radius > 2) this.view.lightFlash(p, radius);
+    if (!options.quiet) {
+      this.sound(radius > 3.5 ? "bigblast" : "blast", p);
+      if (radius > 3.5) this.sound("thump", p);
     }
-    if (!options.quiet) this.audio.play(radius > 3.5 ? "bigblast" : "blast");
   }
 
   // A ring spreading on the ground or the water (shock rings, wakes, pickups): pooled, one draw.
@@ -1246,9 +1324,13 @@ export class Game {
       // A win is recorded at once: the result dialog comes a moment later, and a pause in between
       // must not lose it.
       this.notify("record", this.result());
+      this.jolt("decisive", "key");
       this.audio.play("win");
     } else {
-      if (this.player && reason === "hull") this.blast(this.player.position, 2.3, COLORS.hostile);
+      if (this.player && reason === "hull") {
+        this.blast(this.player.position, 2.3, COLORS.hostile);
+        this.jolt("decisive", "hurt");
+      }
       this.audio.play("fail");
     }
   }

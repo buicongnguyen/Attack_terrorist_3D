@@ -70,6 +70,7 @@ import {
   speaker,
 } from "./story.js";
 import { RadioDirector, STORY, minimumFor } from "./radio-queue.js";
+import { CUES } from "./audio.js";
 import { riverCriteria } from "./river-data.js";
 import { activeBonuses } from "./pickups.js";
 import { DIFFICULTIES, DIFFICULTY, DEFAULT_DIFFICULTY, difficulty, percent } from "./difficulty.js";
@@ -359,6 +360,63 @@ export class Callouts {
   }
 }
 
+// Score pops (5.1 J1): 16 spans made once in #pops (inside #world-labels), each one text node
+// rewritten in place, so the layer never gains or loses a child. A pop rises 28 px over 0.9 s by
+// transform alone, re-projected every frame; a new one takes the oldest span.
+export const POPS = { count: 16, life: 900, rise: 28 };
+export class Pops {
+  constructor(layer, view) {
+    this.view = view;
+    this.point = { x: 0, y: 0, visible: false };
+    this.made = 0;
+    this.slots = Array.from({ length: POPS.count }, () => {
+      const el = document.createElement("span");
+      el.append(document.createTextNode(""));
+      el.style.visibility = "hidden";
+      layer.append(el);
+      return { el, x: 0, y: 0, z: 0, born: -Infinity, live: false, shown: false, tone: "" };
+    });
+  }
+
+  add(x, y, z, text, tone, now = performance.now()) {
+    let slot = this.slots[0];
+    for (const other of this.slots) if (other.born < slot.born) slot = other;
+    Object.assign(slot, { x, y, z, born: now, live: true });
+    slot.el.firstChild.nodeValue = text;
+    if (tone !== slot.tone) slot.el.className = slot.tone = tone;
+    // The newest pop carries the highest number (tests read the last ones by it).
+    slot.el.dataset.order = String(++this.made);
+  }
+
+  // `still`: reduced motion, the pops stay where they appear.
+  update(now, still) {
+    const rise = still ? 0 : POPS.rise;
+    for (const slot of this.slots) {
+      if (!slot.live) continue;
+      const u = (now - slot.born) / POPS.life,
+        p = u < 1 && this.view.projectInto(this.point, slot);
+      const shown = Boolean(p?.visible);
+      if (shown !== slot.shown) {
+        slot.shown = shown;
+        slot.el.style.visibility = shown ? "" : "hidden";
+      }
+      if (u >= 1) slot.live = false;
+      if (!shown) continue;
+      slot.el.style.transform = `translate(${Math.round(p.x)}px, ${Math.round(p.y - rise * u)}px)`;
+      slot.el.style.opacity = u < 0.6 ? "1" : ((1 - u) / 0.4).toFixed(2);
+    }
+  }
+
+  clear() {
+    for (const slot of this.slots) {
+      slot.live = false;
+      slot.born = -Infinity;
+      if (slot.shown) slot.el.style.visibility = "hidden";
+      slot.shown = false;
+    }
+  }
+}
+
 export class UI {
   constructor(game, view, save) {
     this.game = game;
@@ -379,6 +437,11 @@ export class UI {
     this.screenPoint = { x: 0, y: 0, visible: false };
     this.callouts = new Callouts(game);
     this.edge = new EdgeMarkers($("edge-markers"));
+    this.pops = new Pops($("pops"), view);
+    // The hurt edge (5.1 J1): when its direction was set, and whether SHIELDS LOW was said.
+    this.hurtAt = 0;
+    this.warnedLow = false;
+    this.audioAt = 0;
     // The viewport minus the HUD panels (5.1 H1), recomputed when the layout changes.
     this.hudRects = [];
     this.freeRect = null;
@@ -407,6 +470,7 @@ export class UI {
     $("audio-enabled").checked = !save.muted;
     this.updateSound();
     this.bind();
+    if (this.qa && this.params.get("listen") === "1") this.buildListen();
     this.updatePointsDot();
     this.bindStick("move-stick", false);
     this.bindStick("fire-stick", true);
@@ -748,6 +812,8 @@ window.addEventListener('mobile-game-interruption', () => {
     });
     document.addEventListener("visibilitychange", () => {
       if (document.hidden && this.game.status === "playing" && !this.anyDialog()) this.menu();
+      // A hidden tab rests the sound at once (5.1 J1).
+      this.game.audio.idle(0, document.hidden, this.game.paused, this.anyDialog());
     });
   }
 
@@ -1139,6 +1205,7 @@ window.addEventListener('mobile-game-interruption', () => {
 
   updateSound() {
     this.game.audio.muted = this.save.muted;
+    if (this.save.muted) this.game.audio.hum(false);
     $("sound").innerHTML = `<i data-lucide="${this.save.muted ? "volume-x" : "volume-2"}"></i>`;
     $("sound").setAttribute("aria-label", this.save.muted ? "Unmute sound" : "Mute sound");
     $("sound").title = this.save.muted ? "Unmute sound" : "Mute sound";
@@ -1262,6 +1329,7 @@ window.addEventListener('mobile-game-interruption', () => {
     this.brief.close();
     this.clearInput();
     this.game.audio.unlock();
+    this.game.audio.play("missionStart");
     this.game.paused = false;
   }
 
@@ -1275,6 +1343,31 @@ window.addEventListener('mobile-game-interruption', () => {
     this.fillFiles();
     this.fillRequisition();
     this.dialog.showModal();
+  }
+
+  // The Sound test (?qa&listen=1, 5.1 J1): a row and a Play button for every cue of the CUES table,
+  // the new ones first, and Play all. The owner's listen gate for the cue set.
+  buildListen() {
+    const kinds = Object.keys(CUES);
+    $("listen-details").hidden = false;
+    $("listen-details").open = true;
+    $("listen-count").textContent = `${kinds.length} cues`;
+    $("listen-list").innerHTML = kinds
+      .map((kind) => {
+        const cue = CUES[kind];
+        return `<div class="req-row listen-row"><div><strong>${escape(cue.label)}${cue.fresh ? " <em>NEW</em>" : ""}</strong><small>${cue.note ? `${escape(cue.note)} · ` : ""}${kind}</small></div><button data-cue="${kind}" class="secondary-button">Play</button></div>`;
+      })
+      .join("");
+    for (const button of $("listen-list").querySelectorAll("[data-cue]")) button.onclick = () => this.listen([button.dataset.cue]);
+    $("listen-all").onclick = () => this.listen(kinds);
+  }
+
+  // Plays cues one after another, half a second apart; a new request ends the last queue.
+  listen(kinds, i = 0) {
+    clearTimeout(this.listenTimer);
+    if (i >= kinds.length) return;
+    const seconds = this.game.audio.preview(kinds[i]);
+    this.listenTimer = setTimeout(() => this.listen(kinds, i + 1), (seconds + 0.5) * 1000);
   }
 
   // The inquiry files recovered so far (a file comes with its mission's first win).
@@ -1404,6 +1497,15 @@ window.addEventListener('mobile-game-interruption', () => {
     else if (type === "radio") this.director.say(data.line, data.key);
     else if (type === "combo") this.callouts.banner(`MULTI-KILL x${data.count}`, `+${data.bonus}`, "combo", 1.6);
     else if (type === "checkpoint") this.callouts.banner(data, "", "checkpoint", 2.6);
+    else if (type === "pop") this.pops.add(data.x, data.y, data.z, data.text, data.tone);
+    else if (type === "hurt") {
+      // Every hit flashes again: the attribute comes off and a reflow restarts the fade.
+      const edge = $("hurt-edge");
+      delete edge.dataset.dir;
+      void edge.offsetWidth;
+      edge.dataset.dir = data;
+      this.hurtAt = performance.now();
+    }
     else if (type === "record") this.record(data);
     else if (type === "result") this.showResult(data);
   }
@@ -1470,6 +1572,11 @@ window.addEventListener('mobile-game-interruption', () => {
     this.labels.clear();
     this.lastLabels = [];
     this.edge.clear();
+    this.pops.clear();
+    this.hurtAt = 0;
+    delete $("hurt-edge").dataset.dir;
+    setClass($("hurt-edge"), "low-shield", false);
+    this.warnedLow = false;
     if (c === 0) this.buildFlightCards();
     this.weapon("gun");
     // Every callout lane starts empty, the multi-kill banner included.
@@ -1735,8 +1842,19 @@ window.addEventListener('mobile-game-interruption', () => {
     if (this.game.chapter === 0) this.updatePing();
     this.updateEdges();
     const now = performance.now();
+    // 5.1 J1: score pops ride their points; the hurt edge fades 350 ms after a hit; the laser hum
+    // stops with play.
+    this.pops.update(now, this.game.reducedMotion);
+    if (this.hurtAt && now - this.hurtAt > 350) {
+      this.hurtAt = 0;
+      delete $("hurt-edge").dataset.dir;
+    }
+    if (this.game.paused || this.game.status !== "playing") this.game.audio.hum(false);
     if (!force && now - this.lastHUD < 80) return;
     this.lastHUD = now;
+    // The sound rests while paused with no dialog open (audio.js MIX.rest).
+    this.game.audio.idle(this.audioAt ? (now - this.audioAt) / 1000 : 0, document.hidden, this.game.paused, this.anyDialog());
+    this.audioAt = now;
     const state = this.game.snapshot(),
       chapter = state.chapter,
       op = state.op;
@@ -1747,6 +1865,13 @@ window.addEventListener('mobile-game-interruption', () => {
     else {
       const total = state.shields.reduce((a, b) => a + b, 0);
       setText($("shield-count"), `${total} / 9`);
+      // 3 of 9 or fewer: a slow red pulse at the screen edge, and one SHIELDS LOW (5.1 J1).
+      const low = total <= 3 && state.status === "playing";
+      setClass($("hurt-edge"), "low-shield", low);
+      if (low && !this.warnedLow) {
+        this.warnedLow = true;
+        this.callouts.toast("SHIELDS LOW");
+      }
       setHTML(
         $("shield-segments"),
         state.shields

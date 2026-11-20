@@ -11,6 +11,7 @@ import { checkRiver } from "./river-browser.mjs";
 import { checkHarbour } from "./harbour-browser.mjs";
 import { checkPerf } from "./perf-browser.mjs";
 import { checkHud } from "./hud-browser.mjs";
+import { checkFeel } from "./feel-browser.mjs";
 import { MODELS, MISSIONS } from "../src/data.js";
 
 const url = process.env.GAME_URL || "http://127.0.0.1:5183/";
@@ -350,6 +351,7 @@ try {
   await checkProgress(browser, url, check);
   await checkPerf(browser, url, check, { gpu });
   await checkHud(browser, url, check);
+  await checkFeel(browser, url, check);
   const flow = await page.evaluate(() => {
     const { game: g, ui } = __TIDELOCK__,
       out = {};
