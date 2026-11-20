@@ -177,6 +177,8 @@ export class WorldView {
     this.pickupBadges = new Set();
     this.badgeKeepouts = [];
     this.badgePoint = new THREE.Vector3();
+    this.badgeScreen = { x: 0, y: 0, visible: false };
+    this.projectScratch = new THREE.Vector3();
     this.scrollProps = [];
     this.ray = new THREE.Raycaster();
     this.plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
@@ -368,6 +370,59 @@ export class WorldView {
     ring.position.copy(position);
     ring.userData.ownedMaterial = true;
     parent.add(ring);
+    return ring;
+  }
+
+  // Marlin's and Lantern's shields (5.1 H1): one flat ring round the vehicle, drawn in one pass,
+  // cut into three sectors of `segments` pips each. Sector i covers the world angles from
+  // i x 120° to (i + 1) x 120°, measured from +x towards +z (the sectors hurtPlayer uses); a lit
+  // pip is a shield point left in that sector.
+  shieldRing(radius, color, segments = 3, width = 0.2) {
+    const mat = new THREE.ShaderMaterial({
+      uniforms: {
+        shields: { value: new THREE.Vector3(segments, segments, segments) },
+        segments: { value: segments },
+        lit: { value: new THREE.Color(color) },
+        lost: { value: new THREE.Color(0xff4b2b) },
+        opacity: { value: 0.7 },
+      },
+      vertexShader: `varying vec2 vPos;
+void main() {
+  vPos = position.xy;
+  gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+}`,
+      fragmentShader: `uniform vec3 shields;
+uniform float segments;
+uniform vec3 lit;
+uniform vec3 lost;
+uniform float opacity;
+varying vec2 vPos;
+const float TAU = 6.28318531;
+void main() {
+  // The ring lies flat (rotation.x = -PI / 2), so local +y is world -z.
+  float a = atan(-vPos.y, vPos.x);
+  if (a < 0.0) a += TAU;
+  float s = a / (TAU / 3.0);
+  float sector = floor(s);
+  float pip = fract(s) * segments;
+  float index = floor(pip), edge = fract(pip);
+  // A thin gap between pips, a wider one between sectors.
+  float gapIn = index < 0.5 ? 0.16 : 0.06, gapOut = index > segments - 1.5 ? 0.84 : 0.94;
+  if (edge < gapIn || edge > gapOut) discard;
+  float left = sector < 0.5 ? shields.x : sector < 1.5 ? shields.y : shields.z;
+  bool on = index < left;
+  gl_FragColor = vec4(on ? lit : lost, on ? opacity : opacity * 0.45);
+  #include <colorspace_fragment>
+}`,
+      transparent: true,
+      depthWrite: false,
+      forceSinglePass: true,
+    });
+    const ring = new THREE.Mesh(ringGeometry(radius - width, radius, 96), mat);
+    ring.name = "shield-ring";
+    ring.rotation.x = -Math.PI / 2;
+    ring.userData.ownedMaterial = true;
+    this.level.add(ring);
     return ring;
   }
 
@@ -816,10 +871,19 @@ export class WorldView {
   }
 
   project(point) {
-    // The canvas rect is cached on resize: reading it per label forced a layout after every HUD write.
-    const p = new THREE.Vector3(point.x, point.y, point.z).project(this.camera),
+    return this.projectInto({ x: 0, y: 0, visible: false }, point);
+  }
+
+  // Screen position (CSS px) of a world point into `out`, allocating nothing (5.1 H1): world tags,
+  // edge markers and pickup badges project every frame. The canvas rect is cached on resize:
+  // reading it per label forced a layout after every HUD write.
+  projectInto(out, point) {
+    const p = this.projectScratch.set(point.x, point.y, point.z).project(this.camera),
       r = this.canvasRect || this.canvas.getBoundingClientRect();
-    return { x: r.left + ((p.x + 1) / 2) * r.width, y: r.top + ((1 - p.y) / 2) * r.height, visible: p.z < 1 };
+    out.x = r.left + ((p.x + 1) / 2) * r.width;
+    out.y = r.top + ((1 - p.y) / 2) * r.height;
+    out.visible = p.z < 1;
+    return out;
   }
 
   render(time, shake = 0) {
@@ -839,7 +903,7 @@ export class WorldView {
     // Keep floating symbols out of HUD text and controls; the supply case stays visible.
     const pixelScale = this.viewHeight / ((this.camera.top - this.camera.bottom) / this.camera.zoom);
     for (const badge of this.pickupBadges) {
-      const point = this.project(badge.getWorldPosition(this.badgePoint));
+      const point = this.projectInto(this.badgeScreen, badge.getWorldPosition(this.badgePoint));
       const halfWidth = (badge.scale.x * pixelScale) / 2;
       const top = point.y - badge.scale.y * pixelScale;
       badge.visible = !this.badgeKeepouts.some(

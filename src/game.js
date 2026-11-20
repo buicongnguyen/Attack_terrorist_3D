@@ -155,7 +155,7 @@ export class Game {
     this.player = null;
     this.playerTurret = null;
     this.boatParts = {};
-    this.shieldMeshes = [];
+    this.shieldRing = null;
     this.op =
       this.chapter === 0
         ? new StrikeOperation(this)
@@ -214,20 +214,9 @@ export class Game {
     return pickup;
   }
 
-  createShields(radius, y) {
-    return [0, 1, 2].map((i) => {
-      const geo = new THREE.TorusGeometry(radius, 0.06, 6, 30, (Math.PI * 2) / 3 - 0.11);
-      const mat = new THREE.MeshBasicMaterial({ color: COLORS.friendly, transparent: true, opacity: 0.57 });
-      const mesh = new THREE.Mesh(geo, mat);
-      mesh.rotation.x = Math.PI / 2;
-      mesh.rotation.z = (i * Math.PI * 2) / 3 + 0.055;
-      mesh.scale.y = 1.15;
-      mesh.position.set(0, y, 0);
-      mesh.userData.disposable = true;
-      // Shields follow position, but their collision sectors do not bank with the vehicle.
-      this.view.level.add(mesh);
-      return mesh;
-    });
+  // The shield ring round Marlin or Lantern (5.1 H1): one draw for all nine pips.
+  createShields(radius) {
+    return this.view.shieldRing(radius, COLORS.friendly);
   }
 
   update(dt) {
@@ -311,11 +300,11 @@ export class Game {
       if (river && this.weapon === "gun") this.op.autoRockets?.(aim);
     }
     if (!river) this.view.followPlayer(this.player.position, dt);
-    for (let i = 0; i < 3; i++) {
-      this.shieldMeshes[i].position.copy(this.player.position).add(scratch.lift.set(0, river ? 0.45 : -0.6, 0));
-      this.shieldMeshes[i].visible = this.shields[i] > 0;
-      this.shieldMeshes[i].material.opacity = river ? 0.18 + this.shields[i] * 0.1 : 0.5;
-    }
+    // Shields follow position, but their sectors do not bank with the vehicle.
+    this.shieldRing.position.copy(this.player.position).add(scratch.lift.set(0, river ? 0.45 : -0.6, 0));
+    this.shieldRing.material.uniforms.shields.value.set(this.shields[0], this.shields[1], this.shields[2]);
+    // A drained vehicle wears no ring of empty pips.
+    this.shieldRing.visible = this.shields[0] + this.shields[1] + this.shields[2] > 0;
     this.wakeCooldown = (this.wakeCooldown ?? 0) - dt;
     if (this.wakeCooldown <= 0) {
       this.wakeCooldown = river ? 0.17 : 0.65;

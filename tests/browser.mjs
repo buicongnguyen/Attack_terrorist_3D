@@ -10,6 +10,7 @@ import { checkStrike } from "./strike-browser.mjs";
 import { checkRiver } from "./river-browser.mjs";
 import { checkHarbour } from "./harbour-browser.mjs";
 import { checkPerf } from "./perf-browser.mjs";
+import { checkHud } from "./hud-browser.mjs";
 import { MODELS, MISSIONS } from "../src/data.js";
 
 const url = process.env.GAME_URL || "http://127.0.0.1:5183/";
@@ -305,9 +306,9 @@ try {
       }, index);
       const layout = await mobile.evaluate((chapter) => {
         const ids = [
-          ["#flight-panel", "#move-stick", ".mission-hud", "#ladder", "#comms", "#intel"],
-          ["#move-stick", "#fire-stick", "#shield-hud", ".mission-hud", "#convoy-hud", "#comms", ".weapon-bar", "#powerup"],
-          ["#move-stick", "#fire-stick", "#shield-hud", ".mission-hud", "#rescue-hud", "#rescue-actions", ".weapon-bar", "#comms"],
+          [".topbar", "#flight-panel", "#move-stick", ".mission-hud", "#ladder", "#comms", "#intel", "#intel-next", "#map-toggle"],
+          [".topbar", "#boss-slot", "#move-stick", "#fire-stick", "#shield-hud", ".mission-hud", "#convoy-hud", "#comms", ".weapon-bar", "#powerup"],
+          [".topbar", "#move-stick", "#fire-stick", "#shield-hud", ".mission-hud", "#rescue-hud", "#rescue-actions", ".weapon-bar", "#comms"],
         ][chapter];
         const rects = ids.map((s) => document.querySelector(s).getBoundingClientRect()).filter((r) => r.width > 0);
         const inside = rects.every((r) => r.width > 0 && r.left >= 0 && r.right <= innerWidth + 0.5 && r.top >= 0 && r.bottom <= innerHeight + 0.5);
@@ -348,6 +349,7 @@ try {
   await checkFx(browser, url, check);
   await checkProgress(browser, url, check);
   await checkPerf(browser, url, check, { gpu });
+  await checkHud(browser, url, check);
   const flow = await page.evaluate(() => {
     const { game: g, ui } = __TIDELOCK__,
       out = {};

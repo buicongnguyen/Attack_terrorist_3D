@@ -204,6 +204,7 @@ export class StrikeOperation {
     this.used = 0;
     this.damaged = false;
     this.combo = { count: 0, timer: 0 };
+    this.lastBombKills = null;
     this.said = new Map();
     this.forecastTimer = 0;
     this.hints = new Set();
@@ -1663,6 +1664,8 @@ export class StrikeOperation {
         kills++;
       }
     }
+    // The teaching coach offers Reverse only after a bomb that hit nothing (5.1 H1).
+    this.lastBombKills = kills;
     if (kills) {
       g.kills += kills;
       g.hits++;
@@ -1903,7 +1906,7 @@ export class StrikeOperation {
     const index = g.index;
     const lesson = this.layout.lesson;
     if (index === 0 && this.used === 0) return this.aim ? "aiming" : "aim";
-    if (index === 0 && !this.reversed && this.flight.pass <= 2 && this.left().total > 0) return "reverse";
+    if (index === 0 && !this.reversed && this.lastBombKills === 0 && this.flight.pass <= 2 && this.left().total > 0) return "reverse";
     if (index === 1 && !this.floorTouched && !this.aimUsed) return "floor";
     if (index === 2 && this.events.some((e) => e.alive && !e.status?.active && e.status?.next < 14)) return "rally";
     if (index === 3 && !this.salvoUsed && this.flight.pass <= 2) return "salvo";
@@ -2076,7 +2079,9 @@ export class StrikeOperation {
         ...this.aa.filter((n) => !n.dead && !n.mounted).map((n) => dot(n, "flak")),
         ...this.masts.filter((m) => !m.dead).map((m) => dot(m, "mast")),
         ...this.trucks.filter((t) => !t.dead).map((t) => dot(t, "truck")),
-        ...(this.fleet ? this.fleet.ships.filter((s) => !s.dead).map((s) => dot(s, s.civilian ? "civilian" : "ship")) : []),
+        ...(this.fleet
+          ? this.fleet.ships.filter((s) => !s.dead).map((s) => dot(s, s.civilian ? "civilian" : this.layout.required?.includes(s.group.data.id) ? "key" : "ship"))
+          : []),
       ],
       rallies: this.events.filter((e) => e.alive > 0).map((e) => ({ x: e.centre.x, z: e.centre.z, active: Boolean(e.status?.active) })),
       tunnels: this.tunnels.filter((t) => !t.dead).map((t) => ({ x: t.x, z: t.z, inside: t.occupants.size })),
@@ -2124,7 +2129,7 @@ export class StrikeOperation {
     // Hang the counter just south of the pattern, clear of the group labels over the ships.
     const south = Math.max(at.z, ...forecastPoints(lead.forecast).map((q) => q.z)) + 1.6;
     const text = p.civilian ? "CIVILIAN IN THE PATTERN" : p.hits ? `${p.hits} ON TARGET${p.sinks ? ` / ${p.sinks} SINK` : ""}` : "NO SHIPS";
-    return [{ id: "pattern", x: at.x, y: at.y + 0.6, z: south, text, hot: p.hits > 1 && !p.civilian }];
+    return [{ id: "pattern", x: at.x, y: at.y + 0.6, z: south, text, hot: p.hits > 1 && !p.civilian, kind: p.civilian ? "civilian" : undefined }];
   }
 
   rallyLabels() {

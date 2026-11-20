@@ -44,6 +44,7 @@
     <div id="app" hidden>
       <!-- World tags first, so the top bar and every HUD panel cover them. -->
       <div id="world-labels" aria-hidden="true"></div>
+      <div id="edge-markers" aria-hidden="true"></div>
       <header class="topbar">
         <div class="brand">
           <div class="brand-mark"><i data-lucide="crosshair"></i></div>
@@ -54,7 +55,14 @@
           <button data-chapter="1" class="chapter-tab"><span>02</span> Relief Run</button>
           <button data-chapter="2" class="chapter-tab"><span>03</span> Last Light</button>
         </nav>
+        <!-- Phones: the mission header as one objective line; a tap opens the full card. -->
+        <button id="objective-line" class="objective-line" aria-expanded="false" aria-controls="mission-hud" title="Mission details">
+          <i data-lucide="scan"></i><strong id="objective-line-count">03</strong><span id="objective-line-unit">TARGETS LEFT</span>
+        </button>
         <div class="top-actions">
+          <div id="tide-chip" class="tide-chip" role="timer" aria-label="Surge window" hidden>
+            <i data-lucide="waves"></i><span id="tide-text">SURGE 0:00</span>
+          </div>
           <div class="score"><span>SCORE</span><strong id="score">00000</strong></div>
           <button id="sound" class="icon-button" aria-label="Mute sound" title="Mute sound">
             <i data-lucide="volume-2"></i>
@@ -66,10 +74,13 @@
             <i data-lucide="sliders-horizontal"></i>
           </button>
         </div>
+        <div class="tide-bar" aria-hidden="true"><span id="tide-fill"></span></div>
       </header>
+      <!-- One slot for boss bars, directly under the top bar on every layout. -->
+      <div id="boss-slot" hidden aria-label="Boss"></div>
 
       <div class="left-stack">
-      <aside class="mission-hud">
+      <aside id="mission-hud" class="mission-hud">
         <div class="eyebrow"><span class="signal-dot"></span><span id="chapter-label">CHAPTER 01</span></div>
         <h1 id="mission-name">Wake-Up Call</h1>
         <p id="objective">Destroy the jammer mast</p>
@@ -77,18 +88,24 @@
           <i data-lucide="scan"></i><strong id="objective-count">03</strong><span id="objective-unit">TARGETS LEFT</span>
         </div>
         <div class="mission-progress"><span id="mission-progress"></span></div>
-        <div class="mission-meta"><span id="mission-index">MISSION 01 / 06</span><span id="surge-chip" class="mode-chip" hidden>SURGE 0:00</span><span id="difficulty-chip" class="mode-chip">EASY</span><span id="mission-percent">0%</span></div>
+        <div class="mission-meta"><span id="mission-index">MISSION 01 / 06</span><span id="difficulty-chip" class="mode-chip">EASY</span><span id="mission-percent">0%</span></div>
       </aside>
 
       <section id="comms" aria-live="polite" aria-label="Radio"></section>
       </div>
 
+      <button id="intel-next" class="intel-next" hidden aria-expanded="false" aria-controls="intel" title="Intel timeline">
+        <i data-lucide="users"></i><span id="intel-next-text"></span>
+      </button>
       <div id="intel" hidden aria-label="Intel timeline"></div>
       <div id="flak-warning" hidden role="alert"><i data-lucide="siren"></i><span id="flak-text">FLAK LOCK</span></div>
       <div id="coach" hidden role="status" aria-live="polite"></div>
       <div id="toast" role="status" aria-live="polite"></div>
       <div id="combo" aria-live="polite"><strong id="combo-count"></strong><span id="combo-bonus"></span></div>
 
+      <button id="map-toggle" class="icon-button map-toggle" hidden aria-expanded="false" aria-controls="radar" aria-label="City map" title="City map">
+        <i data-lucide="map"></i><span id="map-ping" class="ping-dot" hidden></span>
+      </button>
       <aside id="radar" hidden>
         <div class="radar-head"><i data-lucide="map"></i><span id="radar-title">CITY MAP / TAP TO MARK</span></div>
         <canvas id="radar-map" width="176" height="132" aria-label="City map: tap to mark where the bomb should fall"></canvas>
@@ -97,7 +114,7 @@
       <aside id="ladder" hidden aria-label="Target building floors">
         <div class="ladder-head"><i data-lucide="building-2"></i><span id="ladder-name">NO TARGET</span></div>
         <div id="ladder-floors"></div>
-        <p class="ladder-hint">Click or tap a floor to aim the Drill</p>
+        <p class="ladder-hint">Click a floor to aim the Drill</p>
       </aside>
 
       <section id="flight-panel" hidden aria-label="Kestrel Flight">
@@ -190,7 +207,6 @@
       <aside id="convoy-hud" hidden aria-label="Convoy status">
         <div class="convoy-head"><i data-lucide="ship"></i><span>CONVOY</span></div>
         <div id="barge-bars"></div>
-        <div id="boss-bars" hidden></div>
       </aside>
 
       <aside id="rescue-hud" hidden>
@@ -304,6 +320,15 @@
         <summary>Inquiry files <b id="files-count">0 / 6</b></summary>
         <div id="files-list"></div>
       </details>
+    </dialog>
+
+    <dialog id="leave-dialog" aria-labelledby="leave-title">
+      <h2 id="leave-title">Leave this mission?</h2>
+      <p id="leave-text" class="briefing"></p>
+      <div class="result-actions">
+        <button id="leave-go" class="secondary-button"><i data-lucide="log-out"></i>Leave</button
+        ><button id="leave-stay" class="primary-button"><i data-lucide="play"></i>Stay</button>
+      </div>
     </dialog>
 
     <dialog id="result-dialog" aria-labelledby="result-title" aria-describedby="result-story">

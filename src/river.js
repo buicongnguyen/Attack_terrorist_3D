@@ -61,7 +61,7 @@ export class RiverOperation {
       ]),
     );
     g.updateBoatLoadout();
-    g.shieldMeshes = g.createShields(RIVER.shield + 0.4, 0.6);
+    g.shieldRing = g.createShields(RIVER.shield + 0.5);
     this.distance = 0;
     this.scriptIndex = 0;
     this.holding = false;

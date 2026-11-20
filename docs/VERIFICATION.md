@@ -1,5 +1,27 @@
 # Release Verification
 
+## Tidelock 5.1, H1: a HUD that reads on a phone
+
+[PLAN-5.1.md](PLAN-5.1.md) H1 was verified on 2026-11-21 against the production build (`vite preview`), Chrome 155 on the GPU. Layout and HUD only: **all 50 golden rows are byte-identical** (`npm run golden`).
+
+**What changed.** The tide chip ('SURGE m:ss', label unchanged for N1) sits in the top bar at every width, 13 px with a Lucide `waves` icon, gold, orange from 120 s, red and pulsing from 60 s, with a 4 px bar under the top bar written only when its whole percentage changes. In-play text is 11 px or more and touch targets 44 px or more. Named phone cuts: (a) the city map is a 44x44 button with a ping dot (collapsed by default on every phone layout); (b) the intel strip is one chip ('ROOF BRIEFING 0:09 · 6') that opens the list; (c) the mission card is one ellipsized objective line in the top bar that opens the card (portrait phones also drop Sound and Mission control from the bar: Pause opens the same Mission control, which holds the sound switch); (d) the three shield tori became one segmented ring shader (one draw, three sectors of `segments` pips); (e) flight cards fold to one row when the flight carries one payload kind. Also: the controls flow in one wrapping row on phones, and portrait phones leave the pattern angle to the pattern panel's buttons (the dial and the diagram give way; the hit count is the world tag). Callout lanes (banner at 34%, toasts under the top bar, the coach as the hint lane) with merging and game-time timers; `src/edge-markers.js` (8 pooled chevrons on the free play rect's border); one `#boss-slot` under the top bar holding the Lock Gate bars; world tags hidden under panels, pinned tags clamped to the free rect, glyphs for key (star) and civilian (ban); map marks by shape (key diamond, civilian ring, hostile dot); the glitch fixes (Reverse coach after a bomb with no kills, 'Use 1 bomb or fewer', Release hidden once decided, the full-screen button at 6.9:1, a Stay / Leave confirmation on desktop chapter tabs).
+
+**HUD coverage at 390x844** (touch layout, the P1 measure, after 1 s of play; edge markers excluded like world tags):
+
+| Mission | Before (P1) | After H1 | Target |
+|---|---|---|---|
+| 1.1 Wake-Up Call | 41.3% | 36.2% | 40% |
+| 1.7 Harbour Mouth | 53.9% | 43.2% | 40%: **missed, owner sign-off needed** |
+| 2.1 Mangrove Mile | 34.9% | 30.0% | 40% |
+| 3.1 Hidden Signals | 37.9% | 31.3% | 40% |
+| 3.4 Eye of the Storm | 36.8% | 31.3% | 40% |
+
+1.7 after every named cut: flight panel 14.3%, radio line 7.7%, top bar 6.0%, pattern panel 4.7%, coach 3.8%, intel chip 3.2%, stick 3.1%, map button 0.5%. Reaching 40% would mean shrinking text or targets or hiding the radio, so it is recorded instead; hud-browser gates 1.7 at 44% (its measured share rounded up) until the owner decides. Missions outside the target list, after H1 (P1 in brackets): 1.2 37.3% (46.8), 1.3 43.7% (44.1), 1.4 46.8% (47.2), 1.5 46.3% (46.8), 1.6 44.7% (45.6), 1.8 43.5% (53.0), 1.9 43.7% (50.9), 2.2-2.6 20.2-33.2%, 3.2-3.3 31.3%. The multi-aircraft city missions gain least: the Drill dial (needed on touch, since the ladder floors are a read-out there) pushes Release onto its own row. Shares move by a few tenths between runs with the radio timing.
+
+**Draw calls at 390x844:** 1.6 516, 1.8 344, 3.2 333 (P1: 335). The shield ring replaces three tori, so the canal and valley draw two fewer, inside the declared +1 allowance; the ceilings are unchanged.
+
+**Tests.** 142 Node tests (7 new in tests/edge-markers.test.js: the free rect and border placement). Browser: tests/hud-browser.mjs (214 checks; 679 browser checks in all, zero errors) at 390x844, 360x740, 844x390, 320x568 and 1440x900 on 1.1, 1.4, 1.7, 2.1, 2.6, 3.1 and 3.4, plus new checks in strike-, menus- and progress-browser; the mobile and rescue layout checks now include the top bar and skip the panels phones fold away.
+
 ## Tidelock 5.1, P1: headroom and a bit-identical clean-up
 
 [PLAN-5.1.md](PLAN-5.1.md) P1 was verified on 2026-11-21 against the production build (`vite preview`), Chrome 155 on the GPU unless noted. No gameplay change: **all 50 golden rows are byte-identical**, and the isolation, four interleave and two randomCalls checks pass (`npm run golden`, 1.7 min).

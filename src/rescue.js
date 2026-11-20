@@ -80,7 +80,7 @@ export class RescueOperation {
     this.tailRotor = game.player.getObjectByName("TailRotor");
     this.heliTurret = game.player.getObjectByName("ChinTurret");
     this.heliMuzzle = game.player.getObjectByName("HeliMuzzle");
-    game.shieldMeshes = game.createShields(3.1, 0);
+    game.shieldRing = game.createShields(3.15);
     view.followPlayer(game.player.position, 0, true);
     const b = this.layout.bounds;
     this.vehicle = {

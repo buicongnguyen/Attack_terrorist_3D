@@ -147,7 +147,6 @@ kbd {
   top: 0;
   left: 0;
   right: 0;
-  height: 64px;
   display: flex;
   align-items: center;
   padding: 0 22px;
@@ -187,7 +186,7 @@ kbd {
 }
 .brand span {
   display: block;
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 500;
   color: #9fc4ff;
   margin-top: 3px;
@@ -201,7 +200,7 @@ kbd {
 }
 .chapter-tab {
   background: rgba(255, 255, 255, 0.06);
-  height: 38px;
+  height: 44px;
   padding: 0 16px;
   border-radius: 99px;
   white-space: nowrap;
@@ -240,8 +239,8 @@ kbd {
   background: rgba(255, 255, 255, 0.1);
 }
 .icon-button.small {
-  min-width: 36px;
-  height: 36px;
+  min-width: 44px;
+  height: 44px;
 }
 .score {
   padding: 6px 16px;
@@ -253,7 +252,7 @@ kbd {
   border-radius: 12px;
 }
 .score span {
-  font-size: 9px;
+  font-size: 11px;
   color: #9fc4ff;
   letter-spacing: 0.1em;
 }
@@ -270,7 +269,7 @@ kbd {
 .left-stack {
   position: absolute;
   left: 20px;
-  top: 80px;
+  top: calc(80px + var(--slot));
   width: 310px;
   display: flex;
   flex-direction: column;
@@ -369,7 +368,7 @@ kbd {
   right: 20px;
   display: flex;
   justify-content: space-between;
-  font-size: 10px;
+  font-size: 11px;
   color: rgba(255, 255, 255, 0.55);
   letter-spacing: 0.08em;
   text-shadow: 0 1px 4px #000a;
@@ -416,7 +415,7 @@ kbd {
   font-weight: 700;
 }
 .radio-line small {
-  font-size: 10px;
+  font-size: 11px;
   color: #9fc4ff;
   margin-left: 6px;
   letter-spacing: 0.05em;
@@ -518,7 +517,7 @@ kbd {
    the tightest landscape phones leave it to the red aim lines. */
 @media (max-width: 700px) and (orientation: portrait) {
   body[data-chapter="1"] #flak-warning {
-    top: 188px;
+    top: calc(var(--top-h) + 112px + var(--slot));
     bottom: auto;
     left: auto;
     right: var(--edge, 8px);
@@ -528,7 +527,7 @@ kbd {
 }
 @media (orientation: landscape) and (max-height: 520px) {
   body[data-chapter="1"] #flak-warning {
-    top: 168px;
+    top: calc(var(--top-h) + 112px + var(--slot));
     bottom: auto;
     left: auto;
     right: var(--edge, 8px);
@@ -543,7 +542,7 @@ kbd {
 /* Tablets: on the right under the convoy panel (room for the lock gate's bars too). */
 @media (min-width: 701px) and (max-width: 900px) {
   body[data-chapter="1"] #flak-warning {
-    top: 300px;
+    top: calc(300px + var(--slot));
     bottom: auto;
     left: auto;
     right: 20px;
@@ -645,7 +644,7 @@ html[data-touch="true"] .keys-only {
   align-items: center;
   gap: 6px;
   margin-bottom: 6px;
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 700;
   color: #cfe0ff;
   letter-spacing: 0.04em;
@@ -699,15 +698,14 @@ html[data-touch="true"] .keys-only {
   }
 }
 #reverse {
-  height: 46px;
+  height: 48px;
 }
 @media (max-width: 900px), (orientation: landscape) and (max-height: 520px) {
   #reverse span {
     display: none;
   }
   #reverse {
-    height: auto;
-    align-self: stretch;
+    width: 48px;
   }
 }
 #ladder.no-drill .ladder-hint,
@@ -861,7 +859,7 @@ html[data-touch="true"] .keys-only {
   flex-direction: column;
   gap: 4px;
 }
-#ladder-floors button[data-floor] {
+#ladder-floors [data-floor] {
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -872,25 +870,25 @@ html[data-touch="true"] .keys-only {
   font-size: 12px;
   font-weight: 600;
 }
-#ladder-floors button[data-floor] em {
+#ladder-floors [data-floor] em {
   font-style: normal;
   color: var(--ember);
   letter-spacing: 1px;
 }
-#ladder-floors button[data-floor].set {
+#ladder-floors [data-floor].set {
   outline: 2px dashed rgba(255, 138, 43, 0.8);
 }
-#ladder-floors button[data-floor].drill {
+#ladder-floors [data-floor].drill {
   background: #ff8a2b;
   color: var(--ink);
   box-shadow: 0 3px 0 #b8540c;
 }
-#ladder-floors button[data-floor].drill em {
+#ladder-floors [data-floor].drill em {
   color: #6a0f00;
 }
 .ladder-hint {
   margin: 8px 0 0;
-  font-size: 10px;
+  font-size: 11px;
   color: #9fc4ff;
 }
 #ladder.empty .ladder-hint {
@@ -942,7 +940,7 @@ html[data-touch="true"] .keys-only {
   margin-left: auto;
   display: flex;
   gap: 3px;
-  font-size: 10px;
+  font-size: 11px;
   color: var(--ember);
   font-weight: 700;
 }
@@ -957,7 +955,7 @@ html[data-touch="true"] .keys-only {
 }
 .flight-card small {
   display: block;
-  font-size: 10px;
+  font-size: 11px;
   color: #9fc4ff;
   margin-top: 5px;
 }
@@ -969,8 +967,10 @@ html[data-touch="true"] .keys-only {
 .bomb-chip {
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 5px;
-  height: 36px;
+  min-width: 52px;
+  height: 44px;
   padding: 0 10px;
   border-radius: 10px;
   background: rgba(0, 0, 0, 0.3);
@@ -1010,8 +1010,10 @@ html[data-touch="true"] .keys-only {
 .chip-button {
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 6px;
-  height: 38px;
+  min-width: 48px;
+  height: 44px;
   padding: 0 12px;
   border-radius: 10px;
   background: rgba(255, 255, 255, 0.1);
@@ -1036,7 +1038,7 @@ html[data-touch="true"] .keys-only {
 }
 .floor-control small,
 .speed-readout small {
-  font-size: 9px;
+  font-size: 11px;
   color: #ffcf9e;
   letter-spacing: 0.08em;
 }
@@ -1111,18 +1113,12 @@ html[data-touch="true"] .keys-only {
   opacity: 1;
   transform: translate(-50%, 0);
 }
-#toast.checkpoint {
-  top: 30%;
-  font-size: 22px;
-  padding: 12px 28px;
-  background: var(--gold);
-  color: var(--ink);
-  border-color: #fff;
-}
 #combo {
   position: absolute;
   left: 50%;
-  top: 38%;
+  top: 34%;
+  max-width: calc(100vw - 32px);
+  text-align: center;
   transform: translate(-50%, -50%) scale(0.6);
   display: flex;
   flex-direction: column;
@@ -1265,7 +1261,7 @@ html[data-touch="true"] .keys-only {
 #convoy-hud {
   position: absolute;
   right: 20px;
-  top: 80px;
+  top: calc(80px + var(--slot));
   width: 230px;
   padding: 12px;
   background: var(--panel);
@@ -1282,19 +1278,13 @@ html[data-touch="true"] .keys-only {
   color: var(--mint);
   margin-bottom: 6px;
 }
-#barge-bars,
-#boss-bars {
+#barge-bars {
   display: flex;
   flex-direction: column;
   gap: 7px;
 }
-#boss-bars {
-  margin-top: 10px;
-  padding-top: 10px;
-  border-top: 2px dashed rgba(255, 75, 43, 0.4);
-}
 .bar span {
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 700;
   color: #d5e4ff;
   letter-spacing: 0.05em;
@@ -1396,7 +1386,7 @@ html[data-touch="true"] .keys-only {
   position: absolute;
   bottom: 2px;
   right: 4px;
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 700;
 }
 /* Canal weapons: the laser's heat bar, an empty rocket rack, the air strike in orange. */
@@ -1694,7 +1684,7 @@ dialog h3 {
 .mode-chip {
   padding: 1px 6px;
   border-radius: 6px;
-  font-size: 9px;
+  font-size: 11px;
   font-weight: 800;
   letter-spacing: 0.06em;
   color: var(--ink);
@@ -1984,7 +1974,6 @@ html[data-touch="true"] kbd {
     --edge: 8px;
   }
   .topbar {
-    height: 52px;
     padding: 0 10px;
     gap: 8px;
   }
@@ -2008,27 +1997,12 @@ html[data-touch="true"] kbd {
   .left-stack {
     display: contents;
   }
-  .mission-hud {
-    position: absolute;
-    left: var(--edge);
-    top: 58px;
-    width: 172px;
-    padding: 8px 10px;
-  }
   .mission-hud h1 {
     font-size: 17px;
     margin: 2px 0;
   }
-  .mission-hud > p,
-  .mission-meta,
-  .mission-hud .eyebrow {
-    display: none;
-  }
   .objective-status strong {
     font-size: 22px;
-  }
-  .objective-status span {
-    font-size: 9px;
   }
   .mission-progress {
     margin-top: 6px;
@@ -2057,13 +2031,11 @@ html[data-touch="true"] kbd {
     font-size: 12px;
   }
   #intel {
-    top: 58px;
-    right: var(--edge);
     gap: 4px;
   }
   .intel-chip {
     padding: 5px 9px;
-    font-size: 10px;
+    font-size: 11px;
   }
   .intel-chip span {
     display: none;
@@ -2079,12 +2051,12 @@ html[data-touch="true"] kbd {
     width: 112px;
     padding: 7px;
   }
-  #ladder-floors button[data-floor] {
+  #ladder-floors [data-floor] {
     height: 22px;
     font-size: 11px;
   }
   .ladder-head {
-    font-size: 10px;
+    font-size: 11px;
     margin-bottom: 5px;
   }
   .ladder-hint {
@@ -2116,35 +2088,6 @@ html[data-touch="true"] kbd {
     margin-top: 4px;
     gap: 4px;
   }
-  .bomb-chip {
-    height: 32px;
-    padding: 0 6px;
-  }
-  .flight-controls,
-  .flight-row {
-    flex-direction: row;
-    gap: 5px;
-  }
-  .speed-readout,
-  #formation-label,
-  #salvo span,
-  #drop kbd {
-    display: none;
-  }
-  .flight-controls .flight-row:last-child {
-    flex: 1;
-  }
-  #drop,
-  #salvo {
-    min-width: 0;
-    height: 42px;
-    padding: 0 12px;
-    font-size: 14px;
-  }
-  .chip-button {
-    height: 40px;
-    padding: 0 10px;
-  }
   .joystick {
     width: var(--stick);
     height: var(--stick);
@@ -2158,55 +2101,27 @@ html[data-touch="true"] kbd {
   html[data-touch="true"] body[data-chapter="0"] #move-stick {
     bottom: 138px;
   }
-  #shield-hud,
-  html[data-touch="true"] #shield-hud {
-    left: var(--edge);
-    bottom: 120px;
-    transform: none;
-    padding: 6px 8px;
-    gap: 6px;
-    min-width: 0;
-  }
-  #shield-title {
-    display: none;
-  }
-  #shield-segments {
-    margin-top: 0;
-    gap: 4px;
-  }
-  #shield-segments i {
-    width: 8px;
-    height: 7px;
-  }
-  #shield-count {
-    font-size: 12px;
-    white-space: nowrap;
-  }
   #combat-controls .weapon-bar,
   html[data-touch="true"] #combat-controls .weapon-bar {
     right: var(--edge);
     bottom: 120px;
     padding: 4px;
   }
-  .weapon-bar .icon-button {
-    min-width: 40px;
-    height: 40px;
-  }
   #powerup,
   html[data-touch="true"] #powerup {
     left: var(--edge);
-    top: 150px;
+    top: calc(var(--top-h) + 6px + var(--slot));
     bottom: auto;
     width: 172px;
   }
   #convoy-hud {
     right: var(--edge);
-    top: 58px;
+    top: calc(var(--top-h) + 6px + var(--slot));
     width: 140px;
     padding: 8px;
   }
   #rescue-hud {
-    top: 58px;
+    top: calc(var(--top-h) + 6px);
     right: var(--edge);
     width: 116px;
   }
@@ -2219,19 +2134,18 @@ html[data-touch="true"] kbd {
     max-width: 180px;
   }
   #rescue-status {
-    font-size: 10px;
+    font-size: 11px;
     padding: 4px;
   }
   #flare-action {
-    width: 42px;
-    min-width: 42px;
+    width: 46px;
+    min-width: 46px;
     height: 46px;
   }
   .mission-footer {
     display: none;
   }
   #toast {
-    top: 150px;
     font-size: 13px;
   }
   #combo-count {
@@ -2245,14 +2159,9 @@ html[data-touch="true"] kbd {
   }
 }
 @media (max-width: 380px) {
-  .mission-hud {
-    width: 156px;
-  }
   #convoy-hud {
     width: 136px;
   }
-  #shield-count,
-  #shield-hud > svg,
   .brand strong,
   .objective-status span,
   .intel-chip b {
@@ -2265,9 +2174,6 @@ html[data-touch="true"] kbd {
   :root {
     --stick: 96px;
   }
-  .topbar {
-    height: 44px;
-  }
   .chapters,
   .brand span {
     display: none;
@@ -2275,24 +2181,12 @@ html[data-touch="true"] kbd {
   .left-stack {
     display: contents;
   }
-  .mission-hud {
-    position: absolute;
-    top: 50px;
-    left: 8px;
-    width: 176px;
-    padding: 6px 10px;
-  }
   .mission-hud h1 {
     font-size: 16px;
   }
-  .mission-hud > p,
-  .mission-meta,
-  .mission-hud .eyebrow {
-    display: none;
-  }
   #comms {
     position: absolute;
-    top: 50px;
+    top: calc(var(--top-h) + 6px + var(--slot));
     left: 50%;
     transform: translateX(-50%);
     width: min(360px, 42vw);
@@ -2305,14 +2199,6 @@ html[data-touch="true"] kbd {
   }
   .radio-line p {
     font-size: 11px;
-  }
-  #intel {
-    top: 140px;
-    left: 8px;
-    right: auto;
-    transform: none;
-    flex-direction: column;
-    align-items: flex-start;
   }
   #flight-panel {
     left: auto;
@@ -2329,13 +2215,13 @@ html[data-touch="true"] kbd {
   }
   #ladder,
   body[data-chapter="0"] #ladder {
-    top: 50px;
+    top: calc(var(--top-h) + 6px);
     bottom: auto;
     right: 8px;
     width: 110px;
     padding: 6px;
   }
-  #ladder-floors button[data-floor] {
+  #ladder-floors [data-floor] {
     height: 20px;
   }
   .ladder-hint {
@@ -2359,7 +2245,7 @@ html[data-touch="true"] kbd {
     display: none;
   }
   #rescue-hud {
-    top: 50px;
+    top: calc(var(--top-h) + 6px);
     right: 8px;
     width: 116px;
   }
@@ -2367,23 +2253,9 @@ html[data-touch="true"] kbd {
     height: 96px;
   }
   #convoy-hud {
-    top: 50px;
+    top: calc(var(--top-h) + 6px + var(--slot));
     right: 8px;
     width: 150px;
-  }
-  #shield-hud,
-  html[data-touch="true"] #shield-hud {
-    left: 50%;
-    transform: translateX(-50%);
-    bottom: 8px;
-    padding: 6px 10px;
-    min-width: 0;
-  }
-  #shield-title {
-    display: none;
-  }
-  #shield-segments {
-    margin-top: 0;
   }
   #combat-controls .weapon-bar,
   html[data-touch="true"] #combat-controls .weapon-bar {
@@ -2397,12 +2269,8 @@ html[data-touch="true"] kbd {
   #powerup,
   html[data-touch="true"] #powerup {
     left: 8px;
-    top: 140px;
     bottom: auto;
     width: 170px;
-  }
-  #toast {
-    top: 96px;
   }
 }
 /* Compact flight panel and floor ladder for every phone, in either orientation. */
@@ -2431,13 +2299,17 @@ html[data-touch="true"] kbd {
     gap: 4px;
   }
   .bomb-chip {
-    height: 32px;
     padding: 0 6px;
   }
-  .flight-controls,
-  .flight-row {
+  /* The controls flow in one wrapping row: Reverse, Salvo and Release share a line with the dial
+     when it fits, and Release takes a line of its own when it does not. */
+  .flight-controls {
     flex-direction: row;
+    flex-wrap: wrap;
     gap: 5px;
+  }
+  .flight-row {
+    display: contents;
   }
   .speed-readout,
   #formation-label,
@@ -2445,26 +2317,35 @@ html[data-touch="true"] kbd {
   #drop kbd {
     display: none;
   }
-  .flight-controls .flight-row:last-child {
-    flex: 1;
+  #drop {
+    flex: 1 1 100px;
+  }
+  #formation,
+  .floor-control,
+  #reverse,
+  #salvo {
+    flex-shrink: 0;
   }
   #drop,
   #salvo {
-    min-width: 0;
-    height: 42px;
+    min-width: 48px;
+    height: 48px;
     padding: 0 12px;
     font-size: 14px;
   }
   .chip-button {
-    height: 40px;
     padding: 0 10px;
+  }
+  /* The pattern panel's angle buttons turn the pattern; the dial makes way. */
+  #flight-panel.angle-dial .floor-control {
+    display: none;
   }
   #ladder-floors {
     gap: 2px;
   }
-  #ladder-floors button[data-floor] {
+  #ladder-floors [data-floor] {
     height: 18px;
-    font-size: 10px;
+    font-size: 11px;
     border-radius: 6px;
   }
   .ladder-hint {
@@ -2474,21 +2355,12 @@ html[data-touch="true"] kbd {
 /* Portrait Chapter 1: the radio sits under the mission card, clear of the ladder. */
 @media (max-width: 700px) and (orientation: portrait) {
   body[data-chapter="0"] #comms {
-    top: 150px;
+    top: calc(var(--top-h) + 108px);
     bottom: auto;
   }
-  body[data-chapter="0"] #toast {
-    top: 220px;
-  }
 }
-/* Landscape phones: intel below the mission card, ladder above the flight panel. */
+/* Landscape phones: a wider flight panel. */
 @media (orientation: landscape) and (max-height: 520px) {
-  .objective-status span {
-    font-size: 9px;
-  }
-  #intel {
-    top: 156px;
-  }
   #flight-panel {
     max-width: 360px;
   }
@@ -2524,37 +2396,19 @@ html[data-touch="true"] kbd {
   .joystick {
     bottom: 6px;
   }
-  #shield-hud,
-  html[data-touch="true"] #shield-hud {
-    left: calc(var(--stick) + 16px);
-    transform: none;
-    bottom: 6px;
-    padding: 5px 8px;
-  }
-  #shield-hud > svg,
-  #shield-count {
-    display: none;
-  }
-  #shield-segments i {
-    width: 8px;
-    height: 7px;
-  }
   #combat-controls .weapon-bar,
   html[data-touch="true"] #combat-controls .weapon-bar {
     right: calc(var(--stick) + 16px);
     bottom: 6px;
     padding: 3px;
   }
-  .weapon-bar .icon-button {
-    min-width: 38px;
-    height: 38px;
-  }
+  /* Above the 44 px weapon buttons, and the map short enough to clear the fire stick. */
   #rescue-actions {
-    bottom: 58px;
+    bottom: 62px;
     width: 170px;
   }
   #rescue-map {
-    height: 64px;
+    height: 58px;
   }
   .rescue-waypoint {
     min-height: 36px;
@@ -2564,16 +2418,6 @@ html[data-touch="true"] kbd {
     bottom: 6px;
     padding: 5px;
     gap: 4px;
-  }
-  .bomb-chip {
-    height: 28px;
-  }
-  #drop,
-  #salvo {
-    height: 36px;
-  }
-  .chip-button {
-    height: 34px;
   }
   #flight-panel {
     left: calc(var(--stick) + 16px);
@@ -2586,6 +2430,15 @@ html[data-touch="true"] kbd {
   .flight-card .chips {
     margin-top: 0;
   }
+  /* The cards and the controls share one row: the panel stays one control tall. */
+  #flight-panel {
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+  }
+  .flight-controls {
+    flex: 1 1 280px;
+  }
   #ladder,
   body[data-chapter="0"] #ladder {
     width: 132px;
@@ -2594,7 +2447,7 @@ html[data-touch="true"] kbd {
     display: grid;
     grid-template-columns: 1fr 1fr;
   }
-  #ladder-floors button[data-floor] {
+  #ladder-floors [data-floor] {
     height: 18px;
     padding: 0 5px;
   }
@@ -2605,17 +2458,10 @@ html[data-touch="true"] kbd {
   .pattern-diagram {
     max-width: 58px;
   }
-  .pattern-count {
-    margin-top: 3px;
-    font-size: 10px;
-  }
   html[data-touch="true"] body[data-chapter="0"] #move-stick,
   #ladder,
   body[data-chapter="0"] #ladder {
     bottom: calc(var(--panel-clear, 130px) + 8px);
-  }
-  #intel {
-    max-width: calc(100vw - 196px);
   }
   .intel-chip {
     max-width: 100%;
@@ -2631,25 +2477,12 @@ html[data-touch="true"] kbd {
 @media (max-width: 380px) and (max-height: 600px) and (orientation: portrait) {
   #coach,
   #flak-warning {
-    font-size: 10.5px;
+    font-size: 11px;
     padding: 4px 8px;
     line-height: 1.25;
   }
   body:has(#comms > .radio-line) #coach {
     display: none !important;
-  }
-}
-/* Phones up to 430 px wide: the two control rows stack, so Reverse, Salvo and Release fit. */
-@media (max-width: 430px) {
-  .flight-controls {
-    flex-direction: column;
-    align-items: stretch;
-  }
-  .flight-controls .flight-row {
-    width: 100%;
-  }
-  .flight-controls .flight-row:last-child #drop {
-    flex: 1;
   }
 }
 @media (orientation: landscape) and (max-height: 520px) {
@@ -2658,7 +2491,6 @@ html[data-touch="true"] kbd {
   }
   .pattern-count {
     margin-top: 2px;
-    font-size: 9px;
   }
 }
 /* Narrow windows without touch still show key hints; inside the flight panel they don't fit. */
@@ -2682,7 +2514,7 @@ html[data-touch="true"] kbd {
     min-width: 120px;
   }
   #salvo {
-    min-width: 0;
+    min-width: 48px;
   }
   #salvo span {
     display: none;
@@ -2782,6 +2614,17 @@ html[data-reduced-motion="true"] *::after {
   animation: none !important;
   transition: none !important;
 }
+/* With animations off, the banner lane (multi-kills, checkpoints) still shows: it stands still. */
+html[data-reduced-motion="true"] #combo.visible {
+  opacity: 1;
+  transform: translate(-50%, -50%);
+}
+@media (prefers-reduced-motion: reduce) {
+  #combo.visible {
+    opacity: 1;
+    transform: translate(-50%, -50%);
+  }
+}
 
 /* Phones: bonus timers become compact chips (icon and seconds) so the canal help fits beside the
    mission panel: a column in portrait, a row in landscape. */
@@ -2794,7 +2637,7 @@ html[data-reduced-motion="true"] *::after {
   .bonus {
     padding: 4px 8px 7px;
     gap: 6px;
-    font-size: 10px;
+    font-size: 11px;
     border-radius: 10px;
   }
   .bonus span {
@@ -2814,19 +2657,14 @@ html[data-reduced-motion="true"] *::after {
   #powerup,
   html[data-touch="true"] #powerup {
     flex-direction: row;
-    top: 146px;
+    top: calc(var(--top-h) + 6px + var(--slot));
   }
 }
-/* The narrowest phones: four weapon buttons on the boat still clear the shield bar. */
+/* The narrowest phones: four weapon buttons on the boat sit closer together. */
 @media (max-width: 380px) {
   #combat-controls .weapon-bar {
     gap: 3px;
     padding: 4px;
-  }
-  #combat-controls .weapon-bar .icon-button {
-    min-width: 36px;
-    width: 36px;
-    height: 36px;
   }
 }
 /* In pattern mode the ladder holds the diagram, the angle buttons and the count, one under another. */
@@ -2852,19 +2690,26 @@ html[data-reduced-motion="true"] *::after {
     padding: 2px;
   }
 }
-/* Short portrait phones: one row of four keeps the pattern panel clear of the radio line. */
-@media (max-width: 700px) and (orientation: portrait) and (max-height: 640px) {
-  .pattern-diagram {
-    max-width: 42px;
+/* Portrait phones (5.1 H1, a coverage cut): the lit angle button shows the shape and the head its
+   angle, so the diagram makes way (the O-Ring, with no angle buttons, keeps it); the hit count is
+   the world tag beside the pattern. */
+@media (max-width: 700px) and (orientation: portrait) {
+  #ladder-floors:has(.turn-chips) .pattern-diagram,
+  .pattern-count {
+    display: none;
   }
-  .turn-chips {
-    grid-template-columns: repeat(4, 1fr);
-    max-width: none;
-    gap: 3px;
-  }
-  .turn-chips button {
-    padding: 2px;
-  }
+}
+/* Touch: the angle buttons are 44 px targets, two by two (5.1 H1). */
+html[data-touch="true"] .turn-chips {
+  grid-template-columns: repeat(2, 44px);
+  justify-content: center;
+  max-width: none;
+  gap: 4px;
+}
+html[data-touch="true"] .turn-chips button {
+  min-width: 44px;
+  min-height: 44px;
+  padding: 3px;
 }
 
 /* ------------------------------------------------------------------ menus, dialogs and results (2.8)
@@ -3163,16 +3008,519 @@ kbd,
 .req-pips i.on {
   background: var(--gold);
 }
-#surge-chip.urgent {
-  background: #ff4b2b;
-  color: #fff;
-  animation: pulse-urgent 1s ease-in-out infinite;
-}
 @keyframes pulse-urgent {
   50% {
     opacity: 0.6;
   }
 }
-html[data-reduced-motion="true"] #surge-chip.urgent {
-  animation: none;
+
+/* ---------------------------------------------------------------- a HUD that reads on a phone (5.1 H1)
+   The tide chip in the top bar at every width, the boss slot under it, named coverage cuts on
+   phones (objective line, map button, intel chip, shield ring), callout lanes and edge markers. */
+:root {
+  --top-h: 64px;
+  --slot: 0px;
+}
+#app.boss-on {
+  --slot: 34px;
+}
+.topbar {
+  height: var(--top-h);
+}
+/* A paused mission holds its HUD animations (the banner, pulses) with the game clock. */
+#app.paused,
+#app.paused * {
+  animation-play-state: paused !important;
+}
+.tide-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 32px;
+  padding: 0 11px 0 9px;
+  margin-right: 6px;
+  border-radius: 99px;
+  background: var(--gold);
+  color: var(--ink);
+  box-shadow: 0 3px 0 var(--gold-deep);
+  font-size: 13px;
+  font-weight: 700;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.tide-chip svg {
+  width: 17px;
+  height: 17px;
+  stroke-width: 2.5;
+}
+.tide-chip.warn {
+  background: #ff8a1f;
+  box-shadow: 0 3px 0 #b8540c;
+}
+.tide-chip.urgent {
+  background: #ff4b2b;
+  color: #fff;
+  box-shadow: 0 3px 0 #9b1b0c;
+  animation: pulse-urgent 1s ease-in-out infinite;
+}
+.tide-bar {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 4px;
+  background: rgba(0, 0, 0, 0.35);
+}
+.tide-bar span {
+  display: block;
+  height: 100%;
+  background: var(--gold);
+  transform-origin: left;
+  transform: scaleX(0);
+  transition: transform 0.3s;
+}
+.topbar:has(.tide-chip.warn) .tide-bar span {
+  background: #ff8a1f;
+}
+.topbar:has(.tide-chip.urgent) .tide-bar span {
+  background: #ff4b2b;
+}
+.topbar:has(#tide-chip[hidden]) .tide-bar {
+  display: none;
+}
+.objective-line {
+  display: none;
+  align-items: center;
+  gap: 6px;
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 44px;
+  padding: 0 10px;
+  border-radius: 12px;
+  background: rgba(0, 0, 0, 0.25);
+  text-align: left;
+}
+.objective-line svg {
+  width: 18px;
+  height: 18px;
+  color: var(--ember);
+}
+.objective-line strong {
+  flex: none;
+  font-size: 20px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.objective-line span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+  font-weight: 600;
+  color: #d5e4ff;
+}
+.objective-line[aria-expanded="true"] {
+  background: rgba(255, 198, 43, 0.22);
+}
+/* One slot for boss bars, under the top bar on every layout: the panels below it make room. */
+#boss-slot {
+  position: absolute;
+  top: calc(var(--top-h) + 6px);
+  left: 16px;
+  right: 16px;
+  height: 28px;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0 12px;
+  align-items: center;
+  padding: 2px 12px;
+  background: var(--panel);
+  border: 1px solid rgba(255, 75, 43, 0.55);
+  border-radius: 10px;
+  box-shadow: var(--lip);
+}
+#boss-slot .bar span {
+  display: block;
+  line-height: 13px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+#boss-slot .bar div {
+  height: 7px;
+  margin-top: 2px;
+}
+/* World tags: a glyph by kind (a star on a key target, a no-strike sign on a civilian). */
+.world-label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.world-label svg {
+  width: 14px;
+  height: 14px;
+  stroke-width: 2.6;
+}
+.world-label[data-kind="key"] svg {
+  fill: currentColor;
+}
+.world-label[data-kind="civilian"] {
+  background: rgba(20, 70, 140, 0.92);
+  border-color: #7fd8ff;
+  color: #dff6ff;
+}
+/* Edge markers: chevrons on the free play rect's border, pulsing faster the closer the threat. */
+#edge-markers {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+}
+.edge-marker {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 76px;
+  height: 42px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  visibility: hidden;
+  color: #ff4b2b;
+  filter: drop-shadow(0 2px 2px rgba(0, 0, 0, 0.55));
+  animation: edge-pulse 0.9s ease-in-out infinite;
+}
+.edge-marker[data-kind="launch"],
+.edge-marker[data-kind="boss"],
+.edge-marker[data-kind="key"] {
+  color: var(--gold);
+}
+.edge-marker[data-pulse="near"] {
+  animation-duration: 0.45s;
+}
+.edge-marker[data-pulse="far"] {
+  animation-duration: 1.6s;
+}
+.edge-marker svg {
+  width: 24px;
+  height: 24px;
+  stroke-width: 3.5;
+}
+.edge-marker span {
+  max-width: 76px;
+  padding: 0 6px;
+  border-radius: 99px;
+  background: rgba(11, 22, 40, 0.9);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 16px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+@keyframes edge-pulse {
+  50% {
+    opacity: 0.5;
+  }
+}
+/* The city map's button and the intel chip: phones only. */
+.map-toggle,
+.intel-next {
+  display: none;
+}
+.map-toggle {
+  position: absolute;
+  top: calc(var(--top-h) + 6px);
+  left: 8px;
+  background: var(--panel);
+  border: 2px solid var(--line);
+  box-shadow: var(--lip);
+}
+.map-toggle[aria-expanded="true"] {
+  background: var(--gold);
+  color: var(--ink);
+}
+.ping-dot {
+  position: absolute;
+  top: 5px;
+  right: 5px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--ember);
+  animation: ping 1s ease-out infinite;
+}
+@keyframes ping {
+  0% {
+    box-shadow: 0 0 0 0 rgba(255, 75, 43, 0.7);
+  }
+  70% {
+    box-shadow: 0 0 0 8px rgba(255, 75, 43, 0);
+  }
+}
+.intel-next {
+  position: absolute;
+  top: calc(var(--top-h) + 6px);
+  left: 60px;
+  align-items: center;
+  gap: 7px;
+  height: 44px;
+  max-width: calc(100vw - 76px);
+  padding: 0 14px;
+  border-radius: 99px;
+  background: var(--panel);
+  border: 2px solid rgba(255, 198, 43, 0.45);
+  box-shadow: var(--lip);
+  color: var(--gold);
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.intel-next svg {
+  width: 16px;
+  height: 16px;
+}
+.intel-next span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-variant-numeric: tabular-nums;
+}
+.intel-next.soon {
+  border-color: var(--gold);
+}
+.intel-next.hot {
+  background: var(--ember);
+  border-color: #ffd0c4;
+  color: #fff;
+}
+/* Flight cards fold into one row when the whole flight carries one payload kind. */
+#flight-cards.one-kind .flight-card {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+#flight-cards.one-kind .chips,
+#flight-cards.one-kind .flight-card small {
+  margin-top: 0;
+}
+/* A decided mission hides Release (its turning count means nothing any more). */
+#flight-panel.decided #drop {
+  visibility: hidden;
+}
+html[data-touch="true"] .ladder-hint {
+  display: none;
+}
+/* The banner lane, a third of the way down: multi-kills, checkpoints and (later) medals. */
+#combo-bonus:empty {
+  display: none;
+}
+#combo.checkpoint #combo-count {
+  padding: 10px 26px;
+  border: 3px solid #fff;
+  border-radius: 99px;
+  background: var(--gold);
+  color: var(--ink);
+  box-shadow: var(--lip);
+  font-size: 28px;
+  white-space: nowrap;
+  -webkit-text-stroke: 0;
+  text-shadow: none;
+}
+#combo.checkpoint.visible {
+  animation: banner-hold 2.6s ease-out forwards;
+}
+@keyframes banner-hold {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.7);
+  }
+  10% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1.06);
+  }
+  18% {
+    transform: translate(-50%, -50%) scale(1);
+  }
+  85% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(1);
+  }
+}
+/* The browser's full-screen button (shared helper) dressed as a secondary button, 6.9:1 text. */
+dialog [data-mobile-display][data-mobile-display] {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 48px;
+  margin: 12px 0 0;
+  padding: 0 18px;
+  border: 0;
+  border-radius: 12px;
+  background: #1b5aa6;
+  color: #fff;
+  box-shadow: 0 4px 0 #0f3a70;
+  font-size: 15px;
+  font-weight: 700;
+}
+#leave-dialog {
+  width: min(460px, calc(100% - 24px));
+}
+
+/* Phones, both orientations: the mission card folds into the top bar's objective line (a tap
+   opens it), the map and the intel strip collapse to buttons, the shield ring replaces the
+   shield panel. */
+@media (max-width: 700px), (orientation: landscape) and (max-height: 520px) {
+  .objective-line {
+    display: flex;
+  }
+  .mission-hud {
+    display: none;
+  }
+  #app.brief-open .mission-hud {
+    display: block;
+    position: absolute;
+    top: calc(var(--top-h) + 6px + var(--slot));
+    left: 8px;
+    width: min(320px, calc(100vw - 16px));
+    padding: 10px 12px;
+    z-index: 2;
+  }
+  .map-toggle,
+  .intel-next {
+    display: inline-flex;
+  }
+  #radar {
+    display: none;
+  }
+  #app.map-open #radar {
+    display: block;
+    top: calc(var(--top-h) + 56px);
+    left: 8px;
+    right: auto;
+    bottom: auto;
+    z-index: 2;
+  }
+  #intel {
+    display: none;
+  }
+  #app.intel-open #intel {
+    display: flex;
+    top: calc(var(--top-h) + 56px);
+    left: 8px;
+    right: auto;
+    max-width: calc(100vw - 16px);
+    transform: none;
+    flex-direction: column;
+    align-items: flex-start;
+    z-index: 2;
+  }
+  #app.intel-open .intel-chip {
+    display: flex;
+  }
+  #shield-hud {
+    display: none;
+  }
+  .score {
+    margin-right: 0;
+  }
+}
+@media (max-width: 700px) {
+  :root {
+    --top-h: 52px;
+  }
+}
+/* Portrait phones: one top-bar row (objective line, tide chip, score, pause: the pause button
+   opens Mission control, which also holds sound); toasts under the top bar, two lines at most. */
+@media (max-width: 700px) and (orientation: portrait) {
+  .topbar {
+    padding: 0 8px;
+    gap: 6px;
+  }
+  .brand,
+  #sound,
+  #settings {
+    display: none;
+  }
+  .tide-chip {
+    margin-right: 0;
+    padding: 0 9px 0 7px;
+  }
+  .score {
+    padding: 4px 8px;
+  }
+  #toast {
+    top: calc(var(--top-h) + 6px + var(--slot));
+    width: max-content;
+    max-width: calc(100vw - 32px);
+    padding: 7px 16px;
+    border-radius: 16px;
+    white-space: normal;
+    text-align: center;
+    line-height: 1.25;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    overflow: hidden;
+    z-index: 2;
+  }
+  body[data-chapter="0"] #toast {
+    top: calc(var(--top-h) + 56px);
+  }
+}
+/* Landscape phones: the objective line beside the brand mark; panels start under the top bar;
+   toasts in the left column under the map button and intel chip. */
+@media (orientation: landscape) and (max-height: 520px) {
+  :root {
+    --top-h: 48px;
+  }
+  .topbar {
+    padding: 0 10px;
+    gap: 10px;
+  }
+  .brand strong {
+    display: none;
+  }
+  .brand-mark {
+    width: 32px;
+    height: 32px;
+  }
+  .intel-next {
+    max-width: min(220px, calc(29vw - 70px));
+  }
+  #toast {
+    left: 8px;
+    top: calc(var(--top-h) + 56px + var(--slot));
+    transform: translate(0, -10px);
+    width: max-content;
+    max-width: calc(50vw - 160px);
+    padding: 6px 14px;
+    border-radius: 14px;
+    font-size: 13px;
+    white-space: normal;
+    line-height: 1.25;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    overflow: hidden;
+    z-index: 2;
+  }
+  #toast.visible {
+    transform: none;
+  }
+  #combo {
+    max-width: 280px;
+  }
+  #combo-count {
+    font-size: 26px;
+  }
+  #combo.checkpoint #combo-count {
+    font-size: 20px;
+    padding: 8px 18px;
+  }
 }

@@ -617,8 +617,11 @@ export async function checkRescue(page, browser, url, check, errors) {
       view.render(0);
     });
     const layout = await touch.evaluate(() => {
-      const selectors = ["#move-stick", "#fire-stick", "#shield-hud", ".weapon-bar", "#rescue-actions", "#rescue-hud", ".mission-hud"];
-      const rects = selectors.map((s) => document.querySelector(s).getBoundingClientRect());
+      // Phones fold the mission card into the top bar and the shield panel into the ring round
+      // Lantern (5.1 H1): those two are checked where they are shown.
+      const required = [".topbar", "#move-stick", "#fire-stick", ".weapon-bar", "#rescue-actions", "#rescue-hud"].map((s) => document.querySelector(s).getBoundingClientRect());
+      const optional = ["#shield-hud", ".mission-hud"].map((s) => document.querySelector(s).getBoundingClientRect()).filter((r) => r.width > 0);
+      const rects = [...required, ...optional];
       return (
         rects.every((a) => a.width > 0 && a.left >= 0 && a.right <= innerWidth && a.top >= 0 && a.bottom <= innerHeight) &&
         rects.every((a, i) => rects.every((b, j) => i === j || !(a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top)))

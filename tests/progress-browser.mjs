@@ -27,7 +27,12 @@ export async function checkProgress(browser, url, check) {
     // ---- the surge clock
     let op = enter(0);
     r.windowMatchesTheRule = op.surge === 270;
-    r.hudShowsTheClock = (ui.updateHUD(true), !$("surge-chip").hidden && $("surge-chip").textContent === "SURGE 4:30");
+    // The tide chip is rendered in the top bar, not merely un-hidden (5.1 H1; hud-browser checks every width).
+    ui.updateHUD(true);
+    const chip = $("tide-chip").getBoundingClientRect();
+    r.hudShowsTheClock =
+      getComputedStyle($("tide-chip")).display !== "none" && chip.width > 0 && chip.bottom <= innerHeight && $("tide-text").textContent === "SURGE 4:30" && parseFloat(getComputedStyle($("tide-text")).fontSize) >= 13;
+    r.tideStartsGold = !$("tide-chip").classList.contains("warn") && !$("tide-chip").classList.contains("urgent");
     g.difficulty = "easy";
     op = enter(0);
     const easy = op.surge;
@@ -37,12 +42,16 @@ export async function checkProgress(browser, url, check) {
     g.difficulty = "normal";
     op = enter(0);
     g.hurtPlayer = () => {};
-    run(op.surge - 61);
+    run(op.surge - 119);
+    ui.updateHUD(true);
+    r.tideTurnsOrangeAtTwoMinutes = $("tide-chip").classList.contains("warn") && !$("tide-chip").classList.contains("urgent");
+    r.tideBarFollowsTheWindow = $("tide-fill").style.transform === `scaleX(${Math.floor((1 - 119 / op.surge) * 100) / 100})`;
+    run(58);
     const notYet = g.status === "playing" && op.surgeWarned === 0;
     run(2);
     r.warnsAtSixtySeconds = notYet && op.surgeWarned === 1;
     ui.updateHUD(true);
-    r.clockTurnsUrgent = $("surge-chip").classList.contains("urgent");
+    r.clockTurnsUrgent = $("tide-chip").classList.contains("urgent") && !$("tide-chip").classList.contains("warn");
     run(60);
     r.closedWindowLosesTheMission = g.status === "failed" && g.reason === "surge";
     delete g.hurtPlayer;
@@ -51,7 +60,7 @@ export async function checkProgress(browser, url, check) {
     r.harbourHasALongerWindow = op.surge > 480;
     enter(9);
     ui.updateHUD(true);
-    r.canalHasNoClock = $("surge-chip").hidden;
+    r.canalHasNoClock = $("tide-chip").hidden;
 
     // ---- requisition: points from stars, purchases, and what they do
     ui.save.records = { 0: { score: 1, stars: 3 }, 1: { score: 1, stars: 3 }, 2: { score: 1, stars: 3 }, 9: { score: 1, stars: 2 }, 15: { score: 1, stars: 3 } };

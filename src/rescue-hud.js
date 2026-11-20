@@ -6,6 +6,13 @@ export class RescueHUD {
     this.game = game;
     this.canvas = document.getElementById("rescue-map");
     this.context = this.canvas.getContext("2d");
+    // Soldier numbers are drawn at 11 CSS px (5.1 H1): the font scales with the canvas-to-CSS
+    // ratio, measured once per resize, never per frame.
+    this.digitFont = "bold 11px Arial";
+    new ResizeObserver(([entry]) => {
+      const width = entry.contentRect.width;
+      if (width > 0) this.digitFont = `bold ${Math.ceil((11 * this.canvas.width) / width)}px Arial`;
+    }).observe(this.canvas);
     this.canvas.addEventListener("pointerdown", (event) => {
       if (game.chapter !== 2 || game.paused) return;
       const r = this.canvas.getBoundingClientRect();
@@ -112,9 +119,12 @@ export class RescueHUD {
     c.setLineDash([]);
     for (const e of g.entities) {
       if (!isHostileEntity(e) || e.position.distanceTo(g.player.position) > 48) continue;
+      // Hostiles are dots, as on the city map (5.1 H1: marks differ by shape, not only colour).
       const p = this.mapPoint(e.position);
       c.fillStyle = "#ff8a74";
-      c.fillRect(p.x - 1.5, p.y - 1.5, 3, 3);
+      c.beginPath();
+      c.arc(p.x, p.y, 2, 0, Math.PI * 2);
+      c.fill();
     }
     r.soldiers.forEach((s, i) => {
       const p = this.mapPoint(s.position);
@@ -128,7 +138,7 @@ export class RescueHUD {
         c.arc(p.x, p.y, 7, 0, Math.PI * 2);
         c.stroke();
       }
-      c.font = "bold 9px Arial";
+      c.font = this.digitFont;
       c.fillStyle = "#eff9e6";
       c.fillText(String(i + 1), p.x + 7, p.y + 3);
     });

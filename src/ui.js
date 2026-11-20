@@ -46,6 +46,10 @@ import {
   ArrowLeftRight,
   Map as MapIcon,
   Zap,
+  Waves,
+  Ban,
+  LogOut,
+  createElement,
 } from "lucide";
 import { CHAPTERS, MISSIONS, missionNumber, chapterSize, saveResult, migrateSave } from "./data.js";
 import { BOMBS, BOMB_ORDER, FLIGHT, STRIKE_MISSIONS, isPattern } from "./strike-data.js";
@@ -57,6 +61,7 @@ import { RescueHUD } from "./rescue-hud.js";
 import { isHostileEntity } from "./rescue-data.js";
 import { saveGovernor } from "./quality.js";
 import { UPGRADES, available, buy, level, nextCost, sanitize } from "./requisition.js";
+import { EdgeMarkers, freeRectOf, outside } from "./edge-markers.js";
 
 const iconSet = {
   Crosshair,
@@ -105,6 +110,9 @@ const iconSet = {
   ArrowLeftRight,
   Map: MapIcon,
   Zap,
+  Waves,
+  Ban,
+  LogOut,
 };
 const BOMB_ICON = {
   drill: "drill",
@@ -118,6 +126,18 @@ const BOMB_ICON = {
   box: "grid-2x2",
 };
 const $ = (id) => document.getElementById(id);
+// World tags carry a glyph by what they mark, not only a colour (5.1 H1): a key target a star, a
+// civilian a no-strike sign, a hostile none. Their leading text symbol gives way to the glyph.
+const TAG_GLYPH = { key: Star, civilian: Ban };
+// Boss and objective tags are never hidden: they are kept inside the free play rect.
+const PINNED_TAGS = new Set(["boss", "gates", "station"]);
+// City map marks by shape (5.1 H1): key targets a diamond, civilians a hollow ring, hostiles a dot.
+const KEY_MARKS = new Set(["key", "officer", "mast"]);
+// m:ss for the intel chip and the tide chip.
+const clock = (seconds) => {
+  const s = Math.max(0, Math.ceil(seconds));
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+};
 const SAVE_KEY = "tidelock-v4";
 // Older saves number missions before the harbour (v2) or canal (v3) missions were inserted.
 const LEGACY_KEYS = [
@@ -253,6 +273,71 @@ function lineMarkup(line) {
   return `${portrait(line.who)}<div><b>${escape(cast.name)}</b><small>${escape(cast.role)}</small><p>${escape(line.text)}</p></div>`;
 }
 
+// The callout lanes (5.1 H1): the banner lane across the middle (multi-kills, checkpoints, later
+// medals), the toast lane under the top bar and the hint lane above the controls. One message
+// per lane: a new one replaces the last and resets the lane's classes. The same toast within 3 s
+// merges into one with a count ('GLANCING HIT x3'). Timers run on game time, so a pause holds
+// every message.
+const MERGE_WINDOW = 3;
+export class Callouts {
+  constructor(game) {
+    this.game = game;
+    this.toastLane = { el: $("toast"), text: "", count: 0, at: -Infinity, until: -Infinity };
+    this.bannerLane = { el: $("combo"), until: -Infinity };
+    this.hintLane = { el: $("coach"), text: "", go: false };
+  }
+
+  toast(text, hold = 2.1) {
+    const lane = this.toastLane,
+      now = this.game.time;
+    if (text === lane.text && now - lane.at < MERGE_WINDOW) lane.count++;
+    else {
+      lane.text = text;
+      lane.count = 1;
+    }
+    lane.at = now;
+    lane.until = now + hold;
+    lane.el.textContent = lane.count > 1 ? `${text} x${lane.count}` : text;
+    lane.el.className = "visible";
+  }
+
+  banner(main, sub, kind, hold) {
+    const lane = this.bannerLane;
+    $("combo-count").textContent = main;
+    $("combo-bonus").textContent = sub;
+    // Restart the entrance animation for every message.
+    lane.el.className = "";
+    void lane.el.offsetWidth;
+    lane.el.className = `visible ${kind}`;
+    lane.until = this.game.time + hold;
+  }
+
+  // The hint lane holds a coach line while it applies: no timer.
+  hint(text, go = false) {
+    const lane = this.hintLane;
+    if (text === lane.text && go === lane.go) return;
+    lane.text = text;
+    lane.go = go;
+    lane.el.textContent = text;
+    lane.el.hidden = !text;
+    lane.el.className = go ? "go" : "";
+  }
+
+  update() {
+    const now = this.game.time;
+    if (now > this.toastLane.until) setClass(this.toastLane.el, "visible", false);
+    if (now > this.bannerLane.until) setClass(this.bannerLane.el, "visible", false);
+  }
+
+  clear() {
+    Object.assign(this.toastLane, { text: "", count: 0, at: -Infinity, until: -Infinity });
+    this.bannerLane.until = -Infinity;
+    if (this.toastLane.el.className) this.toastLane.el.className = "";
+    if (this.bannerLane.el.className) this.bannerLane.el.className = "";
+    this.hint("");
+  }
+}
+
 export class UI {
   constructor(game, view, save) {
     this.game = game;
@@ -267,9 +352,17 @@ export class UI {
     this.fireStick = null;
     this.padResets = [];
     this.lastHUD = -1;
-    this.toastTime = 0;
-    this.comboTime = 0;
     this.labels = new Map();
+    this.seenLabels = new Set();
+    this.lastLabels = [];
+    this.screenPoint = { x: 0, y: 0, visible: false };
+    this.callouts = new Callouts(game);
+    this.edge = new EdgeMarkers($("edge-markers"));
+    // The viewport minus the HUD panels (5.1 H1), recomputed when the layout changes.
+    this.hudRects = [];
+    this.freeRect = null;
+    // Phone layouts collapse the city map and the intel strip to buttons (5.1 H1).
+    this.phoneLayout = matchMedia("(max-width: 700px), (orientation: landscape) and (max-height: 520px)");
     this.dialog = $("menu-dialog");
     this.brief = $("brief-dialog");
     this.game.difficulty = save.difficulty || DEFAULT_DIFFICULTY;
@@ -318,7 +411,7 @@ window.addEventListener('mobile-game-interruption', () => this.touches.clear());
     refreshIcons();
     this.badgeOverlays = [
       ...document.querySelectorAll(
-        ".topbar, .mission-hud, #comms, #shield-hud, #powerup, .joystick, .weapon-bar, #rescue-hud, #rescue-actions, #flight-panel, #ladder, #convoy-hud, #intel",
+        ".topbar, #boss-slot, .mission-hud, #comms, #shield-hud, #powerup, .joystick, .weapon-bar, #rescue-hud, #rescue-actions, #flight-panel, #ladder, #convoy-hud, #intel, #intel-next, #map-toggle, #radar",
       ),
     ];
     this.overlayObserver = new ResizeObserver(() => this.updateBadgeBounds());
@@ -341,14 +434,16 @@ window.addEventListener('mobile-game-interruption', () => this.touches.clear());
     document.documentElement.dataset.touch = value;
     this.touch = Boolean(on);
     this.clearInput();
-    this.coachKey = null;
+    this.ladderKey = null;
     if (this.brief?.open) $("brief-controls").innerHTML = this.controlHints(this.game.chapter);
     if (this.badgeOverlays) requestAnimationFrame(() => this.updateBadgeBounds());
   }
 
   updateBadgeBounds() {
     const rects = this.badgeOverlays.map((node) => node.getBoundingClientRect());
-    this.view.badgeKeepouts = rects.filter((rect) => rect.width > 0 && rect.height > 0);
+    this.view.badgeKeepouts = this.hudRects = rects.filter((rect) => rect.width > 0 && rect.height > 0);
+    // The free play rect: world tags are kept out of the panels and edge markers ride its border.
+    this.freeRect = freeRectOf(this.hudRects, innerWidth, innerHeight, this.freeRect || undefined);
     // Floating strike callouts (coach, flak) sit just above the flight panel or the stick.
     const style = document.documentElement.style;
     const clear = (id) => {
@@ -458,9 +553,26 @@ window.addEventListener('mobile-game-interruption', () => this.touches.clear());
       e.preventDefault();
       this.closePrologue();
     });
+    // A chapter tab clicked mid-mission asks first (5.1 H1).
     document.querySelectorAll("[data-chapter]").forEach((button) => {
-      button.onclick = () => this.start(MISSIONS.findIndex((m) => m.chapter === +button.dataset.chapter));
+      button.onclick = () => this.askChapter(+button.dataset.chapter);
     });
+    const leave = $("leave-dialog");
+    $("leave-stay").onclick = () => this.stay();
+    $("leave-go").onclick = () => this.start(this.leaveTo);
+    leave.addEventListener("cancel", (e) => {
+      e.preventDefault();
+      this.stay();
+    });
+    // Phone layouts: the objective line opens the mission card, the map button the city map, the
+    // intel chip the whole timeline.
+    $("objective-line").onclick = () => this.toggle("brief-open", $("objective-line"));
+    $("map-toggle").onclick = () => {
+      this.toggle("map-open", $("map-toggle"));
+      this.pinged = false;
+      setHidden($("map-ping"), true);
+    };
+    $("intel-next").onclick = () => this.toggle("intel-open", $("intel-next"));
     $("sound").onclick = () => {
       this.game.audio.unlock();
       this.save.muted = !this.save.muted;
@@ -717,12 +829,29 @@ window.addEventListener('mobile-game-interruption', () => {
       c.arc(x, y, 5, 0, Math.PI * 2);
       c.stroke();
     }
-    const colors = { enemy: "#ff4b2b", officer: "#ffc62b", flak: "#ff3b3b", mast: "#ff8a2b", truck: "#ff4b2b", ship: "#ff4b2b", civilian: "#7fd8ff" };
+    const colors = { enemy: "#ff4b2b", officer: "#ffc62b", flak: "#ff3b3b", mast: "#ff8a2b", truck: "#ff4b2b", ship: "#ff4b2b", key: "#ff4b2b", civilian: "#7fd8ff" };
     for (const t of op.radar.targets) {
       const [x, y] = at(t.x, t.z);
-      c.fillStyle = colors[t.kind] || "#ff4b2b";
-      const size = t.kind === "enemy" || t.kind === "officer" ? 2.2 : 3.2;
-      c.fillRect(x - size, y - size, size * 2, size * 2);
+      const color = colors[t.kind] || "#ff4b2b";
+      c.beginPath();
+      if (t.kind === "civilian") {
+        // Civilians: a hollow ring.
+        c.strokeStyle = color;
+        c.lineWidth = 1.5;
+        c.arc(x, y, 3.2, 0, Math.PI * 2);
+        c.stroke();
+        continue;
+      }
+      c.fillStyle = color;
+      if (KEY_MARKS.has(t.kind)) {
+        // Key targets: a diamond.
+        c.moveTo(x, y - 4.5);
+        c.lineTo(x + 4.5, y);
+        c.lineTo(x, y + 4.5);
+        c.lineTo(x - 4.5, y);
+        c.closePath();
+      } else c.arc(x, y, t.kind === "enemy" ? 2.2 : 3, 0, Math.PI * 2);
+      c.fill();
     }
     if (op.radar.pipper) {
       const [x, y] = at(op.radar.pipper.x, op.radar.pipper.z);
@@ -762,7 +891,33 @@ window.addEventListener('mobile-game-interruption', () => {
   }
 
   anyDialog() {
-    return [this.dialog, this.brief, $("result-dialog"), $("prologue-dialog")].some((d) => d.open);
+    return [this.dialog, this.brief, $("result-dialog"), $("prologue-dialog"), $("leave-dialog")].some((d) => d.open);
+  }
+
+  // Opens or closes one of the phone HUD's collapsed panels (a class on #app) from its button.
+  toggle(name, button, on = !$("app").classList.contains(name)) {
+    setClass($("app"), name, on);
+    button.setAttribute("aria-expanded", String(on));
+    if (name === "map-open" && on && this.game.chapter === 0) this.drawRadar(this.game.op.snapshot());
+  }
+
+  askChapter(chapter) {
+    const index = MISSIONS.findIndex((m) => m.chapter === chapter);
+    if (this.game.status !== "playing" || this.anyDialog()) return this.start(index);
+    this.leaveTo = index;
+    this.game.paused = true;
+    this.clearInput();
+    // The dialog hands focus back to what had it on close: never the tab (Enter would ask again).
+    document.activeElement?.blur();
+    $("leave-text").textContent = `${this.game.mission.name} is still under way. Chapter 0${chapter + 1}, ${CHAPTERS[chapter].name}, starts from its first mission.`;
+    $("leave-dialog").showModal();
+    $("leave-stay").focus();
+  }
+
+  stay() {
+    $("leave-dialog").close();
+    this.clearInput();
+    this.game.paused = false;
   }
 
   keydown(e) {
@@ -1028,7 +1183,7 @@ window.addEventListener('mobile-game-interruption', () => {
         ["TAP", "Mark the drop: the flight flies there and drops"],
         ["RELEASE", "Drop now"],
         flight && ["SALVO", "Every aircraft at once"],
-        drill && ["LADDER", "Tap a floor for the Drill"],
+        drill && ["ARROWS", "Raise or lower the Drill floor"],
         pattern && ["ARROWS", "Turn the pattern"],
       ],
       [
@@ -1129,6 +1284,7 @@ window.addEventListener('mobile-game-interruption', () => {
 
   start(index) {
     this.dialog.close();
+    $("leave-dialog").close();
     $("result-dialog").close();
     this.brief.close();
     this.clearInput();
@@ -1165,23 +1321,11 @@ window.addEventListener('mobile-game-interruption', () => {
 
   onEvent(type, data) {
     if (type === "start") this.onStart(data);
-    else if (type === "toast") {
-      $("toast").textContent = data;
-      $("toast").classList.add("visible");
-      this.toastTime = performance.now() + 2100;
-    } else if (type === "radio") this.radio(data);
-    else if (type === "combo") {
-      $("combo-count").textContent = `MULTI-KILL x${data.count}`;
-      $("combo-bonus").textContent = `+${data.bonus}`;
-      $("combo").classList.remove("visible");
-      void $("combo").offsetWidth;
-      $("combo").classList.add("visible");
-      this.comboTime = performance.now() + 1600;
-    } else if (type === "checkpoint") {
-      $("toast").textContent = data;
-      $("toast").classList.add("visible", "checkpoint");
-      this.toastTime = performance.now() + 2600;
-    } else if (type === "record") this.record(data);
+    else if (type === "toast") this.callouts.toast(data);
+    else if (type === "radio") this.radio(data);
+    else if (type === "combo") this.callouts.banner(`MULTI-KILL x${data.count}`, `+${data.bonus}`, "combo", 1.6);
+    else if (type === "checkpoint") this.callouts.banner(data, "", "checkpoint", 2.6);
+    else if (type === "record") this.record(data);
     else if (type === "result") this.showResult(data);
   }
 
@@ -1201,7 +1345,21 @@ window.addEventListener('mobile-game-interruption', () => {
     $("difficulty-chip").className = `mode-chip mode-${this.game.difficulty}`;
     this.showDifficulty();
     $("footer-mode").textContent = [`${story.place} / AIRBORNE`, `${story.place} / UPRIVER`, `${story.place} / EXTRACTION`][c];
-    $("flight-panel").hidden = $("ladder").hidden = $("intel").hidden = $("radar").hidden = c !== 0;
+    $("flight-panel").hidden = $("ladder").hidden = $("intel").hidden = $("radar").hidden = $("map-toggle").hidden = c !== 0;
+    // Collapsed phone panels start closed; the boss slot waits for a boss.
+    for (const [name, button] of [
+      ["brief-open", "objective-line"],
+      ["map-open", "map-toggle"],
+      ["intel-open", "intel-next"],
+    ])
+      this.toggle(name, $(button), false);
+    this.pinged = false;
+    this.pings = 0;
+    setHidden($("map-ping"), true);
+    setHidden($("intel-next"), true);
+    setHidden($("boss-slot"), true);
+    setClass($("app"), "boss-on", false);
+    this.tideElapsed = -1;
     if (c === 0) $("radar-title").textContent = `${STRIKE_MISSIONS[data.index].harbour ? "HARBOUR" : "CITY"} MAP / ${this.touch ? "TAP" : "CLICK"} TO MARK`;
     $("combat-controls").hidden = c === 0;
     $("shield-hud").hidden = c === 0;
@@ -1223,17 +1381,18 @@ window.addEventListener('mobile-game-interruption', () => {
     $("ladder").classList.toggle("pattern-mode", c === 0 && Boolean(this.game.op.fleet));
     this.patternKey = null;
     $("salvo").hidden = $("formation").hidden = flight.length < 2;
-    $("coach").hidden = true;
-    this.coachKey = null;
     // The shield panel names the chance that enemy fire reaching you does harm.
     const chance = this.game.hitChance > 0 ? `${percent(this.game.hitChance)} HIT` : "SAFE";
     $("shield-title").textContent = `${c === 1 ? "MARLIN" : "LANTERN"} SHIELDS / ${chance}`;
     $("comms").innerHTML = "";
-    for (const el of this.labels.values()) el.remove();
+    for (const tag of this.labels.values()) tag.el.remove();
     this.labels.clear();
+    this.lastLabels = [];
+    this.edge.clear();
     if (c === 0) this.buildFlightCards();
     this.weapon("gun");
-    $("toast").classList.remove("visible", "checkpoint");
+    // Every callout lane starts empty, the multi-kill banner included.
+    this.callouts.clear();
     $("flak-warning").hidden = true;
     $("flak-warning").classList.remove("calm", "break");
     // Flak locks are urgent alerts; the canal's steady banner is announced politely.
@@ -1274,6 +1433,8 @@ window.addEventListener('mobile-game-interruption', () => {
         return `<div class="flight-card" data-aircraft="${a.index}" style="--tone:${["#ffc62b", "#ff8a6b", "#33d69f"][a.index]}"><div class="card-head"><i data-lucide="plane"></i><b>${escape(a.callsign)}</b><span class="hp"></span></div><div class="chips">${chips}</div><small>${escape(cast.name)}</small></div>`;
       })
       .join("");
+    // One payload kind across the flight: each card folds into one row (5.1 H1).
+    setClass($("flight-cards"), "one-kind", keys.length === 1);
     refreshIcons();
   }
 
@@ -1287,6 +1448,8 @@ window.addEventListener('mobile-game-interruption', () => {
   showResult(result) {
     this.clearInput();
     this.game.paused = true;
+    // Lane timers run on game time, which the result holds: nothing may linger under the dialog.
+    this.callouts.clear();
     this.record(result);
     const story = MISSION_STORY[result.index];
     const finale = result.success && result.index === MISSIONS.length - 1;
@@ -1351,7 +1514,7 @@ window.addEventListener('mobile-game-interruption', () => {
     if (g.chapter === 0)
       return [
         [result.success, op.fleet ? `Sink ${op.fleet.needed()} boats, the key ships among them` : "Eliminate every target"],
-        [result.success && op.used <= op.layout.par, `Use ${op.layout.par} bombs or fewer (used ${op.used})`],
+        [result.success && op.used <= op.layout.par, `Use ${op.layout.par} bomb${op.layout.par === 1 ? "" : "s"} or fewer (used ${op.used})`],
         [result.success && !op.damaged, "Bring the whole flight home unscathed"],
       ];
     if (g.chapter === 1) {
@@ -1379,12 +1542,13 @@ window.addEventListener('mobile-game-interruption', () => {
 
   updateHUD(force = false) {
     if (!this.game.mission) return;
+    // Every frame: callout timers, a paused HUD holds its animations, the map's ping dot and the
+    // edge markers.
+    this.callouts.update();
+    setClass($("app"), "paused", this.game.paused);
+    if (this.game.chapter === 0) this.updatePing();
+    this.updateEdges();
     const now = performance.now();
-    if (now > this.toastTime) {
-      setClass($("toast"), "visible", false);
-      setClass($("toast"), "checkpoint", false);
-    }
-    if (now > this.comboTime) setClass($("combo"), "visible", false);
     if (!force && now - this.lastHUD < 80) return;
     this.lastHUD = now;
     const state = this.game.snapshot(),
@@ -1406,21 +1570,11 @@ window.addEventListener('mobile-game-interruption', () => {
       this.updateRounds(state.round);
     }
     if (chapter === 1) this.updateRiver(state, op);
-    const surge = $("surge-chip");
-    setHidden(surge, chapter !== 0 || op.surge === undefined);
-    if (!surge.hidden) {
-      const left = Math.ceil(op.surge);
-      setText(surge, `SURGE ${Math.floor(left / 60)}:${String(left % 60).padStart(2, "0")}`);
-      setClass(surge, "urgent", left <= 60);
-    }
+    this.updateTide(chapter === 0 ? op.surge : undefined);
     if (chapter === 2 && op.siege) {
       // The finale: the gates are the objective; the station and Marrow carry world labels.
-      setText($("objective-count"), `${Math.floor(op.siege.gate * 100)}%`);
-      setText($("objective-unit"), "GATES CLOSED");
-    } else if (chapter === 2) {
-      setText($("objective-count"), `${op.rescued} / ${op.total}`);
-      setText($("objective-unit"), "SOLDIERS ABOARD");
-    }
+      this.objective(`${Math.floor(op.siege.gate * 100)}%`, "GATES CLOSED");
+    } else if (chapter === 2) this.objective(`${op.rescued} / ${op.total}`, "SOLDIERS ABOARD");
     const bonuses = activeBonuses({ ...state, heli: op.help?.heli, ally: op.help?.ally });
     setHidden($("powerup"), chapter !== 1 || bonuses.length === 0);
     for (const kind of ["star", "gun", "heli", "ally"]) {
@@ -1431,15 +1585,90 @@ window.addEventListener('mobile-game-interruption', () => {
       setText(row.querySelector("strong"), `${bonus.remaining.toFixed(1)}s`);
       row.querySelector(".bonus-fill").style.transform = `scaleX(${Math.min(1, bonus.remaining / bonus.duration)})`;
     }
-    this.updateLabels(op.labels || []);
+    this.lastLabels = op.labels || [];
+    this.updateLabels(this.lastLabels);
     if (force) this.updateBadgeBounds();
     this.rescueHUD.update(state);
   }
 
+  // The objective count and unit, in the mission card and in the phones' objective line.
+  objective(count, unit) {
+    setText($("objective-count"), count);
+    setText($("objective-line-count"), count);
+    setText($("objective-unit"), unit);
+    setText($("objective-line-unit"), unit);
+  }
+
+  // The tide chip (5.1 H1): the surge window left, in the top bar at every width. Gold, orange
+  // from 120 s, red and pulsing from 60 s; the bar under the top bar fills as the window runs out
+  // and is written only when its whole percentage changes. Generic, so later clocks can use it.
+  updateTide(left) {
+    const chip = $("tide-chip"),
+      on = left !== undefined;
+    setHidden(chip, !on);
+    if (!on) return;
+    const seconds = Math.ceil(left);
+    setText($("tide-text"), `SURGE ${clock(seconds)}`);
+    setClass(chip, "urgent", seconds <= 60);
+    setClass(chip, "warn", seconds > 60 && seconds <= 120);
+    const elapsed = Math.floor((1 - left / this.game.op.surge) * 100);
+    if (elapsed !== this.tideElapsed) {
+      this.tideElapsed = elapsed;
+      $("tide-fill").style.transform = `scaleX(${elapsed / 100})`;
+    }
+  }
+
+  // The city map's ping (5.1 H1): a gathering going live or a new flak lock lights a dot on the
+  // collapsed map button, checked every frame, until the map is opened.
+  updatePing() {
+    const op = this.game.op;
+    let count = op.flakLocks?.length || 0;
+    for (const e of op.events) if (e.status?.active) count++;
+    if (count > this.pings && !$("app").classList.contains("map-open")) this.pinged = true;
+    this.pings = count;
+    setHidden($("map-ping"), !this.pinged);
+  }
+
+  // Whether a screen point lies outside the free play rect.
+  offFrame(point) {
+    const p = this.view.projectInto(this.screenPoint, point);
+    return p.visible && outside(this.freeRect, p.x, p.y);
+  }
+
+  // Edge markers (5.1 H1), every frame: what threatens from outside the free play rect. The canal's
+  // aiming guns and launchers above the frame; the valley's missiles, launch crews and drone pads,
+  // and Marrow; the harbour's key hulls. Nothing here allocates.
+  updateEdges() {
+    const g = this.game,
+      edge = this.edge,
+      free = this.freeRect;
+    edge.begin();
+    if (free && g.status === "playing") {
+      if (g.chapter === 1) {
+        for (const e of g.entities) {
+          if (!isHostileEntity(e)) continue;
+          const kind = e.type === "launcher" ? "launcher" : e.aim > 0 && e.target ? "gun" : null;
+          if (!kind) continue;
+          const p = this.view.projectInto(this.screenPoint, e.position);
+          if (p.visible && p.y < free.top) edge.track(e, e.position, kind);
+        }
+      } else if (g.chapter === 2) {
+        for (const shot of g.projectiles) if (shot.hostile && shot.missile && !shot.dead && this.offFrame(shot.position)) edge.track(shot, shot.position, "missile");
+        for (const label of this.lastLabels) {
+          if (label.id === "boss") {
+            if (this.offFrame(label)) edge.track(label.id, label, "boss");
+          } else if ((label.text.startsWith("LAUNCH") || label.text.startsWith("DRONES")) && this.offFrame(label)) edge.track(label.id, label, "launch", label.text);
+        }
+      } else for (const label of this.lastLabels) if (label.kind === "key" && this.offFrame(label)) edge.track(label.id, label, "key");
+    }
+    edge.end();
+    edge.update(this.view, free);
+  }
+
   updateStrike(op) {
-    this.drawRadar(op);
+    // A collapsed phone map is not drawn.
+    if (!this.phoneLayout.matches || $("app").classList.contains("map-open")) this.drawRadar(op);
     const left = op.left.enemies + op.left.aa + op.left.masts + op.left.trucks + (op.left.ships || 0);
-    setText($("objective-count"), String(left).padStart(2, "0"));
     const parts = [
       op.left.enemies && `${op.left.enemies} HOSTILES`,
       op.left.ships && `${op.left.ships} SHIPS`,
@@ -1447,7 +1676,7 @@ window.addEventListener('mobile-game-interruption', () => {
       op.left.masts && `${op.left.masts} JAMMER`,
       op.left.trucks && `${op.left.trucks} TRUCKS`,
     ].filter(Boolean);
-    setText($("objective-unit"), parts.join(" / ") || "TARGETS LEFT");
+    this.objective(String(left).padStart(2, "0"), parts.join(" / ") || "TARGETS LEFT");
     op.aircraft.forEach((a, i) => {
       const card = document.querySelector(`[data-aircraft="${i}"]`);
       if (!card) return;
@@ -1469,6 +1698,9 @@ window.addEventListener('mobile-game-interruption', () => {
     setText($("floor-kind"), mode === "angle" ? "ANGLE" : "DRILL");
     setText($("floor-value"), mode === "angle" ? `${pattern?.angle ?? 0}°` : mode === "floor" ? `F${op.floor}` : "–");
     setClass($("floor-control"), "angle", mode === "angle");
+    // Phones leave the angle to the pattern panel's buttons (5.1 H1); a decided mission hides Release.
+    setClass($("flight-panel"), "angle-dial", mode === "angle");
+    setClass($("flight-panel"), "decided", this.game.status !== "playing");
     $("floor-control").setAttribute("aria-label", mode === "angle" ? "Pattern angle" : "Drill detonation floor");
     $("floor-up").disabled = $("floor-down").disabled = !mode;
     setText($("formation-label"), op.wide ? "WIDE" : "TIGHT");
@@ -1503,6 +1735,18 @@ window.addEventListener('mobile-game-interruption', () => {
       setText(chip.querySelector("strong"), e.active ? (there ? `${e.present}/${e.alive} ${Math.ceil(e.remaining)}s` : "SCATTERED") : `${Math.ceil(e.next)}s`);
     });
     setHidden($("intel"), events.length === 0);
+    // Phones show one chip, the next event, and a tap opens the whole strip (5.1 H1).
+    const next = events[0];
+    setHidden($("intel-next"), !next);
+    if (next) {
+      const there = next.active && next.present > 0;
+      setText(
+        $("intel-next-text"),
+        next.active ? (there ? `${next.label} ON ${clock(next.remaining)} · ${next.present}/${next.alive}` : `${next.label} SCATTERED`) : `${next.label} ${clock(next.next)} · ${next.alive}`,
+      );
+      setClass($("intel-next"), "hot", there);
+      setClass($("intel-next"), "soon", !next.active && next.next < 8);
+    }
     const flak = op.flak || [];
     setHidden($("flak-warning"), flak.length === 0);
     if (flak.length) {
@@ -1519,24 +1763,19 @@ window.addEventListener('mobile-game-interruption', () => {
     }
     // Coach hints give way to a flak warning, which is the more urgent callout.
     const coach = flak.length || !op.hint ? "" : COACH[op.hint]?.[this.touch ? 1 : 0] || "";
-    if (coach !== this.coachKey) {
-      this.coachKey = coach;
-      setText($("coach"), coach);
-      setHidden($("coach"), !coach);
-      setClass($("coach"), "go", op.hint === "release" || op.hint === "lance");
-    }
+    this.callouts.hint(coach, op.hint === "release" || op.hint === "lance");
     if (op.harbour) return this.updatePattern(op);
     const ladder = op.ladder;
     setClass($("ladder"), "empty", !ladder);
     setText($("ladder-name"), ladder ? `${ladder.name}${ladder.kind === "shelter" ? " / NO STRIKE" : ""}` : "PIPPER ON OPEN GROUND");
     setClass($("ladder"), "shelter", ladder?.kind === "shelter" || op.shelter);
-    const ladderKey = ladder ? `${ladder.name}|${ladder.floors.length}` : "";
+    // On touch the floors are a read-out (too many for 44 px rows): the dial's arrows set the floor.
+    const ladderKey = ladder ? `${ladder.name}|${ladder.floors.length}|${this.touch}` : "";
     if (ladderKey !== this.ladderKey) {
       this.ladderKey = ladderKey;
+      const tag = this.touch ? "div" : "button";
       $("ladder-floors").innerHTML = ladder
-        ? ladder.floors
-            .map((f) => `<button data-floor="${f.f}" aria-label="Floor ${f.label}"><span>${f.label}</span><em></em></button>`)
-            .join("")
+        ? ladder.floors.map((f) => `<${tag} data-floor="${f.f}" aria-label="Floor ${f.label}"><span>${f.label}</span><em></em></${tag}>`).join("")
         : "";
     }
     if (ladder)
@@ -1648,8 +1887,7 @@ window.addEventListener('mobile-game-interruption', () => {
     setClass($("laser-weapon"), "overheated", w.overheated);
     setText($("strike-stock"), w.strikes);
     $("strike-action").disabled = w.strikes <= 0 || w.striking;
-    setText($("objective-count"), `${Math.max(0, Math.ceil(op.length - op.distance))}`);
-    setText($("objective-unit"), op.holding ? "CONVOY HOLDING" : "METRES TO GO");
+    this.objective(`${Math.max(0, Math.ceil(op.length - op.distance))}`, op.holding ? "CONVOY HOLDING" : "METRES TO GO");
     setHTML(
       $("barge-bars"),
       op.barges
@@ -1659,36 +1897,94 @@ window.addEventListener('mobile-game-interruption', () => {
         )
         .join(""),
     );
-    setHidden($("boss-bars"), !op.boss || op.boss.phase === "approach");
-    if (op.boss)
-      setHTML($("boss-bars"), [
+    // The Lock Gate's bars live in the boss slot under the top bar (5.1 H1).
+    const boss = Boolean(op.boss) && op.boss.phase !== "approach";
+    setHidden($("boss-slot"), !boss);
+    setClass($("app"), "boss-on", boss);
+    if (boss)
+      setHTML($("boss-slot"), [
         ...op.boss.towers.map((hp, i) => `<div class="bar hostile"><span>GATE TOWER ${i ? "EAST" : "WEST"}</span><div><i style="transform:scaleX(${hp.toFixed(3)})"></i></div></div>`),
         `<div class="bar hostile ${op.boss.shielded ? "shielded" : ""}"><span>GENERATOR${op.boss.shielded ? " / SHIELDED" : ""}</span><div><i style="transform:scaleX(${op.boss.generator.toFixed(3)})"></i></div></div>`,
       ].join(""));
   }
 
+  // World tags (5.1 H1): a glyph by kind; a tag under a HUD panel is hidden that tick, and boss
+  // and objective tags are kept inside the free play rect instead. Sizes are measured once per
+  // text change, all together, so a tick forces at most one layout.
   updateLabels(labels) {
-    const layer = $("world-labels");
-    const seen = new Set();
+    const layer = $("world-labels"),
+      seen = this.seenLabels,
+      free = this.freeRect;
+    seen.clear();
     for (const label of labels) {
       seen.add(label.id);
-      let el = this.labels.get(label.id);
-      if (!el) {
-        el = document.createElement("div");
+      let tag = this.labels.get(label.id);
+      if (!tag) {
+        const el = document.createElement("div");
         el.className = "world-label";
+        const text = document.createElement("span");
+        el.append(text);
         layer.append(el);
-        this.labels.set(label.id, el);
+        tag = { el, text, glyph: null, kind: null, raw: null, w: 0, h: 0, x: NaN, y: NaN, shown: true };
+        this.labels.set(label.id, tag);
       }
-      const p = this.view.project(label);
-      setText(el, label.text);
-      setClass(el, "hot", label.hot);
-      if ((el.dataset.kind || "") !== (label.kind || "")) el.dataset.kind = label.kind || "";
-      el.style.transform = `translate(${p.x}px, ${p.y}px) translate(-50%, -100%)`;
+      const kind = label.kind || "";
+      if (kind !== tag.kind) {
+        tag.kind = kind;
+        // A plain tag carries no data-kind at all (the attribute alone restyles a tag).
+        if (kind) tag.el.dataset.kind = kind;
+        else delete tag.el.dataset.kind;
+        tag.glyph?.remove();
+        tag.glyph = TAG_GLYPH[kind] ? createElement(TAG_GLYPH[kind]) : null;
+        if (tag.glyph) {
+          tag.glyph.classList.add("lucide", `lucide-${kind === "key" ? "star" : "ban"}`);
+          tag.el.prepend(tag.glyph);
+        }
+        tag.raw = null;
+      }
+      if (label.text !== tag.raw) {
+        tag.raw = label.text;
+        // The glyph replaces a leading star or dot.
+        setText(tag.text, tag.glyph ? label.text.replace(/^[★●] /, "") : label.text);
+        tag.w = -1;
+      }
+      setClass(tag.el, "hot", label.hot);
     }
-    for (const [id, el] of this.labels)
+    for (const [id, tag] of this.labels)
       if (!seen.has(id)) {
-        el.remove();
+        tag.el.remove();
         this.labels.delete(id);
+      } else if (tag.w < 0) {
+        tag.w = tag.el.offsetWidth;
+        tag.h = tag.el.offsetHeight;
       }
+    for (const label of labels) {
+      const tag = this.labels.get(label.id),
+        p = this.view.projectInto(this.screenPoint, label);
+      // The tag hangs centred over its point.
+      let x = p.x - tag.w / 2,
+        y = p.y - tag.h,
+        shown = p.visible;
+      if (free && (PINNED_TAGS.has(label.id) || label.kind === "key")) {
+        x = Math.min(Math.max(x, free.left), free.right - tag.w);
+        y = Math.min(Math.max(y, free.top), free.bottom - tag.h);
+      } else if (shown)
+        for (const r of this.hudRects)
+          if (x < r.right && x + tag.w > r.left && y < r.bottom && y + tag.h > r.top) {
+            shown = false;
+            break;
+          }
+      x = Math.round(x);
+      y = Math.round(y);
+      if (x !== tag.x || y !== tag.y) {
+        tag.x = x;
+        tag.y = y;
+        tag.el.style.transform = `translate(${x}px, ${y}px)`;
+      }
+      if (shown !== tag.shown) {
+        tag.shown = shown;
+        tag.el.style.visibility = shown ? "" : "hidden";
+      }
+    }
   }
 }

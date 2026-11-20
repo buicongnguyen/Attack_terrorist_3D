@@ -411,6 +411,33 @@ export async function checkStrike(page, check) {
     ui.updateHUD(true);
     out.fullFlightShowsFlightControls =
       !document.getElementById("floor-control").hidden && !document.getElementById("salvo").hidden && !document.getElementById("formation").hidden;
+
+    // 5.1 H1: on 1.1 the Reverse coach waits for a bomb that hit nothing; it never shows while
+    // the first bomb falls.
+    ui.start(0);
+    g.paused = false;
+    const first = g.op;
+    until(120 * 20, () => first.flight.phase === "pass");
+    // Fly the lane farthest from the mast so the bomb finds nothing.
+    const mastZ = first.masts[0].position.z;
+    first.flight.lane = Math.abs(first.lanes.min - mastZ) > Math.abs(first.lanes.max - mastZ) ? first.lanes.min : first.lanes.max;
+    for (let i = 0; i < 60; i++) g.update(1 / 120);
+    first.release();
+    const reverseLine = /Reverse|turns the flight round/;
+    let coachWhileFalling = false;
+    until(120 * 10, () => first.bombs.length === 0, () => {
+      ui.updateHUD(true);
+      if (!coach.hidden && reverseLine.test(coach.textContent)) coachWhileFalling = true;
+    });
+    ui.updateHUD(true);
+    out.reverseCoachWaitsForTheBombToLand = first.used === 1 && !coachWhileFalling;
+    out.reverseCoachFollowsABombThatHitNothing = first.lastBombKills === 0 && !coach.hidden && reverseLine.test(coach.textContent);
+    // The par-1 star line counts in the singular; a decided mission hides Release.
+    out.starLineSingular = first.layout.par === 1 && ui.criteria({ success: true, stars: 3 })[1][1].startsWith("Use 1 bomb or fewer");
+    for (const t of first.targets()) t.dead = true;
+    for (let i = 0; i < 240 && g.status === "playing"; i++) g.update(1 / 120);
+    ui.updateHUD(true);
+    out.releaseHiddenOnceDecided = g.status === "success" && getComputedStyle(document.getElementById("drop")).visibility === "hidden";
     return out;
   });
   for (const [name, value] of Object.entries(review)) check(`strike ${name}`, value === true);

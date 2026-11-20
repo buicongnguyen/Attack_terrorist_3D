@@ -367,18 +367,21 @@ export async function checkPerf(browser, url, check, { gpu = false } = {}) {
 
 // The share of a 390x844 phone screen (touch layout) under HUD panels, per mission: a 10 px grid,
 // and a point counts when it lies inside any painted HUD element (a background, a border, text,
-// an icon or a canvas), click-through or not. World tags are not panels.
-async function coverage(browser, url) {
+// an icon or a canvas), click-through or not. World tags and edge markers are not panels.
+// hud-browser.mjs gates five missions with it (5.1 H1).
+export async function coverage(browser, url, indexes = MISSIONS.map((_, i) => i)) {
   const page = await browser.newPage({ viewport: PHONE, isMobile: true, hasTouch: true });
   await page.goto(`${url}?qa=1`);
   await ready(page);
   const out = [];
-  for (const [index, mission] of MISSIONS.entries()) {
+  for (const index of indexes) {
+    const mission = MISSIONS[index];
     await page.evaluate(([enterSrc, index]) => eval(enterSrc)(index, 120), [`(${enter})`, index]);
     // Two real frames: the HUD lays out as in play.
     await page.evaluate(() => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done))));
     const share = await page.evaluate(() => {
-      const labels = document.getElementById("world-labels");
+      const labels = document.getElementById("world-labels"),
+        markers = document.getElementById("edge-markers");
       const shown = (el) => {
         for (let e = el; e && e !== document.body; e = e.parentElement) {
           const css = getComputedStyle(e);
@@ -394,7 +397,7 @@ async function coverage(browser, url) {
         [...el.childNodes].some((n) => n.nodeType === 3 && n.textContent.trim());
       const rects = [];
       for (const el of document.querySelectorAll("#app *")) {
-        if (labels.contains(el)) continue;
+        if (labels.contains(el) || markers.contains(el)) continue;
         const css = getComputedStyle(el);
         if (!painted(el, css) || !shown(el)) continue;
         for (const r of el.getClientRects()) if (r.width > 0 && r.height > 0) rects.push(r);
@@ -408,7 +411,7 @@ async function coverage(browser, url) {
         }
       return covered / total;
     });
-    out.push({ code: code(index), name: mission.name, share });
+    out.push({ index, code: code(index), name: mission.name, share });
   }
   await page.close();
   return out;

@@ -53,6 +53,15 @@ export async function checkMenus(browser, url, check) {
         document.querySelectorAll("dialog[open]").forEach((d) => d.close());
         ui.showResult({ success: true, score: 5000, stars: 3, index: 5, kills: 9, reason: null, accuracy: 70 });
       },
+      // 5.1 H1: a chapter tab clicked mid-mission asks before it leaves.
+      leave: () => {
+        const { ui, game } = __TIDELOCK__;
+        document.querySelectorAll("dialog[open]").forEach((d) => d.close());
+        ui.start(3);
+        document.querySelectorAll("dialog[open]").forEach((d) => d.close());
+        game.paused = false;
+        ui.askChapter(1);
+      },
       defeat: () => {
         const { ui } = __TIDELOCK__;
         document.querySelectorAll("dialog[open]").forEach((d) => d.close());
@@ -66,7 +75,7 @@ export async function checkMenus(browser, url, check) {
       await page
         .waitForFunction(() => [...document.querySelectorAll("dialog[open] img.emblem, dialog[open] .result-emblem img")].every((img) => img.hidden || img.complete), null, { timeout: 5000 })
         .catch(() => {});
-      const expected = { briefing: "brief-dialog", "mission control": "menu-dialog", victory: "result-dialog", finale: "result-dialog", "file found": "result-dialog", defeat: "result-dialog" }[name];
+      const expected = { briefing: "brief-dialog", "mission control": "menu-dialog", victory: "result-dialog", finale: "result-dialog", "file found": "result-dialog", leave: "leave-dialog", defeat: "result-dialog" }[name];
       const problems = await page.evaluate((expected) => {
         const out = [];
         const expectDialog = (d) => (d.id === expected ? [] : [`wrong dialog open: ${d.id}`]);
@@ -100,12 +109,50 @@ export async function checkMenus(browser, url, check) {
             break;
           }
         }
+        // The full-screen button (the shared helper's) reads at 4.5:1 or better (5.1 H1).
+        const luminance = (color) => {
+          const [r, g, b] = color.match(/[\d.]+/g).slice(0, 3).map((v) => {
+            const c = v / 255;
+            return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+          });
+          return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+        };
+        for (const b of dialog.querySelectorAll("[data-mobile-display]")) {
+          if (!visible(b)) continue;
+          const css = getComputedStyle(b),
+            [hi, lo] = [luminance(css.color), luminance(css.backgroundColor)].sort((x, y) => y - x);
+          const ratio = (hi + 0.05) / (lo + 0.05);
+          if (css.backgroundColor === "rgba(0, 0, 0, 0)" || ratio < 4.5) out.push(`full screen contrast ${ratio.toFixed(2)}:1`);
+        }
         // The medallions load (menu headings, briefing, victory).
         for (const img of dialog.querySelectorAll("img.emblem, .result-emblem img"))
           if (visible(img) && !(img.complete && img.naturalWidth > 0)) out.push("emblem did not load");
         return out;
       }, expected);
       check(`menus ${name} ${width}x${height}${problems.length ? ": " + problems.slice(0, 3).join("; ") : ""}`, problems.length === 0);
+    }
+    // A desktop chapter tab clicked mid-mission asks first; nothing changes until Leave (5.1 H1).
+    if (width > 900) {
+      await page.evaluate(() => {
+        const { ui, game } = __TIDELOCK__;
+        document.querySelectorAll("dialog[open]").forEach((d) => d.close());
+        ui.start(3);
+        document.querySelectorAll("dialog[open]").forEach((d) => d.close());
+        game.paused = false;
+      });
+      await page.click('[data-chapter="1"]');
+      const asked = await page.evaluate(() => ({ open: document.getElementById("leave-dialog").open, index: __TIDELOCK__.game.index, paused: __TIDELOCK__.game.paused }));
+      await page.click("#leave-stay");
+      const stayed = await page.evaluate(() => ({ open: document.getElementById("leave-dialog").open, index: __TIDELOCK__.game.index, paused: __TIDELOCK__.game.paused, tabFocused: Boolean(document.activeElement?.closest(".chapter-tab")) }));
+      // Escape stays too, and Enter afterwards does not ask again (focus left the tab).
+      await page.click('[data-chapter="1"]');
+      await page.keyboard.press("Escape");
+      await page.keyboard.press("Enter");
+      const escaped = await page.evaluate(() => ({ open: document.getElementById("leave-dialog").open, index: __TIDELOCK__.game.index }));
+      await page.click('[data-chapter="1"]');
+      await page.click("#leave-go");
+      const left = await page.evaluate(() => __TIDELOCK__.game.index);
+      check(`menus a chapter tab mid-mission asks, Stay keeps mission 1.4 and Leave starts 2.1 (${JSON.stringify({ asked, stayed, escaped, left })})`, asked.open && asked.index === 3 && asked.paused && !stayed.open && stayed.index === 3 && !stayed.paused && !stayed.tabFocused && !escaped.open && escaped.index === 3 && left === 9);
     }
     check(`menus page errors ${width}x${height}${errors.length ? ": " + errors[0].slice(0, 60) : ""}`, errors.length === 0);
     await page.close();
