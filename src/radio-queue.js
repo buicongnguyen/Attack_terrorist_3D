@@ -23,6 +23,8 @@ export const RADIO_PRIORITY = Object.freeze({
   stall: STORY,
   rage: STORY,
   bossDown: STORY,
+  quota: STORY,
+  lastRun: STORY,
   multi: CHATTER,
   aa: CHATTER,
   drums: CHATTER,

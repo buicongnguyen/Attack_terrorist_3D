@@ -146,8 +146,10 @@ export function playRow(play, spec) {
     gate: siege ? hundredths(siege.gate * 100) : null,
     flaresUsed: chapter === 2 ? op.flaresUsed : null,
     randomCalls: g.randomCalls,
-    standDown: null,
-    resupply: null,
+    // The harbour endgame (5.1 C1): when it began and how many boats stood down, and the LAST
+    // RUN resupply ({ at, sticks }); null elsewhere and when it never came.
+    standDown: chapter === 0 ? (op.fleet?.standDown ?? null) : null,
+    resupply: chapter === 0 ? op.resupply : null,
     launches: null,
     runsBroken: null,
     phase: null,

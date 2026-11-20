@@ -136,6 +136,8 @@ export class CityView {
     view.level.add(this.group);
     this.decor = new Map();
     this.props = new Map();
+    // Street lamp heads by street (z), for the lights coming back on (5.1 C1).
+    this.lamps = [];
     // Harbour missions stand quays, piers and a dry dock in open water instead of a paved district.
     if (layout.harbour) this.buildHarbour(layout.harbour);
     else this.buildGround();
@@ -582,7 +584,10 @@ export class CityView {
       }
     for (const x of lines.avenues)
       for (const z of lines.streets) {
-        if (!skip(x, z, 0.5)) this.prop("streetlight", V(x + 2.3, CITY.ground, z - 2.3), 0.85, Math.PI / 4);
+        if (skip(x, z, 0.5)) continue;
+        this.prop("streetlight", V(x + 2.3, CITY.ground, z - 2.3), 0.85, Math.PI / 4);
+        // The lamp hangs 0.95 m out on its arm, 3.7 m up (model units, scaled 0.85).
+        this.lamps.push({ street: z, x: x + 2.3 - 0.81 * Math.sin(Math.PI / 4), y: CITY.ground + 3.1, z: z - 2.3 - 0.81 * Math.cos(Math.PI / 4) });
       }
     for (const b of this.buildings) {
       if (!skip(b.x, b.z, 0.55))
@@ -590,6 +595,34 @@ export class CityView {
     }
     for (let x = e.minX + 3; x < e.maxX - 2; x += 7 + this.random() * 4)
       this.prop("street-tree", V(x, CITY.ground, e.maxZ - 1.2), 0.8, this.random() * 6);
+  }
+
+  // Light a street lamp (5.1 C1): its head glows for the rest of the mission. All the lit heads are
+  // one instanced mesh, made at the first and written only when a lamp lights (one draw, nothing
+  // per frame); view.clear() frees it with the level.
+  light(lamp) {
+    if (lamp.lit) return;
+    lamp.lit = true;
+    if (!this.lampHeads) {
+      this.lampHeads = new THREE.InstancedMesh(
+        new THREE.SphereGeometry(0.32, 10, 6),
+        new THREE.MeshBasicMaterial({ color: 0xffe08a, toneMapped: false }),
+        this.lamps.length,
+      );
+      this.lampHeads.count = 0;
+      this.lampHeads.frustumCulled = false;
+      this.lampHeads.userData.disposable = true;
+      this.group.add(this.lampHeads);
+    }
+    const heads = this.lampHeads;
+    heads.setMatrixAt(heads.count++, new THREE.Matrix4().makeTranslation(lamp.x, lamp.y, lamp.z));
+    heads.instanceMatrix.needsUpdate = true;
+  }
+
+  // The lamps along the `count` streets nearest z, nearest first along each street from x.
+  lampsNear(x, z, count = 3) {
+    const streets = [...new Set(this.lamps.map((l) => l.street))].sort((a, b) => Math.abs(a - z) - Math.abs(b - z)).slice(0, count);
+    return this.lamps.filter((l) => streets.includes(l.street)).sort((a, b) => Math.abs(a.x - x) - Math.abs(b.x - x));
   }
 
   showBand(building, f, color) {

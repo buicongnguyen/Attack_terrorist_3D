@@ -52,7 +52,7 @@ import {
   createElement,
 } from "lucide";
 import { CHAPTERS, MISSIONS, missionNumber, chapterSize, saveResult, migrateSave } from "./data.js";
-import { BOMBS, BOMB_ORDER, FLIGHT, STRIKE_MISSIONS, isPattern } from "./strike-data.js";
+import { BOMBS, BOMB_ORDER, FLIGHT, STRIKE_MISSIONS, armRally, isPattern } from "./strike-data.js";
 import { patternDiagram, ROTATION_STEP } from "./harbour-data.js";
 import {
   CAST,
@@ -789,7 +789,7 @@ window.addEventListener('mobile-game-interruption', () => this.touches.clear());
       e.preventDefault();
       this.game.audio.unlock();
       const point = this.radarToWorld(e.offsetX, e.offsetY);
-      if (point) this.strike.setAim(point);
+      if (point) this.strike.markAt(point);
     });
     // A second finger lifting must not stop the first one's fire.
     const release = (e) => {
@@ -845,11 +845,18 @@ window.addEventListener('mobile-game-interruption', () => {
     return kinds;
   }
 
+  // A click marks the first thing along the line of sight. A gathering's ring is drawn on its own
+  // floor, inside its building (5.1 C1): a click on the ring is taken at that floor's height, so it
+  // arms the drop on the gathering rather than marking the roof or the facade in front of it.
   markDrop(clientX, clientY) {
     const strike = this.strike;
     if (!strike) return;
+    for (const e of strike.events) {
+      const at = this.view.pickPlane(clientX, clientY, e.centre.y);
+      if (at && armRally([e], at, this.game.time)) return strike.markAt(at);
+    }
     const point = this.view.pickStrike(clientX, clientY, strike.buildings, strike.land ? 0.05 : 1);
-    if (point) strike.setAim(point);
+    if (point) strike.markAt(point);
   }
 
   // Minimap transform: world metres to canvas pixels, turned like the camera in portrait.
@@ -941,7 +948,7 @@ window.addEventListener('mobile-game-interruption', () => {
       c.arc(x, y, 5, 0, Math.PI * 2);
       c.stroke();
     }
-    const colors = { enemy: "#ff4b2b", officer: "#ffc62b", flak: "#ff3b3b", mast: "#ff8a2b", truck: "#ff4b2b", ship: "#ff4b2b", key: "#ff4b2b", civilian: "#7fd8ff" };
+    const colors = { enemy: "#ff4b2b", officer: "#ffc62b", flak: "#ff3b3b", mast: "#ff8a2b", truck: "#ff4b2b", ship: "#ff4b2b", key: "#ff4b2b", civilian: "#7fd8ff", down: "#8a96a8" };
     for (const t of op.radar.targets) {
       const [x, y] = at(t.x, t.z);
       const color = colors[t.kind] || "#ff4b2b";
@@ -1495,8 +1502,10 @@ window.addEventListener('mobile-game-interruption', () => {
     if (type === "start") this.onStart(data);
     else if (type === "toast") this.callouts.toast(data);
     else if (type === "radio") this.director.say(data.line, data.key);
+    // A combo that broke a gathering closes with its own banner (5.1 C1).
+    else if (type === "combo" && data.title) this.callouts.banner(data.title, data.bonus ? `x${data.count} +${data.bonus}` : "", "checkpoint", 2.6);
     else if (type === "combo") this.callouts.banner(`MULTI-KILL x${data.count}`, `+${data.bonus}`, "combo", 1.6);
-    else if (type === "checkpoint") this.callouts.banner(data, "", "checkpoint", 2.6);
+    else if (type === "checkpoint" || type === "banner") this.callouts.banner(data, "", "checkpoint", 2.6);
     else if (type === "pop") this.pops.add(data.x, data.y, data.z, data.text, data.tone);
     else if (type === "hurt") {
       // Every hit flashes again: the attribute comes off and a reflow restarts the fade.
@@ -1902,12 +1911,13 @@ window.addEventListener('mobile-game-interruption', () => {
     this.rescueHUD.update(state);
   }
 
-  // The objective count and unit, in the mission card and in the phones' objective line.
-  objective(count, unit) {
+  // The objective count and unit, in the mission card and in the phones' objective line (`line`
+  // when the phones need a shorter unit).
+  objective(count, unit, line = unit) {
     setText($("objective-count"), count);
     setText($("objective-line-count"), count);
     setText($("objective-unit"), unit);
-    setText($("objective-line-unit"), unit);
+    setText($("objective-line-unit"), line);
   }
 
   // The tide chip (5.1 H1): the surge window left, read as HIGH TIDE, in the top bar at every width. Gold, orange
@@ -1935,6 +1945,8 @@ window.addEventListener('mobile-game-interruption', () => {
     const op = this.game.op;
     let count = op.flakLocks?.length || 0;
     for (const e of op.events) if (e.status?.active) count++;
+    // The harbour endgame (5.1 C1) pings the map once: the key hulls are left.
+    if (op.fleet?.endgame) count++;
     if (count > this.pings && !$("app").classList.contains("map-open")) this.pinged = true;
     this.pings = count;
     setHidden($("map-ping"), !this.pinged);
@@ -1987,7 +1999,9 @@ window.addEventListener('mobile-game-interruption', () => {
       op.left.masts && `${op.left.masts} JAMMER`,
       op.left.trucks && `${op.left.trucks} TRUCKS`,
     ].filter(Boolean);
-    this.objective(String(left).padStart(2, "0"), parts.join(" / ") || "TARGETS LEFT");
+    // The harbour endgame names what is left to sink (5.1 C1); the phones' line only counts it.
+    const unit = op.objective || parts.join(" / ") || "TARGETS LEFT";
+    this.objective(String(left).padStart(2, "0"), unit, op.objective ? "KEY SHIPS" : unit);
     op.aircraft.forEach((a, i) => {
       const card = document.querySelector(`[data-aircraft="${i}"]`);
       if (!card) return;
@@ -2023,7 +2037,8 @@ window.addEventListener('mobile-game-interruption', () => {
     const any = op.aircraft.some((a) => a.alive && Object.values(a.payload).some((n) => n > 0));
     $("drop").disabled = !ready || !any;
     $("salvo").disabled = !ready || !any;
-    setText($("drop-label"), ready ? `Release ${BOMBS[op.selected]?.name || ""}` : `Turning ${Math.max(0, op.turn).toFixed(1)}s`);
+    // An armed drop (5.1 C1) says when it goes and who is expected.
+    setText($("drop-label"), op.armed || (ready ? `Release ${BOMBS[op.selected]?.name || ""}` : `Turning ${Math.max(0, op.turn).toFixed(1)}s`));
     // The most urgent first: gatherings on now, then the soonest. CSS shows as many as fit.
     const events = op.events.filter((e) => e.alive > 0).sort((a, b) => b.active - a.active || a.next - b.next);
     const intelKey = events.map((e) => e.label).join("|");

@@ -792,13 +792,24 @@ The feed held two lines and dropped the oldest, so 10 of 135 lines went unread, 
 
 Gameplay did not move: the 50 golden rows are identical apart from their new radio log.
 
+### Chapter 1 peaks (C1)
+
+| Part | Change |
+| --- | --- |
+| Armed drop | A click or tap on a gathering's ring (taken at the gathering's floor, through its roof), or within 3 m of it on the map, that has not convened (more than 2.5 s away) arms the drop on it instead of flying there at once. The flight keeps patrolling (no hover) until the convene time less the fall is 5 s away, then steers onto the mark; it releases when at least half the cell (one at least) is forecast within 2.2 m of the centre as the bombs land and no more are still walking in. An indoor gathering selects the Drill and sets its storey. The release button and the gathering's tag read 'ARMED · DROPS IN 0:04 · 4 OF 6 EXPECTED'. A second tap cancels ('ARM CANCELLED'); a member running for cover cancels it ('CELL SCATTERED'). The bomb that breaks a gathering closes its combo with a banner: on 1.6, 'THE MEETING IS BROKEN'. Only the player's click goes this way (`markAt`); the scripted pilots still call `setAim`. |
+| Harbour endgame | Once the quota is met with key hulls afloat, every other hostile boat stands down: it keeps its timetable, holds its fire, wears a grey STANDING DOWN tag, leaves the targets, the bomb assist, the ripples and the pattern's hit count, and if bombed anyway sinks for 0 points and no combo ('NOT A TARGET / SAVE YOUR BOMBS'). The objective reads 'QUOTA MET · SINK THE CHANNEL COLUMN (2 LEFT)' (1.8: the AA frigate; 1.9: the escort ring and Cinder); the key hulls get a pulsing gold ring, keep their flak, their star tags and edge chevrons, and the map pings once. Ines calls the quota. |
+| LAST RUN | Once a mission, on Easy and Normal (`mode.lastRun`), a flight that has spent its last bomb in the endgame gets a Stick per key hull afloat (two at most) on its lead aircraft, with a LAST RUN banner and Bram's line. Hard and Crazy get none. |
+| A jammer that falls | Every jammer mast topples 80 degrees round its base in 1.2 s with sparks, and the street lamps along the three nearest streets flick on, nearest first, and stay lit (one instanced mesh of lamp heads, no random draws). On 1.1 Echo's closing line is now "Jammer's down. Network's back. I can see you, Kestrel." |
+
+**Measured** (8 seeds, `npm run balance`): the harbour pilot now wins 1.7, 1.8 and 1.9 on Normal in 8/8 each (0/8, 0/8 and 8/8 before), with 10-11 bombs instead of running dry at 16-17. Only the six harbour pilot rows of the goldens moved; the record is in [VERIFICATION.md](VERIFICATION.md).
+
 ## 23. Controls
 
 | Action | Desktop | Touch |
 | --- | --- | --- |
 | Fly the formation in the safe airspace (across / along its line) | W S / A D | Left stick (portrait: the camera looks along the flight path) |
 | Turn the flight round | F | Reverse |
-| Mark the drop (the flight flies there and releases) | Click the city or the map; right click cancels | Tap the city |
+| Mark the drop (the flight flies there and releases); on a gathering not yet convened, arm it (a second click cancels) | Click the city or the map; right click cancels | Tap the city |
 | Payload, release now, salvo | 1–9, Space, X | Payload chips, Release, Salvo |
 | Drill floor or pattern angle, formation spacing | E / C or the mouse wheel, the angle buttons, Q | Floor ladder, the dial's arrows or the angle buttons, spacing button |
 | Gunboat | WASD, pointer aim and fire, 1 gun / 2 rockets / 3 laser, Q air strike (rockets follow the gun onto heavy targets) | Two sticks, weapon icons, strike icon |

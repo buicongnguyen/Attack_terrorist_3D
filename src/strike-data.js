@@ -439,6 +439,7 @@ export const CITY_MISSIONS = [
         kind: "rally",
         label: "LIEUTENANTS' MEETING",
         place: "GLASS TOWER / F6",
+        broken: "THE MEETING IS BROKEN",
         homes: [
           P("T4", 1, -1, 0.5),
           P("T4", 2, 1.4, -1),
@@ -1106,6 +1107,8 @@ export function planEnemies(layout, buildings) {
         every: group.every,
         stay: group.stay,
         members,
+        // The banner when an armed drop breaks it (5.1 C1).
+        broken: group.broken || "GATHERING BROKEN",
       });
     }
   });
@@ -1119,6 +1122,50 @@ export function rallyStatus(event, time) {
     return { active: true, remaining: event.stay - phase, next: 0 };
   const next = time < event.at ? event.at - time : event.every - phase;
   return { active: false, remaining: 0, next };
+}
+
+// The armed drop (5.1 C1). A mark within `reach` m of a gathering that has not convened arms the
+// drop instead of flying there at once: the flight patrols on until the gathering's convene time
+// minus the fall is `steer` s away, and the bombs go only when at least half of the cell (one at
+// least) is forecast within `radius` m of the centre at the moment they land, and no more of them
+// would be there `settle` s later (the rest still walking in). A gathering less than `notice` s
+// away is too late to arm.
+export const ARM = Object.freeze({ reach: 3, notice: 2.5, steer: 5, radius: 2.2, settle: 0.5 });
+
+// The gathering a mark at `point` arms, or null (none in reach, or one already on or too close).
+export function armRally(events, point, time) {
+  const event = events.find((e) => (e.alive ?? e.members) > 0 && Math.hypot(point.x - e.centre.x, point.z - e.centre.z) <= ARM.reach);
+  if (!event) return null;
+  const status = rallyStatus(event, time);
+  return status.active || status.next <= ARM.notice ? null : event;
+}
+
+// Whether an armed flight steers onto its mark now; `fall` is the forecast fall time.
+export function armSteers(event, time, fall) {
+  const status = rallyStatus(event, time);
+  return status.active || status.next - fall <= ARM.steer;
+}
+
+// How many of the cell's `routes` put a member within ARM.radius of the centre at `time`.
+export function expectedAt(event, routes, time) {
+  let n = 0;
+  for (const route of routes) {
+    const p = sampleRoute(route, time);
+    if (Math.hypot(p.x - event.centre.x, p.y - event.centre.y, p.z - event.centre.z) < ARM.radius) n++;
+  }
+  return n;
+}
+
+// The release rule: this many of the `alive` members must be expected.
+export const armQuorum = (alive) => Math.max(1, Math.ceil(alive / 2));
+
+// Release now: `now` members expected as the bombs land, `later` if they landed ARM.settle s later.
+export const armReleases = (now, later, alive) => now >= armQuorum(alive) && later <= now;
+
+// 'ARMED · DROPS IN 0:04 · 4 OF 6 EXPECTED', on the release button and the gathering's tag.
+export function armText(drops, expected, alive) {
+  const s = Math.max(0, Math.ceil(drops));
+  return `ARMED · DROPS IN ${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")} · ${expected} OF ${alive} EXPECTED`;
 }
 
 // ------------------------------------------------------------------ flight + ballistics

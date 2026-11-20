@@ -17,7 +17,8 @@ import {
   serialize,
   sortRows,
 } from "./golden-diff.js";
-import { CAST, INTERCEPTS, MISSION_STORY, interceptFor } from "../src/story.js";
+import { CAST, INTERCEPTS, MISSION_STORY, STRIKE_RADIO, interceptFor } from "../src/story.js";
+import { PLAYERS } from "./golden-browser.mjs";
 import { STORY, minimumFor, priorityOf } from "../src/radio-queue.js";
 
 // A schema-1 row with every field; `extra` overrides some.
@@ -161,7 +162,9 @@ test("the recorded file holds 50 rows keyed mission/pilot/mode with the full fro
   for (const r of recorded.rows) {
     assert.match(r.key, /^\d+\/[a-z]+\/(easy|normal|hard|crazy)$/);
     assert.deepEqual(Object.keys(r), FIELDS, r.key);
-    for (const f of RESERVED) assert.equal(r[f], null, `${r.key} ${f}`);
+    // C1 fills standDown and resupply on the harbour rows (missions 6-8); the rest stay null.
+    const harbour = [6, 7, 8].includes(Number(r.key.split("/")[0]));
+    for (const f of RESERVED) if (!(harbour && ["standDown", "resupply"].includes(f))) assert.equal(r[f], null, `${r.key} ${f}`);
   }
   const expected = [];
   for (const mode of ["normal", "easy"])
@@ -199,7 +202,7 @@ test("the scripted pilots still win what the 5.0 suite asserted they win", () =>
 function storyText(index, key, who) {
   if (key === "intercept") return interceptFor(index).line.text;
   if (key === "bargeLost") return who === "okafor" ? "Harbor Mercy is going down! Get the crew across!" : "";
-  return MISSION_STORY[index].radio[key].text;
+  return (MISSION_STORY[index].radio[key] || STRIKE_RADIO[key]).text;
 }
 const pilotRows = recorded.rows.filter((r) => !/\/(idle|naive)\//.test(r.key));
 const missionOfKey = (key) => Number(key.split("/")[0]);
@@ -253,4 +256,23 @@ test("no story line is dropped or cut short, and the harbour never goes a minute
     const gap = Math.max(...times.slice(1).map((t, i) => t - times[i]));
     assert.ok(gap <= 60, `${r.key}: ${gap.toFixed(1)} s without a line`);
   }
+});
+
+// ---------------------------------------------------------------- 5.1 C1
+
+test("the scripted pilots never arm a drop: no pilot calls markAt, and the naive clicker clicks through ui.markDrop", () => {
+  for (const [name, play] of Object.entries(PLAYERS)) assert.ok(!play.toString().includes("markAt"), name);
+  assert.ok(PLAYERS.naive.toString().includes("ui.markDrop("));
+});
+
+test("the harbour endgame in the rows: the pilot wins 1.7-1.9 on Normal, every boat that doesn't count stood down", () => {
+  for (const index of [6, 7, 8])
+    for (const mode of ["normal", "easy"]) {
+      const r = byKey.get(rowKey(index, "harbour", mode));
+      assert.equal(r.status, "success", r.key);
+      assert.ok(r.standDown && r.standDown.ships > 0 && r.standDown.at < r.endTime, r.key);
+      assert.ok(r.radio.some((e) => e[3] === "quota"), `${r.key}: no quota line`);
+    }
+  // Doing nothing never meets the quota.
+  assert.equal(byKey.get(rowKey(6, "idle", "normal")).standDown, null);
 });

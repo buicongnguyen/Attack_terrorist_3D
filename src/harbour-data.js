@@ -303,6 +303,14 @@ export function stationStatus(group, stationIndex, time, plan = fleetPlan(group)
   return { active: false, remaining: 0, next };
 }
 
+// The harbour endgame's objective (5.1 C1): once the quota is met, what is still to sink. Each
+// key group is { title, left, size }; a group of more than one ship counts what is left of it.
+// 'QUOTA MET · SINK THE ESCORT RING (3 LEFT) AND CINDER'
+export function endgameObjective(groups) {
+  const parts = groups.filter((g) => g.left > 0).map((g) => (g.size > 1 ? `${g.title} (${g.left} LEFT)` : g.title));
+  return `QUOTA MET · SINK ${parts.join(" AND ")}`;
+}
+
 // ------------------------------------------------------------------ missions
 
 // Harbour quays and piers are land rectangles [x0, z0, x1, z1]; everything else is water. Fish,
@@ -533,6 +541,7 @@ export const HARBOUR_MISSIONS = [
     fleet: [
       {
         id: "column",
+        title: "THE CHANNEL COLUMN",
         ships: ["patrol", "patrol", "patrol", "patrol"],
         speed: 1.3,
         start: 0,
@@ -722,6 +731,7 @@ export const HARBOUR_MISSIONS = [
       },
       {
         id: "frigate",
+        title: "THE AA FRIGATE",
         ships: ["frigate"],
         speed: 1,
         start: 8,
@@ -844,6 +854,7 @@ export const HARBOUR_MISSIONS = [
       },
       {
         id: "ring",
+        title: "THE ESCORT RING",
         ships: ["patrol", "missile", "patrol", "missile", "patrol"],
         stations: [
           {
@@ -875,6 +886,7 @@ export const HARBOUR_MISSIONS = [
       },
       {
         id: "cinder",
+        title: "CINDER",
         ships: ["destroyer"],
         speed: 0.8,
         start: 0,

@@ -23,6 +23,8 @@ export const DIFFICULTY = Object.freeze({
     rockets: 1.5,
     strikes: 3,
     score: 1,
+    // LAST RUN (5.1 C1): at most this many Sticks once the harbour flight runs dry in the endgame.
+    lastRun: 2,
   },
   normal: {
     label: "Normal",
@@ -40,6 +42,7 @@ export const DIFFICULTY = Object.freeze({
     rockets: 1,
     strikes: 2,
     score: 1.25,
+    lastRun: 2,
   },
   hard: {
     label: "Hard",
@@ -57,6 +60,7 @@ export const DIFFICULTY = Object.freeze({
     rockets: 0.75,
     strikes: 1,
     score: 1.5,
+    lastRun: 0,
   },
   crazy: {
     label: "Crazy",
@@ -74,6 +78,7 @@ export const DIFFICULTY = Object.freeze({
     rockets: 0.5,
     strikes: 1,
     score: 2,
+    lastRun: 0,
   },
 });
 

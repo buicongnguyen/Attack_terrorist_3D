@@ -18,7 +18,7 @@ export function harbourPilot(index) {
     used = 0;
   for (let step = 0; step < 120 * 420 && g.status === "playing"; step++) {
     if (!waitBombs && (!plan || step % 30 === 0)) {
-      if (!plan || plan.group.ships.every((s) => s.dead)) plan = choose();
+      if (!plan || !alive(plan.group).length) plan = choose();
       if (plan) mark(plan);
     }
     // Flak counter, as a player would: break sideways once the fire solution freezes.
@@ -43,8 +43,9 @@ export function harbourPilot(index) {
   }
   g.input.x = g.input.z = 0;
 
+  // Boats standing down in the endgame (5.1 C1) are skipped, as a player reading the HUD would.
   function alive(group) {
-    return group.ships.filter((s) => !s.dead && !s.civilian);
+    return group.ships.filter((s) => !s.dead && !s.civilian && !s.standDown);
   }
   function loaded() {
     return Object.keys(S.BOMBS).filter((kind) => op.aircraft.some((a) => a.alive && a.payload[kind] > 0));
@@ -302,4 +303,83 @@ export async function checkHarbour(page, check) {
     return out;
   });
   for (const [name, value] of Object.entries(mechanics)) check(`harbour ${name}`, value === true);
+
+  // 5.1 C1: the harbour endgame on 1.7 Normal.
+  const endgame = await page.evaluate(async ([pilot]) => {
+    const { game: g, ui } = window.__TIDELOCK__;
+    const out = {};
+    const frame = () => new Promise((done) => requestAnimationFrame(done));
+    const run = (steps) => {
+      for (let i = 0; i < steps && g.status === "playing"; i++) g.update(1 / 120);
+    };
+    const pageMode = g.difficulty;
+    ui.setDifficulty("normal");
+    ui.start(6);
+    g.paused = false;
+    run(12);
+    const op = g.op,
+      fleet = op.fleet;
+    // The quota is met on boats that don't count; the channel column still floats.
+    for (const ship of fleet.hostile().filter((s) => !s.group.key).slice(0, fleet.needed())) fleet.sinkShip(ship);
+    run(2);
+    ui.updateHUD(true);
+    const unit = document.getElementById("objective-unit").textContent;
+    out.objectiveSaysSink = fleet.endgame && unit === "QUOTA MET · SINK THE CHANNEL COLUMN (4 LEFT)";
+    const down = fleet.ships.filter((s) => s.standDown);
+    out.standDownMarkersAreGrey = down.length > 0 && down.every((s) => s.marker.material.userData.color === 0x8a96a8);
+    out.standDownLeavesTheTargets = op.targets().every((t) => !t.standDown) && op.targets().length === fleet.keysAfloat();
+    // A detonation over one of them: it sinks, scores nothing, and the toast says why.
+    const ship = down.find((s) => !s.dead && s.hp === 1);
+    const score = g.score;
+    op.detonate({ kind: "stick", mesh: g.view.model("bomb-cluster"), dead: false }, { x: ship.position.x, y: 0.05, z: ship.position.z });
+    ui.updateHUD(true);
+    out.notATargetToast = ship.dead && g.score === score && op.combo.count === 0 && document.getElementById("toast").textContent.startsWith("NOT A TARGET / SAVE YOUR BOMBS");
+    // The flight far to the east: the column off screen gets a key chevron at the frame's edge.
+    op.flight.x = op.turnX;
+    run(120 * 4);
+    g.paused = true;
+    // Frames, not seconds: a SwiftShader frame can take a while.
+    const keyChevron = () => [...document.querySelectorAll(".edge-marker")].find((m) => m.dataset.kind === "key" && getComputedStyle(m).visibility === "visible");
+    for (let i = 0; i < 60 && !keyChevron(); i++) await frame();
+    const key = ui.lastLabels.find((l) => l.kind === "key");
+    const chevron = keyChevron();
+    out.offScreenKeyHullHasAChevron = Boolean(key && ui.offFrame(key) && chevron);
+    g.paused = false;
+
+    // LAST RUN, an ad-hoc run: the harbour pilot plays 1.7 from a start where every bomb went on
+    // boats that don't count before the quota was met (the racks emptied by Stick bursts on them,
+    // the rest of the quota sunk), so it meets the quota with no bomb left.
+    const lastRun = (mode) => {
+      ui.setDifficulty(mode);
+      const start = ui.start.bind(ui);
+      ui.start = (index) => {
+        start(index);
+        g.paused = false;
+        const o = g.op;
+        for (const a of o.aircraft)
+          for (const kind of Object.keys(a.payload))
+            while (a.payload[kind] > 0) {
+              const target = o.fleet.hostile().find((s) => !s.dead && !s.group.key);
+              a.payload[kind]--;
+              o.used++;
+              o.detonate({ kind: "stick", mesh: g.view.model("bomb-cluster"), dead: false }, { x: target.position.x, y: 0.05, z: target.position.z });
+            }
+        for (const s of o.fleet.hostile().filter((s) => !s.dead && !s.group.key)) if (!o.fleet.quotaMet()) o.fleet.sinkShip(s);
+      };
+      try {
+        eval(`(${pilot})`)(6);
+      } finally {
+        ui.start = start;
+      }
+      return { status: g.status, reason: g.reason, resupply: g.op.resupply, used: g.op.used, quotaAt: g.op.fleet.standDown?.at };
+    };
+    const normal = lastRun("normal");
+    const hard = lastRun("hard");
+    out.lastRunWinsOnNormal = normal.status === "success" && normal.resupply?.sticks === 2;
+    out.noLastRunOnHard = hard.status === "failed" && hard.reason === "ordnance" && hard.resupply === null;
+    out.lastRunDetail = `Normal: ${JSON.stringify(normal)}; Hard: ${JSON.stringify(hard)}`;
+    ui.setDifficulty(pageMode);
+    return out;
+  }, [harbourPilot.toString()]);
+  for (const [name, value] of Object.entries(endgame)) if (name !== "lastRunDetail") check(`harbour ${name}${/astRun/.test(name) ? ` (${endgame.lastRunDetail})` : ""}`, value === true);
 }

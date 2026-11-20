@@ -18,7 +18,12 @@ import {
   shipCourse,
   stationStatus,
   onLand,
+  endgameObjective,
 } from "../src/harbour-data.js";
+import * as THREE from "three";
+import { Fleet } from "../src/harbour.js";
+import { StrikeOperation } from "../src/strike.js";
+import { DIFFICULTY } from "../src/difficulty.js";
 import { BOMBS, BOMB_ORDER, STRIKE_MISSIONS, forecastImpact, forecastPoints, groundAt, payloadTotal, FLIGHT } from "../src/strike-data.js";
 
 const R = BOMBS.stick.radius;
@@ -349,4 +354,253 @@ test("onLand answers as 5.0 did on a 5 cm grid within a metre of every quay and 
   assert.ok(points > 100000 && land > 0 && land < points, `${points} points, ${land} on land`);
   assert.equal(onLand(null, 0, 0), false);
   assert.equal(onLand([], 0, 0), false);
+});
+
+// ---------------------------------------------------------------- 5.1 C1: the harbour endgame
+
+// A real Fleet for a harbour mission on a stub operation: no renderer, the same schedules.
+const GREY = new THREE.SpriteMaterial();
+function stubFleet(index) {
+  const toasts = [],
+    said = [];
+  const ring = () => ({ material: { opacity: 1 }, scale: { setScalar() {} } });
+  const game = {
+    time: 0,
+    status: "playing",
+    score: 0,
+    view: { assets: { has: () => false }, ring, disposeObject() {} },
+    entity: (type, model, position, o) => ({ type, position, mesh: new THREE.Object3D(), hp: o.hp, radius: o.radius }),
+    puff() {},
+    shockRing() {},
+    blast() {},
+    notify: (type, text) => toasts.push(text),
+  };
+  const op = {
+    game,
+    layout: STRIKE_MISSIONS[index],
+    aircraft: [],
+    marker: () => new THREE.SpriteMaterial(),
+    shipMarker: () => new THREE.SpriteMaterial(),
+    standDownMarker: () => GREY,
+    createShipFlak: (ship) => ({ state: "lock", solution: {}, warning: { visible: true }, mounted: ship, position: new THREE.Vector3() }),
+    destroyMounted() {},
+    endgame: () => said.push("quota"),
+  };
+  const fleet = new Fleet(op);
+  return { fleet, game, op, toasts, said };
+}
+// Sink the quota from the boats that don't count (the first ones in fleet order).
+const meetQuota = (fleet) => {
+  for (const ship of fleet.hostile().filter((s) => !s.group.key).slice(0, fleet.needed())) fleet.sinkShip(ship);
+};
+
+test("5.1 C1: once the quota is met with key hulls afloat, every other hostile boat stands down", () => {
+  for (const index of [6, 7, 8]) {
+    const { fleet, game, said } = stubFleet(index);
+    assert.equal(fleet.quotaMet(), false);
+    fleet.update(1 / 120);
+    assert.equal(fleet.endgame, false);
+    meetQuota(fleet);
+    assert.ok(fleet.quotaMet());
+    game.time = 3;
+    fleet.update(1 / 120);
+    assert.ok(fleet.endgame, `mission ${index}`);
+    const afloat = fleet.ships.filter((s) => !s.dead && !s.civilian);
+    const down = afloat.filter((s) => s.standDown);
+    assert.deepEqual(fleet.standDown, { at: 3, ships: down.length });
+    assert.equal(down.length, afloat.filter((s) => !s.group.key).length);
+    assert.ok(down.every((s) => s.marker.material === GREY && (!s.nest || (s.nest.state === "idle" && !s.nest.warning.visible))));
+    assert.ok(afloat.filter((s) => s.group.key).every((s) => !s.standDown && s.keyRing));
+    assert.ok(fleet.ships.filter((s) => s.civilian).every((s) => !s.standDown));
+    assert.deepEqual(said, ["quota"]);
+    // Only the key ships count now, and they are all the outcome waits for.
+    assert.equal(fleet.left(), fleet.keysAfloat());
+    assert.ok(fleet.predicted(game.time).every((p) => !p.ship.standDown));
+    const targets = StrikeOperation.prototype.targets.call({ trucks: [], fleet, masts: [], aa: [], enemies: [] });
+    assert.ok(targets.length === fleet.keysAfloat() && targets.every((s) => s.group.key));
+    const keyIds = fleet.groups.filter((g) => g.key).map((g) => g.data.id);
+    assert.ok(fleet.events().length > 0 && fleet.events().every((e) => keyIds.some((id) => e.id.startsWith(`${id}-`))));
+  }
+  // With the key hulls already sunk, meeting the quota is simply the win: no endgame.
+  const { fleet } = stubFleet(7);
+  for (const ship of fleet.hostile().filter((s) => s.group.key)) fleet.sinkShip(ship);
+  meetQuota(fleet);
+  fleet.update(1 / 120);
+  assert.equal(fleet.endgame, false);
+  assert.equal(fleet.standDown, null);
+});
+
+test("5.1 C1: a boat standing down keeps its timetable for 240 s", () => {
+  const a = stubFleet(6),
+    b = stubFleet(6);
+  meetQuota(a.fleet);
+  meetQuota(b.fleet);
+  b.fleet.startEndgame = () => {};
+  let compared = 0;
+  for (let step = 1; step <= 240 * 30; step++) {
+    a.game.time = b.game.time = step / 30;
+    a.fleet.update(1 / 30);
+    b.fleet.update(1 / 30);
+    if (step % 300) continue;
+    a.fleet.ships.forEach((ship, i) => {
+      if (!ship.standDown) return;
+      const other = b.fleet.ships[i];
+      assert.equal(ship.position.x, other.position.x);
+      assert.equal(ship.position.z, other.position.z);
+      assert.equal(ship.heading, other.heading);
+      compared++;
+    });
+  }
+  assert.ok(a.fleet.endgame && !b.fleet.endgame);
+  assert.ok(compared > 1000, `${compared} poses compared`);
+});
+
+test("5.1 C1: a boat standing down never fires; a key hull's flak still does", () => {
+  const nest = (mounted) => ({
+    mounted,
+    dead: false,
+    state: "idle",
+    cooldown: 0,
+    lock: 0,
+    position: new THREE.Vector3(0, 2, 0),
+    turret: null,
+    warning: { material: { opacity: 0 } },
+    beam: { visible: false, geometry: { attributes: { position: { setXYZ() {}, needsUpdate: false } } } },
+  });
+  const run = (mounted) => {
+    const aircraft = { alive: true, callsign: "Kestrel One", mesh: { position: new THREE.Vector3(2, 24, 0) }, velocity: new THREE.Vector3(1, 0, 0) };
+    const op = Object.create(StrikeOperation.prototype);
+    Object.assign(op, {
+      game: {
+        time: 0,
+        hitChance: 1,
+        hitRoll: () => true,
+        view: { sphere: (p) => ({ position: p.clone() }), disposeObject() {} },
+        sound() {},
+        blast() {},
+        audio: { play() {} },
+      },
+      flight: { phase: "pass" },
+      aa: [nest(mounted)],
+      aircraft: [aircraft],
+      shells: [],
+      say() {},
+      hitAircraft() {},
+    });
+    let fired = 0;
+    for (let i = 0; i < 120 * 10; i++) {
+      op.game.time = i / 120;
+      op.updateFlak(1 / 120);
+      fired = Math.max(fired, op.shells.length);
+    }
+    return { fired, nest: op.aa[0] };
+  };
+  const down = run({ standDown: true });
+  assert.equal(down.fired, 0);
+  assert.equal(down.nest.state, "idle");
+  assert.ok(run({ standDown: false }).fired > 0, "the control nest fires");
+});
+
+test("5.1 C1: sinking a boat that stands down scores nothing, adds nothing to the combo and says so", () => {
+  const { fleet, game, toasts } = stubFleet(6);
+  meetQuota(fleet);
+  fleet.update(1 / 120);
+  const ship = fleet.ships.find((s) => s.standDown && s.hp === 1);
+  const score = game.score;
+  const sunk = fleet.hit({ x: ship.position.x, y: 0.05, z: ship.position.z }, { radius: 1.3 }, 1);
+  assert.ok(ship.dead, "it still sinks");
+  assert.equal(game.score, score);
+  // detonate adds what hit() returns to the kills and the combo.
+  assert.ok(!sunk.includes(ship));
+  assert.ok(toasts.includes("NOT A TARGET / SAVE YOUR BOMBS"));
+  // A key hull still scores.
+  const key = fleet.ships.find((s) => s.group.key && !s.dead);
+  key.hp = 1;
+  const before = game.score;
+  const keySunk = fleet.hit({ x: key.position.x, y: 0.05, z: key.position.z }, { radius: 1.3 }, 1);
+  assert.ok(keySunk.includes(key) && game.score === before + key.def.score);
+});
+
+test("5.1 C1: the endgame objective names what is left, counted only for groups of more than one", () => {
+  assert.equal(endgameObjective([{ title: "THE CHANNEL COLUMN", left: 2, size: 4 }]), "QUOTA MET · SINK THE CHANNEL COLUMN (2 LEFT)");
+  assert.equal(endgameObjective([{ title: "THE CHANNEL COLUMN", left: 1, size: 4 }]), "QUOTA MET · SINK THE CHANNEL COLUMN (1 LEFT)");
+  assert.equal(endgameObjective([{ title: "THE AA FRIGATE", left: 1, size: 1 }]), "QUOTA MET · SINK THE AA FRIGATE");
+  assert.equal(
+    endgameObjective([
+      { title: "THE ESCORT RING", left: 3, size: 5 },
+      { title: "CINDER", left: 1, size: 1 },
+    ]),
+    "QUOTA MET · SINK THE ESCORT RING (3 LEFT) AND CINDER",
+  );
+  assert.equal(
+    endgameObjective([
+      { title: "THE ESCORT RING", left: 0, size: 5 },
+      { title: "CINDER", left: 1, size: 1 },
+    ]),
+    "QUOTA MET · SINK CINDER",
+  );
+  // Every key group has its title, and the fleet rewrites the line as key hulls sink.
+  for (const index of [6, 7, 8]) for (const id of STRIKE_MISSIONS[index].required) assert.ok(STRIKE_MISSIONS[index].fleet.find((g) => g.id === id).title, id);
+  const { fleet } = stubFleet(8);
+  meetQuota(fleet);
+  fleet.update(1 / 120);
+  assert.equal(fleet.objectiveText, "QUOTA MET · SINK THE ESCORT RING (5 LEFT) AND CINDER");
+  fleet.groups
+    .find((g) => g.data.id === "ring")
+    .ships.slice(0, 2)
+    .forEach((s) => fleet.sinkShip(s));
+  assert.equal(fleet.objectiveText, "QUOTA MET · SINK THE ESCORT RING (3 LEFT) AND CINDER");
+});
+
+test("5.1 C1: LAST RUN gives the lead live aircraft a Stick per key hull afloat (two at most), once, on Easy and Normal", () => {
+  const lastRun = (mode, keys, endgame = true) => {
+    const said = [],
+      banners = [];
+    const op = Object.create(StrikeOperation.prototype);
+    Object.assign(op, {
+      game: { time: 231.234, mode: DIFFICULTY[mode], notify: (type, text) => banners.push(text) },
+      fleet: { endgame, keysAfloat: () => keys },
+      aircraft: [
+        { alive: false, payload: { stick: 0 } },
+        { alive: true, payload: { stick: 0, ell: 0 } },
+      ],
+      resupply: null,
+      select(kind) {
+        this.selected = kind;
+      },
+      say: (key) => said.push(key),
+    });
+    const first = op.lastRun();
+    return { first, again: op.lastRun(), op, said, banners };
+  };
+  const normal = lastRun("normal", 4);
+  assert.ok(normal.first && !normal.again);
+  assert.deepEqual(normal.op.resupply, { at: 231.23, sticks: 2 });
+  assert.equal(normal.op.aircraft[1].payload.stick, 2);
+  assert.equal(normal.op.selected, "stick");
+  assert.deepEqual(normal.said, ["lastRun"]);
+  assert.deepEqual(normal.banners, ["LAST RUN"]);
+  assert.equal(lastRun("easy", 1).op.aircraft[1].payload.stick, 1);
+  for (const mode of ["hard", "crazy"]) {
+    const r = lastRun(mode, 4);
+    assert.ok(!r.first && r.op.resupply === null, mode);
+  }
+  assert.ok(!lastRun("normal", 0).first, "no key hull afloat");
+  assert.ok(!lastRun("normal", 2, false).first, "not in the endgame");
+});
+
+test("5.1 C1: a mark on a boat that stands down is dropped; a mark on a key hull stays", () => {
+  for (const key of [false, true]) {
+    const { fleet, op } = stubFleet(6);
+    const toasts = [];
+    const strike = Object.create(StrikeOperation.prototype);
+    // (The last one: meetQuota sinks the first ones.)
+    const target = fleet.ships.findLast((s) => !s.civilian && s.group.key === key);
+    Object.assign(strike, { game: { notify: (type, text) => toasts.push(text) }, aim: { target }, say() {} });
+    op.endgame = () => strike.endgame();
+    meetQuota(fleet);
+    fleet.update(1 / 120);
+    if (key) assert.ok(strike.aim?.target === target && toasts.length === 0);
+    else assert.ok(strike.aim === null && toasts.includes("MARK DROPPED / NOT A TARGET"));
+  }
 });

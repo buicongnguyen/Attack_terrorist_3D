@@ -102,3 +102,33 @@ export function healthMaterial(hp, max, marked = false, key = false) {
   healthCache.set(kind, material);
   return material;
 }
+
+// The harbour endgame (5.1 C1): a boat that no longer counts wears a grey STANDING DOWN tag in
+// place of its health bar. One material, made once.
+export const STAND_DOWN_GREY = 0x8a96a8;
+let standDown = null;
+export function standDownMaterial() {
+  if (standDown) return standDown;
+  const canvas = document.createElement("canvas");
+  canvas.width = 128;
+  canvas.height = 48;
+  const c = canvas.getContext("2d");
+  c.fillStyle = "#1a1420";
+  c.beginPath();
+  c.roundRect(2, 8, 124, 32, 10);
+  c.fill();
+  c.fillStyle = `#${STAND_DOWN_GREY.toString(16)}`;
+  c.beginPath();
+  c.roundRect(5, 11, 118, 26, 8);
+  c.fill();
+  c.fillStyle = "#1a1420";
+  c.font = "bold 15px Arial";
+  c.textAlign = "center";
+  c.textBaseline = "middle";
+  c.fillText("STANDING DOWN", 64, 25);
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  standDown = new THREE.SpriteMaterial({ map: texture, depthTest: false, depthWrite: false, transparent: true, toneMapped: false });
+  standDown.userData.color = STAND_DOWN_GREY;
+  return standDown;
+}

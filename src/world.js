@@ -829,6 +829,16 @@ void main() {
     return p ? { x: p.x, y: groundY, z: p.z, building: null } : null;
   }
 
+  // Where the ray under a screen point crosses the level plane at height `y` (through any roof in
+  // the way), or null.
+  pickPlane(clientX, clientY, y) {
+    const rect = this.canvasRect || this.canvas.getBoundingClientRect();
+    const pointer = new THREE.Vector2(((clientX - rect.left) / rect.width) * 2 - 1, (-(clientY - rect.top) / rect.height) * 2 + 1);
+    this.ray.setFromCamera(pointer, this.camera);
+    const p = this.ray.ray.intersectPlane(new THREE.Plane(new THREE.Vector3(0, 1, 0), -y), new THREE.Vector3());
+    return p ? { x: p.x, y, z: p.z } : null;
+  }
+
   followPlayer(position, dt, snap = false) {
     this.followPlayerPosition = this.followPoint.copy(position);
     const goal = this.followGoal.set(position.x, 0, position.z - 7);

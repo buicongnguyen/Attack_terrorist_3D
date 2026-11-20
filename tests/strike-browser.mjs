@@ -567,4 +567,131 @@ export async function checkStrike(page, check) {
     return out;
   });
   for (const [name, value] of Object.entries(freedom)) check(`strike ${name}`, value === true);
+
+  // 5.1 C1: the armed drop on 1.6 Normal, through the player's path (markAt), and the 1.1 mast.
+  const armed = await page.evaluate(() => {
+    const { game: g, ui } = window.__TIDELOCK__;
+    const S = window.__TIDELOCK_STRIKE__;
+    const out = {};
+    const pageMode = g.difficulty;
+    ui.setDifficulty("normal");
+    ui.start(5);
+    g.paused = false;
+    const op = g.op;
+    const meeting = op.events.find((e) => e.label === "LIEUTENANTS' MEETING");
+    while (g.time < meeting.at - 15) g.update(1 / 120);
+    // A second tap on the armed gathering cancels the arm; a third arms it again.
+    op.markAt(meeting.centre);
+    const firstArm = op.aim?.armed === true;
+    op.markAt({ x: meeting.centre.x + 0.5, z: meeting.centre.z });
+    ui.updateHUD(true);
+    out.secondTapCancels = firstArm && op.aim === null && document.getElementById("toast").textContent.includes("ARM CANCELLED");
+    op.markAt(meeting.centre);
+    const b = op.buildings.find((x) => x.id === meeting.centre.b);
+    out.armSetsRallyAndDrillFloor = op.aim?.armed === true && op.aim.rally === meeting && op.selected === "drill" && op.floor === meeting.centre.f + 1 && meeting.centre.f + 1 === 6 && b.floors > 6;
+    ui.updateHUD(true);
+    const button = document.getElementById("drop-label").textContent;
+    const tag = op.snapshot().labels.find((l) => l.id === `rally-${meeting.group}`)?.text || "";
+    out.armedLineOnButtonAndTag = /^ARMED · DROPS IN \d:\d\d · \d OF 6 EXPECTED$/.test(button) && tag === button;
+    // Until the steering window the flight keeps flying: never below half the patrol speed on a
+    // pass (a jink included), and the jink keeps the arm.
+    let slowest = Infinity,
+      jinked = false,
+      release = null;
+    const realRelease = op.release.bind(op);
+    op.release = (kind) => {
+      const fall = op.shooterFor(kind).forecast.time;
+      release ??= { at: g.time, expected: op.expected(meeting, g.time + fall), quorum: Math.max(1, Math.ceil(meeting.alive / 2)) };
+      return realRelease(kind);
+    };
+    const jinkAt = g.time + 4;
+    for (let i = 0; i < 120 * 40 && op.used === 0 && g.status === "playing"; i++) {
+      const steering = S.armSteers(meeting, g.time, op.shooterFor("drill")?.forecast?.time ?? 2);
+      if (!steering && op.flight.phase === "pass") slowest = Math.min(slowest, op.flight.speed);
+      g.input.z = g.time >= jinkAt && g.time < jinkAt + 1 ? 1 : 0;
+      if (g.time >= jinkAt + 1 && !jinked) jinked = op.aim?.armed === true;
+      g.update(1 / 120);
+    }
+    g.input.z = 0;
+    delete op.release;
+    out.armedFlightNeverHovers = slowest > 0.5 * S.FLIGHT.speed;
+    out.jinkKeepsTheArm = jinked;
+    out.armedDropWaitsForHalfTheCell = release !== null && release.expected >= release.quorum && release.at > meeting.at - 10;
+    const members = op.enemies.filter((e) => e.plan.group === meeting.group);
+    for (let i = 0; i < 120 * 4 && g.status === "playing"; i++) g.update(1 / 120);
+    out.meetingBlastKillsFour = members.filter((e) => e.dead).length >= 4;
+    out.noRunnersLine = !ui.director.log.some((e) => e.key === "alert");
+    ui.updateHUD(true);
+    out.meetingBrokenBanner = document.getElementById("combo-count").textContent === "THE MEETING IS BROKEN";
+    out.armDetail = `${slowest.toFixed(2)} m/s slowest, released at ${release?.at.toFixed(2)} with ${release?.expected} of ${release?.quorum} needed, ${members.filter((e) => e.dead).length} of 6 killed`;
+
+    // The 1.1 jammer topples 80 degrees in 1.2 s, and lamps light along the nearest streets.
+    ui.start(0);
+    g.paused = false;
+    g.update(1 / 120);
+    const mast = g.op.masts[0];
+    const lamps = g.op.city.lampsNear(mast.position.x, mast.position.z).length;
+    g.op.detonate({ kind: "shockwave", mesh: g.view.model("bomb-blast"), dead: false }, { x: mast.position.x, y: mast.position.y + 0.3, z: mast.position.z });
+    let tilt = 0;
+    for (let i = 0; i < 180; i++) {
+      g.update(1 / 120);
+      tilt = Math.max(tilt, -mast.mesh.rotation.z);
+    }
+    for (let i = 0; i < 120 * 3; i++) g.update(1 / 120);
+    out.mastToppleReachesTheRoofline = mast.dead && tilt >= 1.2;
+    // The lit heads are the city's own instanced mesh: heavy fire wrapping the glow pool (more
+    // than its 1024 slots) leaves them lit.
+    for (let i = 0; i < 1500; i++) g.ember(mast.position, 0xffffff, 0.2, 0.3);
+    const heads = g.op.city.lampHeads;
+    out.lampsComeBackOn = lamps > 3 && heads?.count === lamps && heads.parent !== null && heads.visible;
+    out.mastDetail = `${tilt.toFixed(2)} rad in 1.5 s, ${lamps} lamps`;
+    ui.setDifficulty(pageMode);
+    return out;
+  });
+  for (const [name, value] of Object.entries(armed)) if (!name.endsWith("Detail")) check(`strike ${name}${name.startsWith("armed") || name === "meetingBlastKillsFour" ? ` (${armed.armDetail})` : name.startsWith("mast") ? ` (${armed.mastDetail})` : ""}`, value === true);
+
+  // 5.1 C1: a real click on the 1.6 meeting's ring arms the drop. The ring is drawn on F6 inside
+  // the Glass Tower: the click goes through ui.markDrop at the ring's projected centre and at a
+  // point on the drawn ring, in landscape, a phone in landscape and a phone in portrait.
+  const size = page.viewportSize();
+  for (const [width, height] of [
+    [1280, 720],
+    [844, 390],
+    [390, 844],
+  ]) {
+    await page.setViewportSize({ width, height });
+    const ring = await page.evaluate(async ([width, height]) => {
+      const { game: g, ui, view } = window.__TIDELOCK__;
+      const frame = () => new Promise((done) => requestAnimationFrame(done));
+      // Frames, not seconds: wait for the resize to reach the camera.
+      for (let i = 0; i < 120 && !(innerWidth === width && Math.abs(view.camera.aspect - width / height) < 0.01); i++) await frame();
+      const pageMode = g.difficulty;
+      ui.setDifficulty("normal");
+      ui.start(5);
+      g.paused = false;
+      const op = g.op;
+      const meeting = op.events.find((e) => e.label === "LIEUTENANTS' MEETING");
+      while (g.time < meeting.at - 15) g.update(1 / 120);
+      g.paused = true;
+      // The camera over the meeting, as a player would have it before clicking.
+      view.followStrike(meeting.centre, 0, true);
+      const click = (p) => {
+        const s = view.project(p);
+        if (!s.visible) return "off screen";
+        ui.markDrop(s.x, s.y);
+        const armed = op.aim?.armed === true && op.aim.rally === meeting;
+        op.clearAim();
+        return armed;
+      };
+      const c = meeting.centre,
+        y = c.y + 0.08;
+      const out = { centre: click({ x: c.x, y, z: c.z }) };
+      // Four points on the drawn ring (radius 2.6 m), all on screen, all must arm.
+      out.onRing = [0, 1, 2, 3].map((k) => click({ x: c.x + Math.cos((k * Math.PI) / 2) * 2.6, y, z: c.z + Math.sin((k * Math.PI) / 2) * 2.6 }));
+      ui.setDifficulty(pageMode);
+      return out;
+    }, [width, height]);
+    check(`strike a click on the meeting's ring arms the drop at ${width}x${height} (centre ${ring.centre}, ring ${ring.onRing.join(", ")})`, ring.centre === true && ring.onRing.every((v) => v === true));
+  }
+  await page.setViewportSize(size);
 }

@@ -13,6 +13,7 @@ import {
   shipReach,
   evasion,
   onLand,
+  endgameObjective,
 } from "./harbour-data.js";
 
 const V = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
@@ -30,10 +31,16 @@ export class Fleet {
     this.land = op.layout.harbour?.land || null;
     // Each step's course for one ship, reused (see shipPose).
     this.course = {};
-    this.groups = (op.layout.fleet || []).map((data) => ({ data, plan: fleetPlan(data), ships: [] }));
+    // A key group is one the mission requires (op.layout.required).
+    this.groups = (op.layout.fleet || []).map((data) => ({ data, plan: fleetPlan(data), ships: [], key: Boolean(op.layout.required?.includes(data.id)) }));
     this.ships = [];
     // Hostile hulls sunk so far (5.1: the harbour beats).
     this.sunk = 0;
+    // The endgame (5.1 C1): on once the quota is met with key hulls still afloat. standDown is
+    // when it began and how many boats stood down ({ at, ships }); objectiveText what is left.
+    this.endgame = false;
+    this.standDown = null;
+    this.objectiveText = "";
     for (const group of this.groups)
       group.data.ships.forEach((cls, i) => {
         const ship = this.createShip(group, cls, i);
@@ -71,7 +78,7 @@ export class Fleet {
     ship.marker = new THREE.Sprite(ship.civilian ? this.op.marker("civilian") : this.op.shipMarker(ship));
     // Health bars are wide and short; the civilian mark stays a square.
     if (ship.civilian) ship.marker.scale.setScalar(1.3 / k);
-    else ship.marker.scale.set((def.hp > 1 || this.op.layout.required?.includes(group.data.id) ? 3.2 : 1.9) / k, 1.2 / k, 1);
+    else ship.marker.scale.set((def.hp > 1 || group.key ? 3.2 : 1.9) / k, 1.2 / k, 1);
     ship.marker.position.set(0, (3.1 + def.beam * 0.4) / k, 0);
     ship.marker.renderOrder = 12;
     ship.mesh.add(ship.marker);
@@ -121,6 +128,7 @@ export class Fleet {
     const g = this.game,
       t = g.time;
     this.checkFreed();
+    if (!this.endgame && g.status === "playing" && this.quotaMet()) this.startEndgame();
     for (const ship of this.ships) {
       if (ship.dead) {
         this.updateSinking(ship, dt);
@@ -143,7 +151,60 @@ export class Fleet {
       this.updateGuns(ship, dt);
       if (dt > 0) this.effects(ship, moved / dt, dt);
       if (ship.halo) ship.halo.material.opacity = 0.45 + Math.sin(t * 3) * 0.2;
+      if (ship.keyRing) {
+        ship.keyRing.material.opacity = 0.6 + Math.sin(t * 5) * 0.3;
+        ship.keyRing.scale.setScalar(1 + Math.sin(t * 5) * 0.08);
+      }
     }
+  }
+
+  quotaMet() {
+    return this.sunk >= this.needed();
+  }
+
+  // Key hulls still afloat.
+  keysAfloat() {
+    let n = 0;
+    for (const s of this.ships) if (!s.dead && s.group.key) n++;
+    return n;
+  }
+
+  // The endgame (5.1 C1), on the first step the quota is met while key hulls float: every other
+  // hostile boat stands down. It keeps its timetable, holds its fire, scores nothing and is no
+  // longer a target. The key hulls keep their flak and get a pulsing gold ring.
+  startEndgame() {
+    if (!this.keysAfloat()) return;
+    const g = this.game;
+    this.endgame = true;
+    let ships = 0;
+    for (const ship of this.ships) {
+      if (ship.dead || ship.civilian) continue;
+      const k = ship.def.scale || 1;
+      if (ship.group.key) {
+        ship.keyRing = g.view.ring(V(0, 0.12 / k, 0), (ship.def.length * 0.62) / k, 0xffc62b, 0.16 / k, ship.mesh);
+        continue;
+      }
+      ship.standDown = true;
+      ship.marker.material = this.op.standDownMarker();
+      ship.marker.scale.set(3.2 / k, 1.2 / k, 1);
+      if (ship.nest) {
+        ship.nest.state = "idle";
+        ship.nest.solution = null;
+        ship.nest.warning.visible = false;
+      }
+      ships++;
+    }
+    this.standDown = { at: Math.round(g.time * 100) / 100, ships };
+    this.updateObjective();
+    this.op.endgame();
+  }
+
+  // 'QUOTA MET · SINK THE CHANNEL COLUMN (2 LEFT)': written when the endgame starts and when a
+  // key hull sinks, never per frame.
+  updateObjective() {
+    this.objectiveText = endgameObjective(
+      this.groups.filter((g) => g.key).map((g) => ({ title: g.data.title, left: g.ships.filter((s) => !s.dead).length, size: g.ships.length })),
+    );
   }
 
   // Sidestep falling bombs along the direction the forecast predicted, then drift back into
@@ -229,20 +290,23 @@ export class Fleet {
     }
   }
 
-  // Ships the forecast should consider at `time` (what the pipper's hit count reads).
+  // Ships the forecast should consider at `time` (what the pipper's hit count reads): boats
+  // standing down no longer count.
   predicted(time) {
     return this.ships
-      .filter((s) => !s.dead)
+      .filter((s) => !s.dead && !s.standDown)
       .map((s) => {
         const pose = this.poseAt(s, time);
         return { ship: s, cls: s.cls, hp: s.hp, pose, moored: pose.moored, name: s.def.name };
       });
   }
 
-  // A detonation at `point`: damage every hull in reach. Returns the ships it sank.
+  // A detonation at `point`: damage every hull in reach. Returns the ships it sank that count:
+  // a boat standing down still sinks, but scores nothing and adds nothing to the combo.
   hit(point, def, damage) {
     if (Math.abs(point.y - WATER_LEVEL) > DECK_REACH) return [];
     const sunk = [];
+    let wasted = false;
     for (const ship of this.ships) {
       if (ship.dead) continue;
       const pose = { x: ship.position.x, z: ship.position.z, heading: ship.heading };
@@ -253,11 +317,13 @@ export class Fleet {
       }
       ship.hp -= damage;
       this.game.puff(ship.position.clone().add(V(0, 1, 0)), 0xffb35c, 0.5, 0.5);
+      if (ship.standDown) wasted = true;
       if (ship.hp <= 0) {
         this.sinkShip(ship);
-        sunk.push(ship);
-      } else ship.marker.material = this.op.shipMarker(ship);
+        if (!ship.standDown) sunk.push(ship);
+      } else if (!ship.standDown) ship.marker.material = this.op.shipMarker(ship);
     }
+    if (wasted) this.game.notify("toast", "NOT A TARGET / SAVE YOUR BOMBS");
     return sunk;
   }
 
@@ -268,7 +334,8 @@ export class Fleet {
     ship.hp = 0;
     ship.sink = 0;
     ship.marker.visible = false;
-    g.score += ship.def.score;
+    if (!ship.standDown) g.score += ship.def.score;
+    if (this.endgame && ship.group.key) this.updateObjective();
     g.blast(ship.position.clone().add(V(0, 0.8, 0)), 1.6 + ship.def.length * 0.18, 0xffc62b, { quiet: true });
     if (ship.nest && !ship.nest.dead) this.op.destroyMounted(ship.nest);
   }
@@ -280,7 +347,6 @@ export class Fleet {
   // Boats still to sink: the mission's quota, and never fewer than its key ships still afloat.
   // (Counted in one pass: the outcome check asks every step.)
   left() {
-    const required = this.op.layout.required;
     let hostile = 0,
       alive = 0,
       keys = 0;
@@ -289,7 +355,7 @@ export class Fleet {
       hostile++;
       if (s.dead) continue;
       alive++;
-      if (required?.includes(s.group.data.id)) keys++;
+      if (s.group.key) keys++;
     }
     return Math.max(this.needed() - (hostile - alive), keys);
   }
@@ -298,10 +364,12 @@ export class Fleet {
     return this.op.layout.quota ?? this.hostile().length;
   }
 
-  // Intel strip entries: each labelled station with a timetable, like the city's gatherings.
+  // Intel strip entries: each labelled station with a timetable, like the city's gatherings. In
+  // the endgame only the key groups.
   events() {
     const out = [];
     for (const group of this.groups) {
+      if (this.endgame && !group.key) continue;
       const alive = group.ships.filter((s) => !s.dead && !s.civilian).length;
       group.data.stations.forEach((station, i) => {
         if (!station.label || station.hold >= PERMANENT) return;
@@ -327,9 +395,10 @@ export class Fleet {
   labels() {
     const out = [];
     for (const group of this.groups) {
+      if (this.endgame && !group.key) continue;
       const alive = group.ships.filter((s) => !s.dead && !s.civilian);
       if (!alive.length) continue;
-      const key = this.op.layout.required?.includes(group.data.id);
+      const key = group.key;
       const big = group.ships.some((s) => s.def.hp >= 3);
       group.data.stations.forEach((station, i) => {
         const status = stationStatus(group.data, i, this.game.time, group.plan);

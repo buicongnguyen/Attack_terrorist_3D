@@ -1,5 +1,54 @@
 # Release Verification
 
+## Tidelock 5.1, C1: Chapter 1 peaks
+
+[PLAN-5.1.md](PLAN-5.1.md) C1 was verified on 2026-11-21 against the production build (`vite preview`), Chrome 155 on the GPU. This is the first gameplay change of 5.1: one golden re-baseline with `--allow '6/*/*,7/*/*,8/*/*,5/naive/normal'`, and only the six harbour pilot rows moved.
+
+**What changed.**
+- **Armed drop** (`StrikeOperation.markAt`, the player's click, tap and map path only; the pilots still call `setAim`). A mark within 3 m of a gathering that has not convened (more than 2.5 s away) arms the drop: `aim = { x, z, rally, armed: true }`, the Drill selected and set to an indoor gathering's storey. `autoPilot` returns null (the flight patrols, the player steers) until the convene time less the forecast fall is 5 s away. `autoRelease` lets an armed mark go only when at least max(1, ceil(alive / 2)) members are forecast (`sampleRoute`) within 2.2 m of the centre as the bombs land, and no more of them would be there 0.5 s later (`ARM.settle`, added: with the bare half-cell rule the bomb went at 34.00 s, killed 4 of 6, and the two survivors ran, so Echo's 'Runners heading for the ground floors' fired). The button and the gathering's tag read 'ARMED · DROPS IN 0:11 · 6 OF 6 EXPECTED'; a second tap cancels ('ARM CANCELLED'); a member running for cover cancels it ('CELL SCATTERED'). The armed bomb (and each bomblet of an armed Scatter) closes its combo with the gathering's banner, 'THE MEETING IS BROKEN' on 1.6 (J1's blowout throws F6 out). A click on a gathering's ring arms it: the ring is drawn on the gathering's floor inside its building, and `view.pickStrike` returns the roof or facade 3.2-3.6 m from the 1.6 centre (beyond the 3 m reach), so `ui.markDrop` also takes the click where its ray crosses each gathering's floor height (`view.pickPlane`) and arms when that point is in reach.
+- **Harbour endgame** (`Fleet.startEndgame`). The first step the quota is met with key hulls afloat, every other hostile boat stands down: same timetable, flak held (`updateFlak` skips it), the grey (0x8a96a8) STANDING DOWN tag in place of its pips, out of `targets()` (so out of the bomb assist, the Lance lock, the ripples and click snapping), out of `predicted()` (the pattern's hit count) and of the intel strip and world badges. Bombed anyway it sinks for 0 points, adds nothing to the kills or the combo, and toasts 'NOT A TARGET / SAVE YOUR BOMBS'. A player's mark on a boat that stands down is dropped ('MARK DROPPED / NOT A TARGET'), so the flight no longer releases on it. The key groups have a `title` in harbour-data.js; the objective reads `endgameObjective` ('QUOTA MET · SINK THE CHANNEL COLUMN (4 LEFT)', 'QUOTA MET · SINK THE AA FRIGATE', 'QUOTA MET · SINK THE ESCORT RING (5 LEFT) AND CINDER'), written when it starts and when a key hull sinks; the phones' one-line objective reads 'KEY SHIPS' (the full line was cut to 'QUOTA M…' at 390x844). Key hulls get a pulsing gold ring and keep their flak, star tag and edge chevron; the map pings once; Ines calls the quota (`quota`, a story line per mission).
+- **LAST RUN** (`StrikeOperation.lastRun`, checked before the 1.2 s ordnance timer): once, in the endgame with key hulls afloat, when the flight's payload is 0 and nothing is falling, the lead live aircraft gets min(`mode.lastRun`, key hulls afloat) Sticks (`lastRun` 2 on Easy and Normal, 0 on Hard and Crazy), a LAST RUN banner and Bram's line. They count toward 'used'; the golden `resupply` field records `{ at, sticks }`, `standDown` records `{ at, ships }`.
+- **1.1 set piece** (cosmetic, on the kill, also after the result): every jammer mast topples 80 degrees round its base in 1.2 s with sparks and a dust puff, and the lamps along the three nearest streets flash on, nearest first, all by the time it lands, and stay lit for the mission: the lit heads are one instanced mesh owned by the city, made at the first lamp and written only when a lamp lights (one draw once lit, nothing per frame, no random draws; a pooled glow would have been overwritten once heavy fire wrapped the 1024-slot glow ring). Echo's line is 1.1's closing line ('Jammer's down. Network's back. I can see you, Kestrel.'), not an extra line on the kill: in 1.1 the mast's blast is the winning blast, so an extra line would have moved mission 0's radio logs.
+- No Normal-only bomb lever was needed: the harbour pilot wins all three missions on Normal without it.
+
+**Tests.**
+- `npm test`: **193 Node tests**, all passing (13 new: the arm rule with a stub operation on the real 1.6 schedules, the 2.5 s refusal and reach, the autopilot's 5 s window, the stand-down on a real `Fleet` for 1.7-1.9, a stood-down boat's pose over 240 s against a fleet that never stood down, its flak never firing while a control nest does, its sinking scoring 0 and returning nothing to the combo, the plural-aware objective and its title data, LAST RUN per mode and once only, the pilots' source with no `markAt`, the harbour rows, an armed Scatter's bomblets carrying the gathering, and a mark on a boat that stands down being dropped while one on a key hull stays).
+- `npm run test:browser`: **730 checks passed, 0 failed**, no runtime or resource errors (hud-browser's 11 px / 44 px checks included). New: on 1.6 Normal, `markAt` 15 s before the meeting arms it (rally set, Drill on F6), a second tap shows ARM CANCELLED, the armed line is on the button and the tag, the flight never drops below 1.40 m/s on a pass before the steering window (patrol speed 1.4, so more than half), a jink keeps the arm, the drop goes at 34.32 s with 6 of 6 forecast (3 needed), the blast kills 6 of 6, no 'alert' line, and the banner reads THE MEETING IS BROKEN; a real click through `ui.markDrop` at the meeting ring's projected centre and at four points on the drawn ring arms the drop at 1280x720, 844x390 and 390x844; on 1.1 the mast reaches 1.40 rad within 1.5 s and its 9 lamps stay lit after 1,500 more glows wrap the pool; on 1.7 Normal the objective is 'QUOTA MET · SINK THE CHANNEL COLUMN (4 LEFT)', the stood-down tags use the grey material, a detonation over one sinks it for 0 and toasts NOT A TARGET, and the column off screen has a key edge chevron. The LAST RUN harness (the harbour pilot from a 1.7 start where every bomb went on boats that don't count and the quota is met with none left): Normal wins after the resupply (`{ at: 1.11, sticks: 2 }`, 19 used); Hard fails 'ordnance' with resupply null (13 used).
+- `npm run perf`: 29 of 29 checks passed.
+- `npm run golden`: the re-baseline rewrote only the allowed keys, and a verify run after it matched all 50 rows with all 11 checks passing (the four interleave checks, plain and `&feel=1`, included).
+
+**The golden diff** (`UPDATE_GOLDEN=1 npm run golden -- --allow '6/*/*,7/*/*,8/*/*,5/naive/normal'`, 47 field changes in 6 rows). Mission 0 (the set piece) and `5/naive/normal` did not move; neither did `6/idle/normal` (it never meets the quota) nor any other row. Every row also gained the `quota` line in its radio log; none used LAST RUN.
+
+| Row | status | endTime | used | stars | score | kills | randomCalls | standDown |
+|---|---|---|---|---|---|---|---|---|
+| 6/harbour/normal | failed (ordnance) -> success | 231.72 -> 146.43 | 17 -> 10 | 0 -> 2 | 21030 -> 17088 | 72 -> 42 | 2 -> 0 | null -> 127.09 s, 61 boats |
+| 6/harbour/easy | success | 266.42 -> 145.93 | 20 -> 10 | 2 | 23750 -> 14220 | 79 -> 42 | 1 -> 0 | null -> 127.09 s, 61 boats |
+| 7/harbour/normal | failed (ordnance) -> success | 245.3 -> 184.87 | 16 -> 11 | 0 -> 2 | 16490 -> 15975 | 59 -> 39 | 4 | null -> 109.83 s, 60 boats |
+| 7/harbour/easy | success | 189.51 -> 124.59 | 15 -> 9 | 2 | 20270 -> 13630 | 63 -> 39 | 4 -> 1 | null -> 106.43 s, 60 boats |
+| 8/harbour/normal | success | 326.57 -> 177.93 | 19 -> 10 | 2 | 39225 -> 26613 | 88 -> 49 | 14 -> 9 | null -> 154.27 s, 59 boats |
+| 8/harbour/easy | success | 323.06 -> 185 | 20 -> 10 | 2 | 32280 -> 21990 | 88 -> 49 | 12 -> 9 | null -> 154.27 s, 59 boats |
+
+Why: once the quota is met the pilot reads the HUD and goes only for the key group, and the boats that stood down no longer fire (fewer flak volleys, so fewer `hitRoll` draws in randomCalls) or pay out. Scores drop because the run ends sooner with fewer boats sunk; stars stay at 2 (used is still over par).
+
+**Balance, 8 seeds** (`npm run balance -- --missions 5-8 --modes easy,normal,hard --seeds 8`, 27 cells in 2.0 min), against the G1 baseline:
+
+| Mission | Player | Easy (G1 -> C1) | Normal (G1 -> C1) | Hard (G1 -> C1) |
+|---|---|---|---|---|
+| 1.6 | autopilot | 8/8 -> 8/8 | 8/8 -> 8/8 | 8/8 -> 8/8 |
+| 1.6 | naive | 8/8 -> 8/8 | 0/8 -> 0/8 (ordnance) | 0/8 -> 0/8 (ordnance) |
+| 1.6 | idle | 0/8 -> 0/8 | 0/8 -> 0/8 | 0/8 -> 0/8 |
+| 1.7 | harbour | 8/8, 266.4 s -> 8/8, 145.9 s | **0/8 (ordnance) -> 8/8**, 146.4 s | 0/8 (ordnance) -> 8/8, 147.9 s |
+| 1.7 | idle | 0/8 -> 0/8 | 0/8 -> 0/8 (surge, 600.01 s in all 8) | 0/8 -> 0/8 (surge 7, flight 1) |
+| 1.8 | harbour | 8/8, 189.5 s -> 8/8, 124.6 s | **0/8 (ordnance) -> 8/8**, 184.9 s | 0/8 (ordnance) -> 8/8, 159.4 s |
+| 1.8 | idle | 0/8 -> 0/8 | 0/8 -> 0/8 | 0/8 -> 0/8 |
+| 1.9 | harbour | 8/8, 323.1 s -> 8/8, 185.0 s | 8/8, 326.6 s -> **8/8**, 177.9 s | 0/8 (ordnance) -> 8/8, 350.6 s |
+| 1.9 | idle | 0/8 -> 0/8 | 0/8 -> 0/8 | 0/8 -> 0/8 |
+
+- **Acceptance met:** the harbour pilot wins 1.7, 1.8 and 1.9 on Normal in 8/8 each (target 7/8); its Easy rate stays 8/8; doing nothing on 1.7 Normal fails 'surge' at 600.01 s in 8/8.
+- **Hard, recorded (no target):** the pilot now wins 1.7-1.9 on Hard in 8/8 (0/8 before), using 10, 11 and 13 bombs; LAST RUN never fires there. The stand-down alone did it: from the quota on, every bomb goes on the key group and the other boats' flak is silent. Hard harbour is now much kinder than G1 measured; the plan allowed Hard to stay low and set no ceiling, so this is for the owner (a Hard-only quota or payload lever would be the place).
+- **No run needed LAST RUN:** all 72 harbour pilot runs ended with `resupply` null (9-13 bombs used). LAST RUN is exercised by the harness above.
+- The city cells are unchanged in rate and time: the pilots never arm (no `markAt`), and the naive clicker's 1.6 rows did not move (its clicks land on targets, not within 3 m of a gathering's centre more than 2.5 s ahead).
+
 ## Tidelock 5.1, J1: hits that land and threats you can hear
 
 [PLAN-5.1.md](PLAN-5.1.md) J1 was verified on 2026-11-21 against the production build (`vite preview`), Chrome on the GPU. Presentation only: **all 50 golden rows are byte-identical with no re-baseline**, randomCalls unchanged, and the four interleave checks pass both as before and with `&feel=1` (hit-stops on).

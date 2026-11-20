@@ -158,7 +158,8 @@ export const MISSION_STORY = [
     ],
     radio: {
       start: line("iona", "Cleared in hot, Kestrel. Tap or click the mast to mark it."),
-      success: line("echo", "Mast is down. I can hear you now, Kestrel. Loud and clear."),
+      // 5.1 C1: the jammer set piece's line (the mast topples and the street lamps come back on).
+      success: line("echo", "Jammer's down. Network's back. I can see you, Kestrel."),
     },
     success:
       "The first jammer is silent. For the first time since dawn, Echo's voice reaches the carrier clearly.",
@@ -362,6 +363,7 @@ export const MISSION_STORY = [
       q25: line("ines", "A quarter of them gone. The mouth's starting to breathe."),
       q50: line("bram", "Half the column. Keep the Stick for the big hulls."),
       q75: line("ines", "They're panicking on the quays. Finish it."),
+      quota: line("ines", "That's the quota! Only the channel column now, Kestrel."),
       multi: line("piper", "The whole column in one line!"),
       success: line("ines", "The channel is clear. What's left of them is running for the open sea."),
     },
@@ -401,6 +403,7 @@ export const MISSION_STORY = [
       q25: line("ines", "A quarter of the dock is on the bottom. Keep going."),
       q50: line("piper", "Half of them gone. The shapes are doing the work."),
       q75: line("ines", "The slipways are emptying. A few more, Kestrel."),
+      quota: line("ines", "That's the quota! Only the frigate now, Kestrel."),
       flak: line("piper", "Flak from the frigate! Break when it says break."),
       ferry: line("iona", "Civilians in your pattern. Hold your release."),
       multi: line("piper", "That shape fit like a glove."),
@@ -446,6 +449,7 @@ export const MISSION_STORY = [
       q25: line("bram", "A quarter down. Their rings are coming apart."),
       q50: line("ines", "Half the flotilla. They're losing their nerve."),
       q75: line("iona", "The quays are cheering, Kestrel. Finish it."),
+      quota: line("ines", "That's the quota! Only the ring and Cinder now, Kestrel."),
       freed: line("ines", "My father brought ferries through that mouth for thirty years. The Belle doesn't sink on my watch."),
       flak: line("bram", "Flak from Cinder and the frigate. Watch the red lines."),
       ferry: line("ines", "The ferry is inside your pattern. Don't release!"),
@@ -848,6 +852,10 @@ export const STRIKE_RADIO = {
   quiet1: line("piper", "Tap or click a group on the map, Kestrel, and we'll fly straight there."),
   quiet2: line("ines", "Look for boats moored in rows. One pattern laid along a row sinks the lot."),
   quiet3: line("bram", "Watch the count on the pattern before you let go. Wait for a full line."),
+  // The harbour endgame (5.1 C1): the quota is met (each harbour mission names its key ships in
+  // its own line), and LAST RUN.
+  quota: line("ines", "That's the quota! Only the key ships now, Kestrel."),
+  lastRun: line("bram", "Last run, Kestrel. Sticks on the rail. Make them count."),
 };
 
 // Marrow on the radio (5.1): six intercepts, each said once from an event in its mission. The

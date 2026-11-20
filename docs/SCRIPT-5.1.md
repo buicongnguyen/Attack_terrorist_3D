@@ -104,6 +104,24 @@ The quarter beats alone left the Normal harbour runs 54-161 s without a line, so
 | `quiet2` | Ines | Look for boats moored in rows. One pattern laid along a row sinks the lot. |
 | `quiet3` | Bram | Watch the count on the pattern before you let go. Wait for a full line. |
 
+### The harbour endgame and LAST RUN (C1)
+
+Added in C1. Both keys are story lines (never dropped). `quota` is said once, when the quota is met with key hulls still afloat (the other boats stand down); each harbour mission names its own key ships, and `STRIKE_RADIO.quota` is the fallback. `lastRun` is said once, when the flight's last bomb is gone in the endgame on Easy or Normal and the lead aircraft gets its Sticks.
+
+| Mission | Key | Speaker | Line |
+|---|---|---|---|
+| 1.7 Harbour Mouth | `quota` | Ines | That's the quota! Only the channel column now, Kestrel. |
+| 1.8 Dry Dock | `quota` | Ines | That's the quota! Only the frigate now, Kestrel. |
+| 1.9 The Ring | `quota` | Ines | That's the quota! Only the ring and Cinder now, Kestrel. |
+| (fallback) | `quota` | Ines | That's the quota! Only the key ships now, Kestrel. |
+| any harbour, Easy and Normal | `lastRun` | Bram | Last run, Kestrel. Sticks on the rail. Make them count. |
+
+The jammer set piece (C1) gives 1.1 Echo's line from the plan. It replaces the mission's closing line rather than adding one on the mast's kill: in 1.1 the mast's blast is the winning blast, so a second line would stack on the result.
+
+| Mission | Speaker | Trigger | Key | Line | Was |
+|---|---|---|---|---|---|
+| 1.1 Wake-Up Call | Echo | mission won | `success` | Jammer's down. Network's back. I can see you, Kestrel. | Mast is down. I can hear you now, Kestrel. Loud and clear. |
+
 ## 5. Survivor voices
 
 One line for each of the nine Echo crew, said as that soldier is aboard (key `aboard`, tactical). When Reyes is the last aboard, her line gives way to the mission's pickup line, so the moment carries one story line. The seven without a cast entry get one (name, role 'Echo team', an Echo green), so the portrait dot and name show.

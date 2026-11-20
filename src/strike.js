@@ -48,6 +48,12 @@ import {
   isPattern,
   groundAt,
   surgeWindow,
+  ARM,
+  armRally,
+  armSteers,
+  expectedAt,
+  armReleases,
+  armText,
 } from "./strike-data.js";
 import { patternPoints, patternDiagram, predictHits, ROTATION_STEP, SHAPES } from "./harbour-data.js";
 import { Fleet, dampAngle } from "./harbour.js";
@@ -60,7 +66,7 @@ const QUIET_KEYS = ["quiet1", "quiet2", "quiet3"];
 import { clamp } from "./physics.js";
 import { scalePayload } from "./difficulty.js";
 import { bonuses } from "./requisition.js";
-import { Ripples, healthMaterial } from "./ripples.js";
+import { Ripples, healthMaterial, standDownMaterial } from "./ripples.js";
 
 const V = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
 // A building's four walls: outward normal (x, z) and the box side it stands on (5.1 J1 blowouts).
@@ -147,6 +153,11 @@ const MARK_GRACE = 3;
 const AUTO_GAIN = 0.55;
 // How far past the last live target a flight with no mark flies before it turns round.
 const PATROL_MARGIN = 18;
+// A jammer down (5.1 C1): it topples this far (80 degrees) in TOPPLE seconds; the mast stands
+// MAST_HEIGHT m before scaling.
+const TOPPLE = 1.2;
+const TOPPLE_ANGLE = (80 * Math.PI) / 180;
+const MAST_HEIGHT = 4.7;
 
 // Steer a guided bomb toward `aim`: match the horizontal speed needed to arrive as it falls.
 function guide(s, aim, dt, steer = BOMBS.lance.steer) {
@@ -214,7 +225,12 @@ export class StrikeOperation {
     this.shells = [];
     this.used = 0;
     this.damaged = false;
-    this.combo = { count: 0, timer: 0 };
+    // title: the banner that closes this combo instead of MULTI-KILL (a broken gathering).
+    this.combo = { count: 0, timer: 0, title: null };
+    // LAST RUN (5.1 C1): the one resupply of the harbour endgame, { at, sticks }, once given.
+    this.resupply = null;
+    // The routes of an armed gathering's members, refilled in place (5.1 C1).
+    this.armRoutes = [];
     this.lastBombKills = null;
     this.said = new Map();
     this.forecastTimer = 0;
@@ -595,7 +611,21 @@ export class StrikeOperation {
 
   // A ship's marker: its health bar (yellow under the pattern, starred if it is a key ship).
   shipMarker(ship, marked = false) {
-    return healthMaterial(Math.max(0, ship.hp), ship.maxHp, marked, this.layout.required?.includes(ship.group.data.id));
+    return healthMaterial(Math.max(0, ship.hp), ship.maxHp, marked, ship.group.key);
+  }
+
+  // A boat standing down in the harbour endgame (5.1 C1) wears this instead.
+  standDownMarker() {
+    return standDownMaterial();
+  }
+
+  // The harbour endgame has begun (Fleet.startEndgame): the quota is met, key hulls are left. A
+  // mark on a boat that has just stood down is dropped, or the flight would still bomb it.
+  endgame() {
+    this.say("quota");
+    if (!this.aim?.target?.standDown) return;
+    this.clearAim();
+    this.game.notify("toast", "MARK DROPPED / NOT A TARGET");
   }
 
   // Flak on a ship: a nest that rides the hull and dies with it.
@@ -689,6 +719,64 @@ export class StrikeOperation {
     this.aim = null;
   }
 
+  // A click or tap on the city or the map (5.1 C1). Only the player's path comes here; the scripted
+  // pilots call setAim. A mark on a gathering that has not convened arms the drop on it: the
+  // flight patrols on and drops when the cell is forecast to be there (see autoPilot and
+  // autoRelease). A gathering indoors sets the Drill to its storey. A second tap on an armed
+  // gathering cancels the arm; a tap anywhere else cancels it and marks there.
+  markAt(point) {
+    if (this.game.status !== "playing") return false;
+    if (this.aim?.armed) {
+      const again = Math.hypot(point.x - this.aim.x, point.z - this.aim.z) <= ARM.reach;
+      this.disarm("ARM CANCELLED");
+      if (again) return true;
+    }
+    const rally = armRally(this.events, point, this.game.time);
+    if (!rally) return this.setAim(point);
+    this.aim = { x: rally.centre.x, z: rally.centre.z, rally, armed: true };
+    this.markOutside = 0;
+    this.aimUsed = true;
+    this.forecastTimer = 0;
+    const b = rally.centre.b ? buildingById(this.buildings, rally.centre.b) : null;
+    if (b && rally.centre.f < b.floors) {
+      this.select("drill");
+      this.setFloor(rally.centre.f + 1);
+    }
+    return true;
+  }
+
+  disarm(text) {
+    this.aim = null;
+    this.game.notify("toast", text);
+  }
+
+  // An armed mark ends when its cell is alerted (one of them runs for cover) or all are down.
+  watchArm() {
+    const rally = this.aim?.armed ? this.aim.rally : null;
+    if (!rally) return;
+    if (rally.alive === 0) return this.clearAim();
+    for (const e of this.enemies) if (!e.dead && e.plan.group === rally.group && e.state === "hide") return this.disarm("CELL SCATTERED");
+  }
+
+  // How many of an armed gathering's members are forecast at its centre at `time`: those still
+  // walking their schedule (a runner hiding is not coming).
+  expected(rally, time) {
+    const routes = this.armRoutes;
+    let n = 0;
+    for (const e of this.enemies) if (!e.dead && e.plan.group === rally.group && e.state === "route") routes[n++] = e.plan.route;
+    routes.length = n;
+    return expectedAt(rally, routes, time);
+  }
+
+  // The armed drop's line for the release button and the gathering's tag, or null.
+  armState() {
+    const rally = this.aim?.armed ? this.aim.rally : null;
+    if (!rally) return null;
+    const fall = this.shooterFor(this.selected)?.forecast?.time ?? 2;
+    const { next } = rallyStatus(rally, this.game.time);
+    return armText(next - fall, this.expected(rally, this.game.time + Math.max(fall, next)), rally.alive ?? rally.members);
+  }
+
   // A marked target that runs out of the safe airspace is waited for a moment (it may turn back),
   // then the mark is dropped and the flight is free to patrol again.
   watchMark(dt) {
@@ -722,11 +810,14 @@ export class StrikeOperation {
 
   // Steering toward the aim point: fast on the way, then a hover with the pipper on the mark (a
   // mark just behind is crept back to; one well behind turns the flight round).
+  // An armed mark (5.1 C1) never hovers: the flight patrols as usual (null) until the gathering's
+  // convene time less the fall is ARM.steer seconds away.
   autoPilot() {
     const aim = this.aimPoint();
     if (!aim) return null;
     const f = this.flight;
     const a = this.shooterFor(this.selected) || this.aircraft.find((x) => x.alive);
+    if (aim.armed && !armSteers(aim.rally, this.game.time, a?.forecast?.time ?? 2)) return null;
     const impact = a?.forecast?.impact;
     const pipperZ = impact ? impact.z : f.lane + (a?.slot.z || 0);
     // The pipper already leads by the flight's own speed times the fall (about 2 s), so the gains
@@ -754,6 +845,8 @@ export class StrikeOperation {
   }
 
   // Drop by itself once the pipper sits on the aim point, unless the drop would touch a civilian.
+  // An armed mark (5.1 C1) also waits until enough of the cell is forecast there as the bombs land
+  // and no more are still walking in (armReleases).
   autoRelease() {
     const aim = this.aimPoint();
     if (!aim || !this.canRelease()) return;
@@ -767,17 +860,27 @@ export class StrikeOperation {
     // A moving target gets a little allowance for its own speed.
     const v = this.markVelocity();
     if (!locked && Math.hypot(p.x - aim.x, p.z - aim.z) > AIM_TOLERANCE + 0.4 * Math.hypot(v.x, v.z)) return;
-    // A Drill marked on someone indoors goes to their floor, and only into their building.
-    if (this.selected === "drill" && target?.cur?.b) {
-      if (f.building?.id !== target.cur.b) return;
-      const b = this.buildings.find((x) => x.id === target.cur.b);
-      const floor = target.cur.f >= b.floors ? b.floors + 1 : target.cur.f + 1;
+    const rally = this.aim.armed ? this.aim.rally : null;
+    if (rally) {
+      const land = this.game.time + f.time;
+      if (!armReleases(this.expected(rally, land), this.expected(rally, land + ARM.settle), rally.alive ?? rally.members)) return;
+    }
+    // A Drill marked on someone indoors (or on a gathering indoors) goes to their floor, and only
+    // into their building.
+    const place = target?.cur?.b ? target.cur : rally?.centre.b ? rally.centre : null;
+    if (this.selected === "drill" && place) {
+      if (f.building?.id !== place.b) return;
+      const b = buildingById(this.buildings, place.b);
+      const floor = place.f >= b.floors ? b.floors + 1 : place.f + 1;
       if (this.floor !== floor) {
         this.setFloor(floor);
         return;
       }
     }
-    if (this.release(this.selected)) this.clearAim();
+    if (!this.release(this.selected)) return;
+    // The bomb remembers the gathering it was armed on, for the banner when it breaks it.
+    if (rally) this.bombs[this.bombs.length - 1].rally = rally;
+    this.clearAim();
   }
 
   // Bombs home gently onto the nearest target within the mission's assist radius of their impact.
@@ -990,13 +1093,13 @@ export class StrikeOperation {
     return candidates.find((c) => this.lanceReaches(release, c.t))?.t || null;
   }
 
-  // Every live target, in this order: trucks, hostile ships, jammer masts, flak, people. `out`
-  // is refilled when given.
+  // Every live target, in this order: trucks, hostile ships (not those standing down), jammer
+  // masts, flak, people. `out` is refilled when given.
   // (Overwritten, then cut to length: emptying it first would drop its storage.)
   targets(out = []) {
     let n = 0;
     for (const t of this.trucks) if (!t.dead) out[n++] = t;
-    if (this.fleet) for (const s of this.fleet.ships) if (!s.civilian && !s.dead) out[n++] = s;
+    if (this.fleet) for (const s of this.fleet.ships) if (!s.civilian && !s.dead && !s.standDown) out[n++] = s;
     for (const t of this.masts) if (!t.dead) out[n++] = t;
     for (const t of this.aa) if (!t.dead && !t.mounted) out[n++] = t;
     for (const t of this.enemies) if (!t.dead) out[n++] = t;
@@ -1052,7 +1155,10 @@ export class StrikeOperation {
     const g = this.game,
       f = this.flight;
     // With an aim point the flight steers itself; any held key or stick input takes over while held.
-    if (g.status === "playing") this.watchMark(dt);
+    if (g.status === "playing") {
+      this.watchMark(dt);
+      this.watchArm();
+    }
     const auto = g.status === "playing" ? this.autoPilot() : null;
     const manualX = Math.abs(g.input.x) > 0.05,
       manualZ = Math.abs(g.input.z) > 0.05;
@@ -1152,6 +1258,7 @@ export class StrikeOperation {
     this.updateBombs(dt);
     this.updateFlak(dt);
     this.fleet?.update(dt);
+    this.updateMasts(dt);
     if (this.combo.timer > 0) {
       this.combo.timer -= dt;
       if (this.combo.timer <= 0) this.closeCombo();
@@ -1334,8 +1441,15 @@ export class StrikeOperation {
     }
   }
 
+  // A jammer down (5.1 C1, cosmetic): it topples 80 degrees round its base in TOPPLE seconds,
+  // throwing sparks, and the street lamps along the three nearest streets come back on, nearest
+  // first. Driven by the kill alone, after the result too (settle), with no random draws.
   updateMasts(dt) {
     for (const mast of this.masts) {
+      if (mast.fall !== undefined) {
+        this.toppleMast(mast, dt);
+        continue;
+      }
       if (mast.dead) continue;
       if (mast.dish) mast.dish.rotation.y += dt * 1.4;
       const on = Math.sin(this.game.time * 6) > 0;
@@ -1354,7 +1468,8 @@ export class StrikeOperation {
     let nest;
     for (nest of this.aa) {
       nest.beam.visible = false;
-      if (nest.dead) continue;
+      // A boat standing down holds its fire (5.1 C1).
+      if (nest.dead || nest.mounted?.standDown) continue;
       nest.cooldown -= dt;
       const target =
         nest.state === "lock"
@@ -1597,7 +1712,7 @@ export class StrikeOperation {
       const t = Math.max(0.25, (vy + Math.sqrt(vy * vy + 2 * -GRAVITY * h)) / -GRAVITY);
       const state = { x: point.x, y: point.y, z: point.z, vx: (p.x - point.x) / t, vy, vz: (p.z - point.z) / t };
       const mesh = g.view.model(model, V(point.x, point.y, point.z), 1);
-      this.bombs.push({ kind: "bomblet", def, state, mesh, crossed: new Set(), time: 0, trail: 0, owner: bomb.owner, dead: false });
+      this.bombs.push({ kind: "bomblet", def, state, mesh, crossed: new Set(), time: 0, trail: 0, owner: bomb.owner, rally: bomb.rally, dead: false });
     }
   }
 
@@ -1699,6 +1814,8 @@ export class StrikeOperation {
     }
     // The teaching coach offers Reverse only after a bomb that hit nothing (5.1 H1).
     this.lastBombKills = kills;
+    // An armed drop that breaks its gathering closes its combo with the gathering's banner.
+    if (bomb.rally && kills) this.combo.title = bomb.rally.broken;
     if (kills) {
       g.kills += kills;
       g.hits++;
@@ -1765,17 +1882,51 @@ export class StrikeOperation {
     target.dead = true;
     target.hp = 0;
     g.score += score;
-    g.view.disposeObject(target.mesh);
+    if (target.type === "mast") this.felled(target);
+    else g.view.disposeObject(target.mesh);
     g.blast(target.position.clone().add(V(0, 0.8, 0)), 2.2, 0xffc62b, { quiet: true });
   }
 
+  // A jammer is down: it starts to fall, and the lamps near it wait their turn to light.
+  felled(mast) {
+    mast.fall = 0;
+    mast.ring.visible = false;
+    for (const m of mast.light) m.emissiveIntensity = 0;
+    const p = mast.position;
+    // All lit by the time it lands: when the jammer is the last target the result follows 1.4 s on.
+    mast.lamps = this.city.lampsNear(p.x, p.z).map((lamp) => ({ lamp, at: Math.min(TOPPLE, 0.4 + Math.abs(lamp.x - p.x) * 0.012) }));
+  }
+
+  toppleMast(mast, dt) {
+    const g = this.game;
+    mast.fall += dt;
+    const u = Math.min(1, mast.fall / TOPPLE);
+    mast.mesh.rotation.z = -TOPPLE_ANGLE * u * u;
+    // Sparks from the top while it goes over; a burst of dust where it lands.
+    const top = MAST_HEIGHT * mast.mesh.scale.y;
+    if (u < 1 && Math.floor(mast.fall * 12) !== Math.floor((mast.fall - dt) * 12))
+      g.ember(V(mast.position.x + Math.sin(TOPPLE_ANGLE * u * u) * top, mast.position.y + Math.cos(TOPPLE_ANGLE * u * u) * top, mast.position.z), 0xffd23f, 0.35, 0.5, V(0.5, 1.6, 0), -6);
+    if (mast.fall >= TOPPLE && mast.fall - dt < TOPPLE) g.puff(V(mast.position.x + top * 0.9, mast.position.y + 0.4, mast.position.z), 0x8a8494, 1.1, 1.2);
+    // A lamp flicks on: a short flash, then it stays lit for the rest of the mission.
+    while (mast.lamps.length && mast.lamps[0].at <= mast.fall) {
+      const { lamp } = mast.lamps.shift();
+      g.flash(lamp, 0xfff1c4, 1.4);
+      this.city.light(lamp);
+    }
+    if (mast.fall > TOPPLE + 6 && mast.mesh.parent) g.view.disposeObject(mast.mesh);
+  }
+
   closeCombo() {
-    const count = this.combo.count;
+    const { count, title } = this.combo;
     this.combo.count = 0;
-    if (count < 2) return;
+    this.combo.title = null;
+    if (count < 2) {
+      if (title) this.game.notify("combo", { count, bonus: 0, title });
+      return;
+    }
     const bonus = comboBonus(count);
     this.game.score += bonus;
-    this.game.notify("combo", { count, bonus });
+    this.game.notify("combo", { count, bonus, title });
     if (count >= 3) this.say("multi");
   }
 
@@ -1961,7 +2112,7 @@ export class StrikeOperation {
     const lead = this.shooterFor(this.selected);
     const marked = new Set((lead?.forecast?.prediction?.ships || []).map((s) => s.ship.ship));
     for (const ship of this.fleet.ships) {
-      if (ship.dead || ship.civilian) continue;
+      if (ship.dead || ship.civilian || ship.standDown) continue;
       ship.marker.material = this.shipMarker(ship, marked.has(ship));
     }
   }
@@ -2056,9 +2207,28 @@ export class StrikeOperation {
     }
     const ordnance = this.aircraft.some((a) => a.alive && Object.values(a.payload).some((n) => n > 0));
     if (!ordnance && this.bombs.length === 0 && this.combo.timer <= 0) {
+      if (this.lastRun()) return;
       this.emptyTimer += dt;
       if (this.emptyTimer > 1.2) g.finish(false, "ordnance");
     } else this.emptyTimer = 0;
+  }
+
+  // LAST RUN (5.1 C1): once a mission, on the modes that give it (mode.lastRun Sticks at most), a
+  // flight that has spent its last bomb in the harbour endgame gets a Stick for each key hull
+  // still afloat, on the lead live aircraft. They count toward 'used' like any other bomb.
+  lastRun() {
+    const g = this.game,
+      lead = this.aircraft.find((a) => a.alive);
+    if (this.resupply || !this.fleet?.endgame || !g.mode.lastRun || !lead) return false;
+    const keys = this.fleet.keysAfloat();
+    if (!keys) return false;
+    const sticks = Math.min(g.mode.lastRun, keys);
+    lead.payload.stick = (lead.payload.stick ?? 0) + sticks;
+    this.resupply = { at: Math.round(g.time * 100) / 100, sticks };
+    this.select("stick");
+    this.say("lastRun");
+    g.notify("banner", "LAST RUN");
+    return true;
   }
 
   finishBonus() {
@@ -2132,7 +2302,11 @@ export class StrikeOperation {
       pass: this.flight.pass,
       harbour: Boolean(this.fleet),
       reversible: this.canReverse(),
-      aim: this.aim ? { ...this.aimPoint(), marked: Boolean(this.aim?.target) } : null,
+      aim: this.aim ? { ...this.aimPoint(), rally: undefined, marked: Boolean(this.aim.target) } : null,
+      // The armed drop's line (5.1 C1), or null.
+      armed: this.armState(),
+      // The harbour endgame's objective (5.1 C1), or null.
+      objective: this.fleet?.endgame ? this.fleet.objectiveText : null,
       radar: this.radar(),
       pattern: this.patternInfo(),
       events: [
@@ -2173,7 +2347,7 @@ export class StrikeOperation {
         ...this.masts.filter((m) => !m.dead).map((m) => dot(m, "mast")),
         ...this.trucks.filter((t) => !t.dead).map((t) => dot(t, "truck")),
         ...(this.fleet
-          ? this.fleet.ships.filter((s) => !s.dead).map((s) => dot(s, s.civilian ? "civilian" : this.layout.required?.includes(s.group.data.id) ? "key" : "ship"))
+          ? this.fleet.ships.filter((s) => !s.dead).map((s) => dot(s, s.civilian ? "civilian" : s.group.key ? "key" : s.standDown ? "down" : "ship"))
           : []),
       ],
       rallies: this.events.filter((e) => e.alive > 0).map((e) => ({ x: e.centre.x, z: e.centre.z, active: Boolean(e.status?.active) })),
@@ -2225,7 +2399,9 @@ export class StrikeOperation {
     return [{ id: "pattern", x: at.x, y: at.y + 0.6, z: south, text, hot: p.hits > 1 && !p.civilian, kind: p.civilian ? "civilian" : undefined }];
   }
 
+  // An armed gathering's tag reads the armed line (5.1 C1).
   rallyLabels() {
+    const armed = this.aim?.armed ? this.aim.rally : null;
     return this.events
         .filter((e) => (e.alive ?? 1) > 0)
         .map((e) => ({
@@ -2234,12 +2410,15 @@ export class StrikeOperation {
           // Indoors, under the next floor (2.6); in the street, over the heads.
           y: e.centre.y + (e.centre.b ? 1.8 : 2.8),
           z: e.centre.z,
-          text: e.status?.active
-            ? e.present
-              ? `${e.label} / ${e.present} THERE / ${Math.ceil(e.status.remaining)}s`
-              : `${e.label} / SCATTERED`
-            : `${e.label} / ${Math.ceil(e.status?.next ?? e.at)}s`,
-          hot: Boolean(e.status?.active && e.present),
+          text:
+            e === armed
+              ? this.armState()
+              : e.status?.active
+                ? e.present
+                  ? `${e.label} / ${e.present} THERE / ${Math.ceil(e.status.remaining)}s`
+                  : `${e.label} / SCATTERED`
+                : `${e.label} / ${Math.ceil(e.status?.next ?? e.at)}s`,
+          hot: e === armed || Boolean(e.status?.active && e.present),
         }));
   }
 }

@@ -29,7 +29,15 @@ import {
   formationSlots,
   FLIGHT,
   turnPoint,
+  ARM,
+  armRally,
+  armSteers,
+  expectedAt,
+  armQuorum,
+  armReleases,
+  armText,
 } from "../src/strike-data.js";
+import { StrikeOperation } from "../src/strike.js";
 
 const distance3 = (a, b) => Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z);
 const setup = (i) => {
@@ -286,4 +294,134 @@ test("gatherings outlast the worst wait: with Reverse the pipper reaches any poi
   // The flight turns round a margin past the district edge, so every pass sweeps the whole district.
   const layout = STRIKE_MISSIONS[5];
   assert.ok(turnPoint(layout) - lead > (layout.cols * CITY.pitch) / 2, "the pipper clears the far edge before the turn");
+});
+
+// ---------------------------------------------------------------- 5.1 C1: the armed drop
+
+// The lieutenants' meeting on 1.6 (F6 of the Glass Tower, convenes at 36 s), its six members as
+// enemies walking their schedules, and a flight whose pipper sits on the meeting with a 2 s fall.
+function armedMeeting() {
+  const { layout, buildings } = setup(5);
+  const { plans, events } = planEnemies(layout, buildings);
+  const rally = { ...events.find((e) => e.label === "LIEUTENANTS' MEETING"), alive: 6 };
+  const enemies = plans.filter((p) => p.group === rally.group).map((plan) => ({ dead: false, state: "route", plan }));
+  const op = Object.create(StrikeOperation.prototype);
+  const shooter = {
+    alive: true,
+    cooldown: 0,
+    payload: { drill: 4 },
+    forecast: { time: 2, impact: { x: rally.centre.x, z: rally.centre.z }, building: { id: rally.centre.b } },
+  };
+  Object.assign(op, {
+    game: { time: 0, status: "playing", paused: false },
+    flight: { phase: "pass", lane: 0, x: 0 },
+    aim: { x: rally.centre.x, z: rally.centre.z, rally, armed: true },
+    selected: "drill",
+    floor: rally.centre.f + 1,
+    buildings,
+    enemies,
+    events: [rally],
+    aircraft: [shooter],
+    armRoutes: [],
+    bombs: [],
+    release() {
+      this.bombs.push({});
+      return true;
+    },
+  });
+  return { op, rally, enemies };
+}
+
+test("5.1 C1: an armed drop goes only once half the cell is forecast at the meeting as the bombs land", () => {
+  assert.equal(armQuorum(6), 3);
+  assert.ok(!armReleases(2, 2, 6) && armReleases(3, 3, 6) && !armReleases(3, 4, 6) && armReleases(6, 5, 6));
+  assert.equal(armQuorum(5), 3);
+  assert.equal(armQuorum(1), 1);
+  const { op, rally, enemies } = armedMeeting();
+  const routes = enemies.map((e) => e.plan.route);
+  let released = null;
+  for (let t = 20; t < 40 && released === null; t += 1 / 120) {
+    op.game.time = t;
+    op.autoRelease();
+    if (op.bombs.length) released = t;
+  }
+  assert.ok(released !== null, "the armed drop never went");
+  assert.ok(expectedAt(rally, routes, released + 2) >= 3, `${expectedAt(rally, routes, released + 2)} expected at ${released + 2}`);
+  // ... and once no more of them are still walking in: here the whole cell.
+  assert.ok(expectedAt(rally, routes, released + 2 + ARM.settle) <= expectedAt(rally, routes, released + 2));
+  assert.equal(expectedAt(rally, routes, released + 2), 6);
+  assert.ok(expectedAt(rally, routes, released + 2 - 1 / 60) < 6, "it waited longer than it had to");
+  assert.ok(released + 2 > 30 && released + 2 <= rally.at + 0.5, `landed at ${released + 2}`);
+  assert.equal(op.bombs[0].rally, rally, "the bomb remembers its gathering");
+  assert.equal(op.aim, null);
+  // With only two of the cell left alive, one of them arriving is enough.
+  const late = armedMeeting();
+  late.enemies.slice(2).forEach((e) => (e.dead = true));
+  late.rally.alive = 2;
+  for (let t = 20; t < 40 && !late.op.bombs.length; t += 1 / 120) {
+    late.op.game.time = t;
+    late.op.autoRelease();
+  }
+  const two = late.enemies.slice(0, 2).map((e) => e.plan.route);
+  assert.ok(expectedAt(late.rally, two, late.op.game.time + 2) >= 1);
+  // A runner hiding is not coming: with every member hiding, nothing is released.
+  const scattered = armedMeeting();
+  scattered.enemies.forEach((e) => (e.state = "hide"));
+  for (let t = 20; t < 60; t += 1 / 30) {
+    scattered.op.game.time = t;
+    scattered.op.autoRelease();
+  }
+  assert.equal(scattered.op.bombs.length, 0);
+});
+
+test("5.1 C1: an arm request inside 2.5 s of a gathering, on one already on, or out of reach is refused", () => {
+  const { rally } = armedMeeting();
+  const at = { x: rally.centre.x + 1, z: rally.centre.z - 1 };
+  assert.equal(armRally([rally], at, rally.at - 15), rally);
+  assert.equal(armRally([rally], at, rally.at - ARM.notice - 0.01), rally);
+  assert.equal(armRally([rally], at, rally.at - 2.4), null);
+  assert.equal(armRally([rally], at, rally.at + 1), null, "already convened");
+  assert.equal(armRally([rally], { x: rally.centre.x + ARM.reach + 0.1, z: rally.centre.z }, rally.at - 15), null);
+  assert.equal(armRally([{ ...rally, alive: 0 }], at, rally.at - 15), null, "nobody left to meet");
+  assert.equal(armText(4, 4, 6), "ARMED · DROPS IN 0:04 · 4 OF 6 EXPECTED");
+  assert.equal(armText(-1.5, 0, 6), "ARMED · DROPS IN 0:00 · 0 OF 6 EXPECTED");
+  assert.equal(armText(75.2, 6, 6), "ARMED · DROPS IN 1:16 · 6 OF 6 EXPECTED");
+});
+
+test("5.1 C1: while armed the autopilot leaves the flight alone until the 5 s steering window", () => {
+  const { op, rally } = armedMeeting();
+  op.flight = { phase: "pass", lane: rally.centre.z + 6, x: rally.centre.x - 30 };
+  op.aircraft[0].mesh = { position: { x: op.flight.x } };
+  op.aircraft[0].slot = { z: 0 };
+  op.aircraft[0].forecast.impact = { x: op.flight.x + 3, z: op.flight.lane };
+  for (const t of [0, 10, 20, rally.at - 2 - ARM.steer - 0.05]) {
+    op.game.time = t;
+    assert.equal(op.autoPilot(), null, `steering at ${t}`);
+  }
+  op.game.time = rally.at - 2 - ARM.steer + 0.05;
+  const auto = op.autoPilot();
+  assert.ok(auto && auto.vx > 0 && auto.lateral < 0, JSON.stringify(auto));
+  assert.ok(armSteers(rally, rally.at + 1, 2), "a gathering already on is steered for");
+  // An unarmed mark is steered for at once.
+  op.aim = { x: rally.centre.x, z: rally.centre.z };
+  op.game.time = 0;
+  assert.ok(op.autoPilot());
+});
+
+test("5.1 C1: the bomblets of an armed Scatter keep the gathering, so the gathering's banner shows", () => {
+  const { layout, buildings, blocks } = setup(5);
+  const { rally } = armedMeeting();
+  const op = Object.create(StrikeOperation.prototype);
+  Object.assign(op, {
+    game: { view: { assets: { has: () => false }, model: () => ({}), disposeObject() {} }, blast() {}, audio: { play() {} } },
+    layout,
+    buildings,
+    blocks,
+    land: null,
+    bombs: [],
+  });
+  const bomb = { kind: "scatter", state: { x: rally.centre.x, y: 20, z: rally.centre.z, vx: 0, vy: -6, vz: 0 }, mesh: {}, owner: {}, rally, dead: false };
+  op.burst(bomb, { x: rally.centre.x, y: 20, z: rally.centre.z });
+  assert.ok(op.bombs.length > 3);
+  assert.ok(op.bombs.every((b) => b.kind === "bomblet" && b.rally === rally));
 });
