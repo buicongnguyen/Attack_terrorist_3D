@@ -95,13 +95,15 @@ npm run dev
 ```
 
 ```sh
-npm test                                  # 54 Node tests: rules, schedules, ballistics, harbour fits, story, GLB contracts
+npm test                                  # 125 Node tests: rules, schedules, ballistics, harbour fits, story, GLB contracts, golden and sweep tools
 npm run build
 npm run preview -- --port 5183
-npm run test:browser                      # Chrome suite: 250+ checks incl. scripted pilots for all 18 missions
+npm run test:browser                      # Chrome suite: mechanics, layouts, rendering
+npm run golden                            # golden scripted runs: 50 rows (pilots on Normal and Easy, naive, idle)
+npm run balance                           # balance sweep: win rates over 8 seeds (local only, takes a while)
 ```
 
-The browser tests use system Chrome on Windows (`CHROME_PATH` overrides it) and SwiftShader by default. Set `GPU=1` to render on the real GPU, and `GAME_URL` to test another server. Screenshots go to `test-results/`. The QA handle `window.__TIDELOCK__` exists only with `?qa=1`. Add `&brief=1` or `&prologue=1` to keep the story dialogs in QA runs.
+`npm run golden` plays each scripted run in a fresh page and compares it with `tests/golden/scripted-runs.json`; `UPDATE_GOLDEN=1` rewrites that file and `--allow 'pattern,...'` limits which rows may move (see the top of `tests/golden-browser.mjs`). `npm run balance` plays the pilots, the naive clicker and the do-nothing player over 8 seeds on Easy, Normal and Hard and writes win rates, mean stars and mean end times to `test-results/balance.json`; `--missions 9-14 --modes normal --seeds 8 --players pilot,idle` narrows it (see the top of `tests/balance-browser.mjs`). Both take mission indexes 0-18 for `--missions` (2.1 is 9), and both stop with an error on a filter that selects nothing. The golden runs gate every push in CI; the balance sweep does not gate and does not run in CI. The browser tests use system Chrome on Windows (`CHROME_PATH` overrides it) and SwiftShader by default. Set `GPU=1` to render on the real GPU, and `GAME_URL` to test another server. Screenshots go to `test-results/`. The QA handle `window.__TIDELOCK__` exists only with `?qa=1`. Add `&brief=1` or `&prologue=1` to keep the story dialogs in QA runs.
 
 ## Blender assets
 
@@ -127,4 +129,4 @@ The build fails if a node or material the game animates or recolours is missing.
 
 ## Repository and deployment
 
-SSH remote: `git@github.com:buicongnguyen/Attack_terrorist_3D.git`. Pushing to `main` runs the GitHub Actions workflow: tests, build, the Chrome suite against the production preview, then deployment of `dist/` to GitHub Pages. The build is fully static, with no CDN or server backend.
+SSH remote: `git@github.com:buicongnguyen/Attack_terrorist_3D.git`. Pushing to `main` runs the GitHub Actions workflow: the Node tests and one build, then the Chrome suite and the golden runs in parallel against that build's production preview on Playwright's Chromium, then deployment of `dist/` to GitHub Pages once all of them pass. The build is fully static, with no CDN or server backend.

@@ -79,6 +79,19 @@ export class Game {
     this.difficulty = DEFAULT_DIFFICULTY;
     // 5.0: requisition levels from the save, applied at each mission's start (see requisition.js).
     this.upgrades = {};
+    // Starts per mission in this page: the attempt number in each mission's seed.
+    this.attemptsBy = new Map();
+  }
+
+  // QA: the next start of mission `index` plays attempt `n` (the balance sweep walks n = 1..8).
+  setAttempt(index, n) {
+    this.attemptsBy.set(index, n - 1);
+  }
+
+  // How many numbers this mission's random source has drawn, Game.start and the operation
+  // constructors included.
+  get randomCalls() {
+    return this.random?.calls ?? 0;
   }
 
   start(index) {
@@ -111,9 +124,11 @@ export class Game {
     this.mode = difficulty(this.difficulty);
     this.hitChance = hitChance(index, this.difficulty);
     // Each attempt rolls its own sequence (a retry is not a replay), yet a run of attempts still
-    // repeats exactly, which keeps the scripted runs reproducible.
-    this.attempts = (this.attempts ?? 0) + 1;
-    this.random = seededRandom(1 + index * 7919 + this.attempts * 104729);
+    // repeats exactly. The count is per mission, so starting other missions first (the start at
+    // load, a test suite) never moves this mission's seed.
+    const attempt = (this.attemptsBy.get(index) ?? 0) + 1;
+    this.attemptsBy.set(index, attempt);
+    this.random = seededRandom(1 + index * 7919 + attempt * 104729);
     this.lastMiss = -Infinity;
     this.hitsTaken = 0;
     this.finishTimer = 0;

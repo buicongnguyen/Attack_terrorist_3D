@@ -1,210 +1,223 @@
-// Chapter 1 browser checks: mechanics plus a scripted pilot that flies every strike mission
-// with the same controls a player has: it picks the payload and floor, marks the drop point
-// (as a click on the city does), lets the flight fly there, and releases or jinks by hand.
+// Chapter 1 browser checks: the strike mechanics. The scripted pilots below fly the strike
+// missions for the golden runs (tests/golden-browser.mjs), each in a page of its own.
 
-export function autopilot() {
+// The scripted pilot flies one strike mission with the same controls a player has: it picks the
+// payload and floor, marks the drop point (as a click on the city does), lets the flight fly
+// there, and releases or jinks by hand.
+export function autopilot(index) {
   const { game: g, ui } = window.__TIDELOCK__;
-  const BOMB_KINDS = ["drill", "scatter", "shockwave", "lance"];
-  const results = [];
-  for (let index = 0; index < 6; index++) {
-    ui.start(index);
-    g.paused = false;
-    const op = g.op;
-    const unsafe = new Map();
-    let task = null;
-    let waitBombs = false;
-    let jink = 0,
-      jinkDir = 1,
-      usedBefore = 0;
-    for (let step = 0; step < 120 * 420 && g.status === "playing"; step++) {
-      if (step % 6 === 0 && !waitBombs) task = choose();
-      steer(waitBombs ? null : task);
-      // Flak counter, as the HUD teaches: break sideways as soon as a lock's solution freezes.
-      const lockIn = Math.min(9, ...op.aa.filter((n) => !n.dead && n.state === "lock").map((n) => (n.solution ? 0 : n.lock)));
-      if (lockIn < 0.05 && jink <= 0) {
-        jink = 1;
-        jinkDir = op.flight.lateral > 0.5 ? -1 : 1;
-      }
-      if (jink > 0) {
-        jink -= 1 / 120;
-        g.input.z = jinkDir;
-        // One bomb per task: wait for it to land before judging the next release.
-      } else if (task && !waitBombs && tryRelease(task)) waitBombs = true;
-      if (op.used > usedBefore) {
-        usedBefore = op.used;
-        waitBombs = true;
-        op.clearAim();
-      }
-      if (waitBombs && op.bombs.length === 0 && op.combo.timer <= 0) waitBombs = false;
-      g.update(1 / 120);
+  ui.start(index);
+  g.paused = false;
+  const op = g.op;
+  const unsafe = new Map();
+  let task = null;
+  let waitBombs = false;
+  let jink = 0,
+    jinkDir = 1,
+    usedBefore = 0;
+  for (let step = 0; step < 120 * 420 && g.status === "playing"; step++) {
+    if (step % 6 === 0 && !waitBombs) task = choose();
+    steer(waitBombs ? null : task);
+    // Flak counter, as the HUD teaches: break sideways as soon as a lock's solution freezes.
+    const lockIn = Math.min(9, ...op.aa.filter((n) => !n.dead && n.state === "lock").map((n) => (n.solution ? 0 : n.lock)));
+    if (lockIn < 0.05 && jink <= 0) {
+      jink = 1;
+      jinkDir = op.flight.lateral > 0.5 ? -1 : 1;
     }
-    g.input.x = g.input.z = 0;
-    results.push({
-      index,
-      status: g.status,
-      reason: g.reason,
-      used: op.used,
-      par: op.layout.par,
-      time: Math.round(g.time),
-      left: op.remaining(),
-      stars: op.stars(g.status === "success"),
-      lost: op.aircraft.filter((a) => !a.alive).length,
-      score: g.score,
-    });
+    if (jink > 0) {
+      jink -= 1 / 120;
+      g.input.z = jinkDir;
+      // One bomb per task: wait for it to land before judging the next release.
+    } else if (task && !waitBombs && tryRelease(task)) waitBombs = true;
+    if (op.used > usedBefore) {
+      usedBefore = op.used;
+      waitBombs = true;
+      op.clearAim();
+    }
+    if (waitBombs && op.bombs.length === 0 && op.combo.timer <= 0) waitBombs = false;
+    g.update(1 / 120);
+  }
+  g.input.x = g.input.z = 0;
 
-    function has(kind) {
-      return op.aircraft.some((a) => a.alive && a.payload[kind] > 0);
+  function has(kind) {
+    return op.aircraft.some((a) => a.alive && a.payload[kind] > 0);
+  }
+  function count(kind) {
+    return op.aircraft.reduce((n, a) => n + (a.alive ? a.payload[kind] || 0 : 0), 0);
+  }
+  function building(id) {
+    return op.buildings.find((b) => b.id === id);
+  }
+  function pickKind(prefs, key) {
+    const banned = unsafe.get(key) || new Set();
+    return prefs.find((kind) => has(kind) && !banned.has(kind)) || null;
+  }
+  function rallyPending() {
+    return op.events.some((e) => e.alive > 0);
+  }
+  // Keep Scatter for gatherings while one is still scheduled.
+  function spare(kind) {
+    if (kind !== "scatter" || !rallyPending()) return true;
+    return count("scatter") > 1;
+  }
+  function choose() {
+    const tasks = [];
+    const roofTask = (target, pri, key) => {
+      const b = building(target.cur.b);
+      const kind = pickKind(["shockwave", "drill", spare("scatter") ? "scatter" : null, "lance"].filter(Boolean), key);
+      if (kind) tasks.push({ key, pri, kind, floor: b ? b.floors + 1 : 1, aim: () => target.position, target });
+    };
+    op.aa.forEach((n, i) => !n.dead && roofTask(n, 0, `aa${i}`));
+    op.masts.forEach((m, i) => !m.dead && roofTask(m, 1, `mast${i}`));
+    op.events.forEach((e, i) => {
+      if (e.alive < 1) return;
+      const s = e.status || { active: false, next: 99 };
+      if (!(s.active ? s.remaining > 2.6 : s.next < 2.2)) return;
+      const indoor = e.centre.b && e.centre.f < building(e.centre.b).floors;
+      const key = `rally${i}`;
+      const kind = indoor ? pickKind(["drill"], key) : pickKind(["scatter", "shockwave", "drill"], key);
+      if (kind) tasks.push({ key, pri: -1, kind, floor: indoor ? e.centre.f + 1 : building(e.centre.b)?.floors + 1 || 1, aim: () => e.centre, rally: e });
+    });
+    op.trucks.forEach((t, i) => {
+      if (t.dead) return;
+      const p = lead(t);
+      if (window.__TIDELOCK_STRIKE__.shelterStruck(op.blocks, op.buildings, { x: p.x, y: p.y, z: p.z }, "shockwave", 1.5)) return;
+      const kind = pickKind(["lance", "shockwave", spare("scatter") ? "scatter" : null].filter(Boolean), `truck${i}`);
+      if (kind) tasks.push({ key: `truck${i}`, pri: 3, kind, floor: 1, aim: () => lead(t), target: t });
+    });
+    // Remaining fighters, grouped by building floor so one Drill can clear a room.
+    const groups = new Map();
+    for (const e of op.enemies) {
+      if (e.dead || e.state === "fall") continue;
+      const member = op.events.find((ev) => ev.group === e.plan.group);
+      if (member && !e.hidden && (member.status?.next ?? 0) < 30 && e.state === "route") continue;
+      // Walkers in the street are bombed one by one; two passing each other are not a group.
+      const key = e.cur.b ? `${e.cur.b}:${e.cur.f}` : `street:${op.enemies.indexOf(e)}`;
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key).push(e);
     }
-    function count(kind) {
-      return op.aircraft.reduce((n, a) => n + (a.alive ? a.payload[kind] || 0 : 0), 0);
-    }
-    function building(id) {
-      return op.buildings.find((b) => b.id === id);
-    }
-    function pickKind(prefs, key) {
-      const banned = unsafe.get(key) || new Set();
-      return prefs.find((kind) => has(kind) && !banned.has(kind)) || null;
-    }
-    function rallyPending() {
-      return op.events.some((e) => e.alive > 0);
-    }
-    // Keep Scatter for gatherings while one is still scheduled.
-    function spare(kind) {
-      if (kind !== "scatter" || !rallyPending()) return true;
-      return count("scatter") > 1;
-    }
-    function choose() {
-      const tasks = [];
-      const roofTask = (target, pri, key) => {
-        const b = building(target.cur.b);
-        const kind = pickKind(["shockwave", "drill", spare("scatter") ? "scatter" : null, "lance"].filter(Boolean), key);
-        if (kind) tasks.push({ key, pri, kind, floor: b ? b.floors + 1 : 1, aim: () => target.position, target });
-      };
-      op.aa.forEach((n, i) => !n.dead && roofTask(n, 0, `aa${i}`));
-      op.masts.forEach((m, i) => !m.dead && roofTask(m, 1, `mast${i}`));
-      op.events.forEach((e, i) => {
-        if (e.alive < 1) return;
-        const s = e.status || { active: false, next: 99 };
-        if (!(s.active ? s.remaining > 2.6 : s.next < 2.2)) return;
-        const indoor = e.centre.b && e.centre.f < building(e.centre.b).floors;
-        const key = `rally${i}`;
-        const kind = indoor ? pickKind(["drill"], key) : pickKind(["scatter", "shockwave", "drill"], key);
-        if (kind) tasks.push({ key, pri: -1, kind, floor: indoor ? e.centre.f + 1 : building(e.centre.b)?.floors + 1 || 1, aim: () => e.centre, rally: e });
+    for (const [key, members] of groups) {
+      const b = members[0].cur.b ? building(members[0].cur.b) : null;
+      const indoor = b && members[0].cur.f < b.floors;
+      const prefs = indoor ? ["drill"] : ["shockwave", "drill", spare("scatter") ? "scatter" : null].filter(Boolean);
+      let kind = pickKind(prefs, key);
+      // Out of Drills: a Shockwave in the street shatters the glass front of a ground floor.
+      if (!kind && indoor && members[0].cur.f === 0 && members.every((m) => m.state !== "hide" || m.path.at(-1).t <= g.time)) {
+        kind = pickKind(["shockwave", "scatter"], key + ":street");
+        if (kind)
+          tasks.push({
+            key: key + ":street",
+            pri: 5,
+            kind,
+            floor: 1,
+            aim: () => ({ x: centroid(members.filter((m) => !m.dead)).x, y: 1, z: b.z + 4 + 1.2 }),
+            target: { cur: { b: null } },
+          });
+        continue;
+      }
+      if (!kind) continue;
+      tasks.push({
+        key,
+        pri: 4 - members.length * 0.1,
+        kind,
+        floor: indoor ? members[0].cur.f + 1 : b ? b.floors + 1 : 1,
+        aim: () => centroid(members.filter((m) => !m.dead)),
+        members,
       });
-      op.trucks.forEach((t, i) => {
-        if (t.dead) return;
-        const p = lead(t);
-        if (window.__TIDELOCK_STRIKE__.shelterStruck(op.blocks, op.buildings, { x: p.x, y: p.y, z: p.z }, "shockwave", 1.5)) return;
-        const kind = pickKind(["lance", "shockwave", spare("scatter") ? "scatter" : null].filter(Boolean), `truck${i}`);
-        if (kind) tasks.push({ key: `truck${i}`, pri: 3, kind, floor: 1, aim: () => lead(t), target: t });
-      });
-      // Remaining fighters, grouped by building floor so one Drill can clear a room.
-      const groups = new Map();
-      for (const e of op.enemies) {
-        if (e.dead || e.state === "fall") continue;
-        const member = op.events.find((ev) => ev.group === e.plan.group);
-        if (member && !e.hidden && (member.status?.next ?? 0) < 30 && e.state === "route") continue;
-        // Walkers in the street are bombed one by one; two passing each other are not a group.
-        const key = e.cur.b ? `${e.cur.b}:${e.cur.f}` : `street:${op.enemies.indexOf(e)}`;
-        if (!groups.has(key)) groups.set(key, []);
-        groups.get(key).push(e);
-      }
-      for (const [key, members] of groups) {
-        const b = members[0].cur.b ? building(members[0].cur.b) : null;
-        const indoor = b && members[0].cur.f < b.floors;
-        const prefs = indoor ? ["drill"] : ["shockwave", "drill", spare("scatter") ? "scatter" : null].filter(Boolean);
-        let kind = pickKind(prefs, key);
-        // Out of Drills: a Shockwave in the street shatters the glass front of a ground floor.
-        if (!kind && indoor && members[0].cur.f === 0 && members.every((m) => m.state !== "hide" || m.path.at(-1).t <= g.time)) {
-          kind = pickKind(["shockwave", "scatter"], key + ":street");
-          if (kind)
-            tasks.push({
-              key: key + ":street",
-              pri: 5,
-              kind,
-              floor: 1,
-              aim: () => ({ x: centroid(members.filter((m) => !m.dead)).x, y: 1, z: b.z + 4 + 1.2 }),
-              target: { cur: { b: null } },
-            });
-          continue;
-        }
-        if (!kind) continue;
-        tasks.push({
-          key,
-          pri: 4 - members.length * 0.1,
-          kind,
-          floor: indoor ? members[0].cur.f + 1 : b ? b.floors + 1 : 1,
-          aim: () => centroid(members.filter((m) => !m.dead)),
-          members,
-        });
-      }
-      tasks.sort((a, b) => a.pri - b.pri);
-      // Echo's advice for jumpy cells: the first strike goes on the gathering.
-      const waiting = op.layout.alert && op.used === 0 && op.events.some((e) => e.alive > 1);
-      if (waiting) return tasks.find((t) => t.rally) || null;
-      return tasks[0] || null;
     }
-    function centroid(list) {
-      if (!list.length) return { x: 0, y: 0, z: 0 };
-      const c = { x: 0, y: 0, z: 0 };
-      for (const e of list) {
-        const p = lead(e);
-        c.x += p.x / list.length;
-        c.y += p.y / list.length;
-        c.z += p.z / list.length;
-      }
-      return c;
+    tasks.sort((a, b) => a.pri - b.pri);
+    // Echo's advice for jumpy cells: the first strike goes on the gathering.
+    const waiting = op.layout.alert && op.used === 0 && op.events.some((e) => e.alive > 1);
+    if (waiting) return tasks.find((t) => t.rally) || null;
+    return tasks[0] || null;
+  }
+  function centroid(list) {
+    if (!list.length) return { x: 0, y: 0, z: 0 };
+    const c = { x: 0, y: 0, z: 0 };
+    for (const e of list) {
+      const p = lead(e);
+      c.x += p.x / list.length;
+      c.y += p.y / list.length;
+      c.z += p.z / list.length;
     }
-    // Aim where a scheduled walker will be when the bomb arrives.
-    function lead(e) {
-      const route = e.plan?.route || e.route;
-      if (!route || (e.state && e.state !== "route")) return e.position;
-      const fall = Math.sqrt((2 * Math.max(1, 24 - e.position.y)) / 9.81);
-      const p = window.__TIDELOCK_STRIKE__.sampleRoute(route, g.time + fall + 0.2);
-      return p;
-    }
-    function shooter(kind) {
-      return op.aircraft.find((a) => a.alive && a.payload[kind] > 0);
-    }
-    function steer(task) {
-      g.input.x = 0;
-      g.input.z = 0;
-      if (!task) return op.clearAim();
-      op.select(task.kind);
-      op.setFloor(task.floor);
-      // Mark the task: a moving target is marked itself (the flight leads it), a group by its centre.
-      const mark = task.target?.position ? task.target : task.members?.find((m) => !m.dead) || null;
-      const aim = task.aim();
-      if (mark && op.aim?.target !== mark) op.setAim({ x: aim.x, z: aim.z }, mark);
-      else if (!mark && (!op.aim || Math.hypot(op.aim.x - aim.x, op.aim.z - aim.z) > 0.5)) {
-        op.clearAim();
-        op.setAim({ x: aim.x, z: aim.z });
-        // A bare point near a target snaps to it; the pilot wants the point itself.
-        if (op.aim?.target) op.aim = { x: aim.x, z: aim.z };
-      }
-    }
-    function tryRelease(task) {
-      const a = shooter(task.kind);
-      const f = a?.forecast;
-      if (!a || !f || f.kind !== task.kind || a.cooldown > 0 || op.flight.phase !== "pass") return false;
-      const aim = task.aim();
-      const dx = f.impact.x - aim.x,
-        dz = f.impact.z - aim.z;
-      const tolerance = task.kind === "lance" ? 3 : task.kind === "scatter" ? 1.4 : 0.9;
-      if (Math.abs(dx) > tolerance || Math.abs(dz) > 1.2) return false;
-      if (task.kind === "drill") {
-        const want = task.members?.[0]?.cur.b || task.target?.cur?.b || task.rally?.centre.b || null;
-        if ((f.building?.id || null) !== want) return false;
-      }
-      if (f.shelter) {
-        if (!unsafe.has(task.key)) unsafe.set(task.key, new Set());
-        unsafe.get(task.key).add(task.kind);
-        return false;
-      }
-      return op.release(task.kind);
+    return c;
+  }
+  // Aim where a scheduled walker will be when the bomb arrives.
+  function lead(e) {
+    const route = e.plan?.route || e.route;
+    if (!route || (e.state && e.state !== "route")) return e.position;
+    const fall = Math.sqrt((2 * Math.max(1, 24 - e.position.y)) / 9.81);
+    const p = window.__TIDELOCK_STRIKE__.sampleRoute(route, g.time + fall + 0.2);
+    return p;
+  }
+  function shooter(kind) {
+    return op.aircraft.find((a) => a.alive && a.payload[kind] > 0);
+  }
+  function steer(task) {
+    g.input.x = 0;
+    g.input.z = 0;
+    if (!task) return op.clearAim();
+    op.select(task.kind);
+    op.setFloor(task.floor);
+    // Mark the task: a moving target is marked itself (the flight leads it), a group by its centre.
+    const mark = task.target?.position ? task.target : task.members?.find((m) => !m.dead) || null;
+    const aim = task.aim();
+    if (mark && op.aim?.target !== mark) op.setAim({ x: aim.x, z: aim.z }, mark);
+    else if (!mark && (!op.aim || Math.hypot(op.aim.x - aim.x, op.aim.z - aim.z) > 0.5)) {
+      op.clearAim();
+      op.setAim({ x: aim.x, z: aim.z });
+      // A bare point near a target snaps to it; the pilot wants the point itself.
+      if (op.aim?.target) op.aim = { x: aim.x, z: aim.z };
     }
   }
-  return results;
+  function tryRelease(task) {
+    const a = shooter(task.kind);
+    const f = a?.forecast;
+    if (!a || !f || f.kind !== task.kind || a.cooldown > 0 || op.flight.phase !== "pass") return false;
+    const aim = task.aim();
+    const dx = f.impact.x - aim.x,
+      dz = f.impact.z - aim.z;
+    const tolerance = task.kind === "lance" ? 3 : task.kind === "scatter" ? 1.4 : 0.9;
+    if (Math.abs(dx) > tolerance || Math.abs(dz) > 1.2) return false;
+    if (task.kind === "drill") {
+      const want = task.members?.[0]?.cur.b || task.target?.cur?.b || task.rally?.centre.b || null;
+      if ((f.building?.id || null) !== want) return false;
+    }
+    if (f.shelter) {
+      if (!unsafe.has(task.key)) unsafe.set(task.key, new Set());
+      unsafe.get(task.key).add(task.kind);
+      return false;
+    }
+    return op.release(task.kind);
+  }
+}
+
+// A naive player: whenever no mark is waiting and no bomb is falling, they click the live target
+// nearest the flight where it shows on screen, through the same handler as a mouse click. They
+// keep the bomb the mission starts with, never touch the floor or the angle, and never dodge.
+// (The camera follows the flight, so the target nearest it is on screen in practice. There is no
+// screen-edge test, so the screen never changes which target is chosen. It can change what the
+// click marks: the first building along the line of sight, and a portrait screen turns the city
+// camera. At 390x844 five of the six golden rows play differently, so they are played in landscape.)
+export function naivePilot(index) {
+  const { game: g, ui, view } = window.__TIDELOCK__;
+  ui.start(index);
+  g.paused = false;
+  const op = g.op;
+  for (let step = 0; step < 120 * 420 && g.status === "playing"; step++) {
+    if (step % 30 === 0 && !op.aim && op.bombs.length === 0) {
+      let best = null;
+      for (const t of op.targets()) {
+        const d = Math.hypot(t.position.x - op.flight.x, t.position.z - op.flight.lane);
+        if (!best || d < best.d) best = { d, t };
+      }
+      if (best) {
+        const p = view.project(best.t.position);
+        ui.markDrop(p.x, p.y);
+      }
+    }
+    g.update(1 / 120);
+  }
 }
 
 export async function checkStrike(page, check) {
@@ -407,6 +420,8 @@ export async function checkStrike(page, check) {
     const { game: g, ui } = window.__TIDELOCK__;
     const S = window.__TIDELOCK_STRIKE__;
     const out = {};
+    // These checks switch modes; the page gets its own mode back at the end.
+    const pageMode = g.difficulty;
     const run = (seconds, each) => {
       for (let i = 0; i < 120 * seconds && g.status === "playing"; i++) {
         each?.();
@@ -508,7 +523,7 @@ export async function checkStrike(page, check) {
     const onFloor = (f) => S.blastDistance(burst, { x: tower.x, y: S.storyY(f) + S.inStorey(0.8), z: tower.z }) < reach;
     out.drillReachStaysNearItsFloor = onFloor(2) && !onFloor(4);
 
-    // Difficulty: Easy is the default; Crazy carries fewer bombs and flak that can hit from 1.1.
+    // Difficulty: Easy is safe on 1.2; Crazy carries fewer bombs and flak that can hit from 1.1.
     ui.start(1);
     const easyDrills = g.op.aircraft[0].payload.drill;
     const easyChance = g.hitChance;
@@ -521,14 +536,8 @@ export async function checkStrike(page, check) {
     ui.start(1);
     out.easyIsBack = g.difficulty === "easy" && document.querySelector('#difficulty-options [data-mode="easy"]').classList.contains("selected");
     g.input.x = 0;
+    ui.setDifficulty(pageMode);
     return out;
   });
   for (const [name, value] of Object.entries(freedom)) check(`strike ${name}`, value === true);
-
-  const runs = await page.evaluate(`(${autopilot.toString()})()`);
-  for (const run of runs) {
-    console.log(`  strike 1.${run.index + 1}: ${run.status} ${run.reason || ""} used ${run.used}/${run.par} in ${run.time}s stars ${run.stars} lost ${run.lost} left ${JSON.stringify(run.left)}`);
-    check(`strike mission 1.${run.index + 1} completed by scripted pilot`, run.status === "success");
-  }
-  return runs;
 }

@@ -281,6 +281,9 @@ try {
   }
 
   // ---------------------------------------------------------------- phones and tablets
+  // The desktop page holds still meanwhile: its frame loop would keep rendering 1440x900 frames
+  // in the GPU process the phone pages share (one frame at a time under SwiftShader).
+  await page.evaluate(() => (__TIDELOCK__.game.paused = true));
   for (const size of [
     { width: 320, height: 740 },
     { width: 390, height: 844 },

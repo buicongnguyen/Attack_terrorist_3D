@@ -2,6 +2,9 @@
 // base, fires along a direction, and meets launch crews, missile trucks, drone stations and
 // barracks on three different maps.
 
+// The scripted pilots below fly the valley sorties and the finale for the golden runs
+// (tests/golden-browser.mjs).
+
 // A scripted pilot: fly to the next signal (or the landing base), shoot along the line of the
 // most urgent threat, flare missiles that get close.
 export function rescuePilot(index) {
@@ -42,8 +45,6 @@ export function rescuePilot(index) {
     g.update(1 / 120);
   }
   g.input.fire = false;
-  g.paused = true;
-  return { status: g.status, rescued: r.rescued, total: r.soldiers.length, time: g.time, hits: g.hitsTaken };
 }
 
 export function siegePilot(index) {
@@ -83,12 +84,16 @@ export function siegePilot(index) {
     g.update(1 / 120);
   }
   g.input.fire = false;
-  g.paused = true;
-  const s = r.siege;
-  return { status: g.status, reason: g.reason, time: Math.round(g.time), hits: g.hitsTaken, gate: Math.round(s.gate * 100), station: Math.round(s.integrity), boss: s.bossDown, stars: r.stars(g.status === "success"), kills: g.kills };
 }
 
 export async function checkRescue(page, browser, url, check, errors) {
+  // The valley checks were tuned on Easy (the finale's on Normal), so they set it; the page gets
+  // its own mode back at the end.
+  const pageMode = await page.evaluate(() => {
+    const was = __TIDELOCK__.game.difficulty;
+    __TIDELOCK__.ui.setDifficulty("easy");
+    return was;
+  });
   const result = await page.evaluate(() => {
     const { game: g, ui } = __TIDELOCK__,
       out = {};
@@ -398,13 +403,8 @@ export async function checkRescue(page, browser, url, check, errors) {
   });
   for (const [name, value] of Object.entries(threats)) check(`threat ${name}`, value);
 
-  for (const index of [15, 16, 17]) {
-    const sortie = await page.evaluate(`(${rescuePilot.toString()})(${index})`);
-    console.log(`  rescue 3.${index - 14}: ${sortie.status} ${sortie.rescued}/${sortie.total} in ${sortie.time.toFixed(0)}s, ${sortie.hits} hits`);
-    check(`full rescue sortie ${index - 14}: ${sortie.rescued}/${sortie.total}`, sortie.status === "success" && sortie.rescued === sortie.total);
-  }
-
-  // 4.0: the finale, Eye of the Storm. The rules first, then a full run, then the ending.
+  // 4.0: the finale, Eye of the Storm. The rules first, then the ending (the full runs, scripted
+  // and do-nothing, are golden rows).
   const siege = await page.evaluate(() => {
     const { game: g, ui } = __TIDELOCK__;
     const out = {};
@@ -468,23 +468,11 @@ export async function checkRescue(page, browser, url, check, errors) {
     run(0.2);
     out.onlyTheCampPadRepairs = atStation === "111" && g.shields.join("") === "333";
     delete g.hurtPlayer;
+    // Hold the siege still, so the frame loop cannot finish it under the ending checks.
+    g.paused = true;
     return out;
   });
   for (const [name, value] of Object.entries(siege)) check(`finale ${name}`, value === true);
-
-  const idle = await page.evaluate(() => {
-    const { game: g, ui } = __TIDELOCK__;
-    document.querySelectorAll("dialog[open]").forEach((d) => d.close());
-    ui.start(18);
-    document.querySelectorAll("dialog[open]").forEach((d) => d.close());
-    g.paused = false;
-    for (let i = 0; i < 120 * 200 && g.status === "playing"; i++) g.update(1 / 120);
-    return g.status;
-  });
-  check("finale lost by a player who does nothing", idle === "failed");
-  const last = await page.evaluate(`(${siegePilot.toString()})(18)`);
-  console.log(`  rescue 3.4: ${last.status} ${last.reason || ""} in ${last.time}s, gates ${last.gate}%, station ${last.station}, Marrow ${last.boss ? "down" : "up"}, ${last.hits} hits, ${last.stars} stars`);
-  check("finale won by the scripted pilot, with Marrow shot down", last.status === "success" && last.boss && last.gate === 100);
 
   // The ending: the question first, then the epilogue of the choice, saved for Mission Control.
   const ending = await page.evaluate(() => {
@@ -652,4 +640,5 @@ export async function checkRescue(page, browser, url, check, errors) {
     await touch.screenshot({ path: `test-results/rescue-${size.width}.png` });
   }
   await touch.close();
+  await page.evaluate((mode) => __TIDELOCK__.ui.setDifficulty(mode), pageMode);
 }

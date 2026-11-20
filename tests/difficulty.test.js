@@ -58,3 +58,15 @@ test("the per-mission random source repeats exactly", () => {
   assert.deepEqual(run(a), run(b));
   assert.ok(run(seededRandom(7)).every((x) => x >= 0 && x < 1));
 });
+
+test("the random source counts its own draws and keeps the 5.0 sequence", () => {
+  // Mission 1.1, first attempt: the numbers 5.0 drew for this seed.
+  const r = seededRandom(1 + 104729);
+  assert.equal(r.calls, 0);
+  assert.deepEqual([r(), r(), r()], [0.509758897125721, 0.00399607908912003, 0.0450300567317754]);
+  assert.equal(r.calls, 3);
+  const other = seededRandom(42);
+  other();
+  assert.equal(other.calls, 1, "each source keeps its own count");
+  assert.equal(r.calls, 3);
+});

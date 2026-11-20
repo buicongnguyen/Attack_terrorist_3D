@@ -1,34 +1,17 @@
-// Chapter 2 browser checks: convoy mechanics and a scripted skipper for every river mission.
+// Chapter 2 browser checks: convoy mechanics. The scripted skipper below sails the canal missions
+// for the golden runs (tests/golden-browser.mjs).
 
-export function skipper() {
+export function skipper(index) {
   const { game: g, ui } = window.__TIDELOCK__;
-  const out = [];
-  for (let index = 9; index <= 14; index++) {
-    ui.start(index);
-    g.paused = false;
-    const op = g.op;
-    for (let step = 0; step < 120 * 240 && g.status === "playing"; step++) {
-      if (step % 4 === 0) decide();
-      g.update(1 / 120);
-    }
-    g.input.fire = false;
-    g.input.x = g.input.z = 0;
-    g.input.stickAim = null;
-    out.push({
-      index,
-      status: g.status,
-      reason: g.reason,
-      distance: Math.round(op.distance),
-      length: op.data.length,
-      barges: op.barges.map((b) => Math.round(b.hp)),
-      shields: g.shields.reduce((a, b) => a + b, 0),
-      stars: op.stars(g.status === "success"),
-      blocked: op.blocked,
-      boss: op.boss?.phase || null,
-      time: Math.round(g.time),
-    });
+  ui.start(index);
+  g.paused = false;
+  for (let step = 0; step < 120 * 240 && g.status === "playing"; step++) {
+    if (step % 4 === 0) decide();
+    g.update(1 / 120);
   }
-  return out;
+  g.input.fire = false;
+  g.input.x = g.input.z = 0;
+  g.input.stickAim = null;
 
   function decide() {
     const op = g.op;
@@ -75,6 +58,9 @@ export async function checkRiver(page, check) {
   const mechanics = await page.evaluate(() => {
     const { game: g, ui } = window.__TIDELOCK__;
     const out = {};
+    // These checks were tuned on Easy, so they set it; the page gets its own mode back at the end.
+    const pageMode = g.difficulty;
+    ui.setDifficulty("easy");
     ui.start(9);
     g.paused = false;
     const op = g.op;
@@ -400,13 +386,8 @@ export async function checkRiver(page, check) {
     g.update(1 / 120);
     g.update(1 / 120);
     out.rebuiltHouseDoesNotSmoke = shack.alive && !g.emitters.includes(smoke);
+    ui.setDifficulty(pageMode);
     return out;
   });
   for (const [name, value] of Object.entries(mechanics)) check(`river ${name}`, value);
-  const runs = await page.evaluate(`(${skipper.toString()})()`);
-  for (const run of runs) {
-    console.log(`  river 2.${run.index - 8}: ${run.status} ${run.reason || ""} ${run.distance}/${run.length} barges ${run.barges} shields ${run.shields} stars ${run.stars} blocked ${run.blocked} boss ${run.boss} in ${run.time}s`);
-    check(`river mission 2.${run.index - 8} completed by scripted skipper`, run.status === "success");
-  }
-  return runs;
 }

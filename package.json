@@ -8,7 +8,9 @@
     "build": "vite build",
     "preview": "vite preview --host 127.0.0.1",
     "test": "node --test tests/*.test.js",
-    "test:browser": "node tests/browser.mjs"
+    "test:browser": "node tests/browser.mjs",
+    "golden": "node tests/golden-browser.mjs",
+    "balance": "node tests/balance-browser.mjs"
   },
   "dependencies": {
     "@fontsource-variable/fredoka": "5.3.0",

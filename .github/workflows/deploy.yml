@@ -17,6 +17,7 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-24.04
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -26,24 +27,71 @@ jobs:
       - run: npm ci
       - run: npm test
       - run: npm run build
-      - run: npx playwright install --with-deps chromium
-      - name: Verify production game in Chrome
-        run: |
-          npm run preview -- --port 5183 > /tmp/tidelock-preview.log 2>&1 &
-          for i in $(seq 1 30); do curl -fsS http://127.0.0.1:5183/ > /dev/null && break; sleep 1; done
-          npm run test:browser
       - uses: actions/upload-artifact@v4
-        if: always()
         with:
-          name: browser-screenshots
-          path: test-results/
+          name: dist
+          path: dist/
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dist
-  deploy:
+
+  # The Chrome suite and the golden runs in parallel, all against the one build. Mission 7 has a
+  # shard of its own: its interleave check (1.8, rendered under SwiftShader) is the longest run.
+  test:
+    name: ${{ matrix.name }}
     needs: build
     runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: browser
+            run: npm run test:browser
+          - name: golden 1.8
+            run: npm run golden -- --missions 7
+          - name: golden
+            run: npm run golden -- --missions 0-6,8-18
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist
+      # Playwright's pinned chromium, cached by the @playwright/test version; its system
+      # libraries are installed on every run.
+      - id: playwright
+        run: echo "version=$(node -p "require('@playwright/test/package.json').version")" >> "$GITHUB_OUTPUT"
+      - id: browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: ms-playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}
+      - if: steps.browsers.outputs.cache-hit != 'true'
+        run: npx playwright install chromium
+      - run: npx playwright install-deps chromium
+      - name: Verify the production build in Chromium
+        run: |
+          npm run preview -- --port 5183 > /tmp/tidelock-preview.log 2>&1 &
+          for i in $(seq 1 30); do curl -fsS http://127.0.0.1:5183/ > /dev/null && break; sleep 1; done
+          ${{ matrix.run }}
+      # Also when the job is cancelled, as a job that runs past its timeout is.
+      - uses: actions/upload-artifact@v4
+        if: failure() || cancelled()
+        with:
+          name: test-results ${{ matrix.name }}
+          path: test-results/
+
+  deploy:
+    needs: [build, test]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}

@@ -104,6 +104,7 @@ export class RescueOperation {
     this.selected = 0;
     this.countermeasures = 0;
     this.flareCooldown = 0;
+    this.flaresUsed = 0;
     this.baseCooldown = 0;
     this.landing = null;
     this.state = "EN ROUTE";
@@ -531,6 +532,7 @@ export class RescueOperation {
     const g = this.game;
     if (g.paused || g.status !== "playing" || !this.gear.flares || this.flareCooldown > 0) return false;
     this.gear.flares--;
+    this.flaresUsed++;
     this.countermeasures = 3;
     this.flareCooldown = 4;
     for (const shot of g.projectiles)

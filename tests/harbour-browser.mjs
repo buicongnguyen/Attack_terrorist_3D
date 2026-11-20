@@ -1,118 +1,101 @@
-// Harbour strike checks (missions 1.7-1.9): pattern bombs, ships, the ferry, and a scripted pilot
-// that wins each mission with the controls a player has: it picks a group, the pattern and angle
-// that sink most of it, marks the spot (as a click on the map does) and lets the flight fly
-// there and drop; it breaks away from flak by hand.
+// Harbour strike checks (missions 1.7-1.9): pattern bombs, ships and the ferry. The scripted
+// pilot below flies the harbour missions for the golden runs (tests/golden-browser.mjs).
 
-export function harbourPilot(indices) {
+// The scripted pilot wins a harbour mission with the controls a player has: it picks a group,
+// the pattern and angle that sink most of it, marks the spot (as a click on the map does) and
+// lets the flight fly there and drop; it breaks away from flak by hand.
+export function harbourPilot(index) {
   const { game: g, ui } = window.__TIDELOCK__;
   const H = window.__TIDELOCK_HARBOUR__,
     S = window.__TIDELOCK_STRIKE__;
-  const results = [];
-  for (const index of indices) {
-    ui.start(index);
-    g.paused = false;
-    const op = g.op;
-    let plan = null,
-      waitBombs = false,
-      jink = 0,
-      jinkDir = 1,
-      used = 0,
-      marks = 0;
-    for (let step = 0; step < 120 * 420 && g.status === "playing"; step++) {
-      if (!waitBombs && (!plan || step % 30 === 0)) {
-        if (!plan || plan.group.ships.every((s) => s.dead)) plan = choose();
-        if (plan) mark(plan);
-      }
-      // Flak counter, as a player would: break sideways once the fire solution freezes.
-      const lockIn = Math.min(9, ...op.aa.filter((n) => !n.dead && n.state === "lock").map((n) => (n.solution ? 0 : n.lock)));
-      if (lockIn < 0.05 && jink <= 0) {
-        jink = 1.1;
-        jinkDir = op.flight.lateral > 0.5 ? -1 : 1;
-      }
-      g.input.z = 0;
-      if (jink > 0) {
-        jink -= 1 / 120;
-        g.input.z = jinkDir;
-      }
-      g.update(1 / 120);
-      if (op.used > used) {
-        used = op.used;
-        waitBombs = true;
-        plan = null;
-        op.clearAim();
-      }
-      if (waitBombs && op.bombs.length === 0) waitBombs = false;
+  ui.start(index);
+  g.paused = false;
+  const op = g.op;
+  let plan = null,
+    waitBombs = false,
+    jink = 0,
+    jinkDir = 1,
+    used = 0;
+  for (let step = 0; step < 120 * 420 && g.status === "playing"; step++) {
+    if (!waitBombs && (!plan || step % 30 === 0)) {
+      if (!plan || plan.group.ships.every((s) => s.dead)) plan = choose();
+      if (plan) mark(plan);
     }
-    g.input.x = g.input.z = 0;
-    results.push({
-      index,
-      status: g.status,
-      reason: g.reason,
-      used: op.used,
-      par: op.layout.par,
-      time: Math.round(g.time),
-      left: op.remaining().ships,
-      stars: op.stars(g.status === "success"),
-      lost: op.aircraft.filter((a) => !a.alive).length,
-      marks,
-    });
-
-    function alive(group) {
-      return group.ships.filter((s) => !s.dead && !s.civilian);
+    // Flak counter, as a player would: break sideways once the fire solution freezes.
+    const lockIn = Math.min(9, ...op.aa.filter((n) => !n.dead && n.state === "lock").map((n) => (n.solution ? 0 : n.lock)));
+    if (lockIn < 0.05 && jink <= 0) {
+      jink = 1.1;
+      jinkDir = op.flight.lateral > 0.5 ? -1 : 1;
     }
-    function loaded() {
-      return Object.keys(S.BOMBS).filter((kind) => op.aircraft.some((a) => a.alive && a.payload[kind] > 0));
+    g.input.z = 0;
+    if (jink > 0) {
+      jink -= 1 / 120;
+      g.input.z = jinkDir;
     }
-    // The group and fit worth most now: sinks first, key groups before the rest, near before far.
-    function choose() {
-      const fall = 2.2;
-      const ships = op.fleet.predicted(g.time + fall);
-      const flight = op.flight.x;
-      let best = null;
-      for (const group of op.fleet.groups) {
-        const left = alive(group);
-        if (!left.length) continue;
-        const mine = ships.filter((s) => s.ship.group === group);
-        const c = mine.reduce((a, s) => ({ x: a.x + s.pose.x / mine.length, z: a.z + s.pose.z / mine.length }), { x: 0, z: 0 });
-        const key = op.layout.required?.includes(group.data.id) ? 25 : 0;
-        for (const kind of loaded()) {
-          const def = S.BOMBS[kind];
-          const steps = def.pattern ? (kind === "ring" ? [0] : [0, 1, 2, 3, 4, 5, 6, 7]) : [0];
-          // Centred on the group, or on any one of its boats (a row, a raft, a hull).
-          const centres = [c, ...mine.filter((s) => !s.ship.dead).map((s) => ({ x: s.pose.x, z: s.pose.z }))];
-          for (const step of steps)
-            for (const centre of centres) {
-              const at = centre;
-              const offset = { x: at.x - c.x, z: at.z - c.z };
-              const points = def.pattern
-                ? H.patternPoints(def.pattern, at, step * H.ROTATION_STEP).map((p) => ({ ...p, y: 0.05, kind }))
-                : [{ x: at.x, y: 0.05, z: at.z, kind }];
-              const r = H.predictHits(mine, points, def.radius, def.shipDamage ?? 1, fall);
-              if (!r.sinks) continue;
-              const score = r.sinks * 10 + r.hits + key - Math.abs(at.x - flight) / 12;
-              if (!best || score > best.score) best = { group, kind, step, at, offset, score, points };
-            }
-        }
-      }
-      // Never a pattern that would touch a civilian.
-      if (best && H.predictHits(ships, best.points, S.BOMBS[best.kind].radius).civilian) return null;
-      return best;
+    g.update(1 / 120);
+    if (op.used > used) {
+      used = op.used;
+      waitBombs = true;
+      plan = null;
+      op.clearAim();
     }
-    // Select the payload and angle, then mark the spot: the flight flies there and drops by itself.
-    function mark(p) {
-      op.select(p.kind);
-      op.setPatternStep(p.step);
-      // Moving groups: keep the mark on the group's centre where it will be when the bombs land.
-      const ships = alive(p.group);
-      const c = ships.reduce((a, s) => {
-        const pose = op.fleet.poseAt(s, g.time + 2.2);
-        return { x: a.x + pose.x / ships.length, z: a.z + pose.z / ships.length };
-      }, { x: 0, z: 0 });
-      op.aim = { x: c.x + p.offset.x, z: c.z + p.offset.z };
-      marks++;
-    }
+    if (waitBombs && op.bombs.length === 0) waitBombs = false;
   }
-  return results;
+  g.input.x = g.input.z = 0;
+
+  function alive(group) {
+    return group.ships.filter((s) => !s.dead && !s.civilian);
+  }
+  function loaded() {
+    return Object.keys(S.BOMBS).filter((kind) => op.aircraft.some((a) => a.alive && a.payload[kind] > 0));
+  }
+  // The group and fit worth most now: sinks first, key groups before the rest, near before far.
+  function choose() {
+    const fall = 2.2;
+    const ships = op.fleet.predicted(g.time + fall);
+    const flight = op.flight.x;
+    let best = null;
+    for (const group of op.fleet.groups) {
+      const left = alive(group);
+      if (!left.length) continue;
+      const mine = ships.filter((s) => s.ship.group === group);
+      const c = mine.reduce((a, s) => ({ x: a.x + s.pose.x / mine.length, z: a.z + s.pose.z / mine.length }), { x: 0, z: 0 });
+      const key = op.layout.required?.includes(group.data.id) ? 25 : 0;
+      for (const kind of loaded()) {
+        const def = S.BOMBS[kind];
+        const steps = def.pattern ? (kind === "ring" ? [0] : [0, 1, 2, 3, 4, 5, 6, 7]) : [0];
+        // Centred on the group, or on any one of its boats (a row, a raft, a hull).
+        const centres = [c, ...mine.filter((s) => !s.ship.dead).map((s) => ({ x: s.pose.x, z: s.pose.z }))];
+        for (const step of steps)
+          for (const centre of centres) {
+            const at = centre;
+            const offset = { x: at.x - c.x, z: at.z - c.z };
+            const points = def.pattern
+              ? H.patternPoints(def.pattern, at, step * H.ROTATION_STEP).map((p) => ({ ...p, y: 0.05, kind }))
+              : [{ x: at.x, y: 0.05, z: at.z, kind }];
+            const r = H.predictHits(mine, points, def.radius, def.shipDamage ?? 1, fall);
+            if (!r.sinks) continue;
+            const score = r.sinks * 10 + r.hits + key - Math.abs(at.x - flight) / 12;
+            if (!best || score > best.score) best = { group, kind, step, at, offset, score, points };
+          }
+      }
+    }
+    // Never a pattern that would touch a civilian.
+    if (best && H.predictHits(ships, best.points, S.BOMBS[best.kind].radius).civilian) return null;
+    return best;
+  }
+  // Select the payload and angle, then mark the spot: the flight flies there and drops by itself.
+  function mark(p) {
+    op.select(p.kind);
+    op.setPatternStep(p.step);
+    // Moving groups: keep the mark on the group's centre where it will be when the bombs land.
+    const ships = alive(p.group);
+    const c = ships.reduce((a, s) => {
+      const pose = op.fleet.poseAt(s, g.time + 2.2);
+      return { x: a.x + pose.x / ships.length, z: a.z + pose.z / ships.length };
+    }, { x: 0, z: 0 });
+    op.aim = { x: c.x + p.offset.x, z: c.z + p.offset.z };
+  }
 }
 
 export async function checkHarbour(page, check) {
@@ -124,6 +107,9 @@ export async function checkHarbour(page, check) {
     const run = (steps) => {
       for (let i = 0; i < steps && g.status === "playing"; i++) g.update(1 / 120);
     };
+    // These checks were tuned on Easy, so they set it; the page gets its own mode back at the end.
+    const pageMode = g.difficulty;
+    ui.setDifficulty("easy");
     // The harbour opens on the pattern it teaches; turning it changes the angle and the diagram.
     ui.start(6);
     g.paused = false;
@@ -312,16 +298,8 @@ export async function checkHarbour(page, check) {
     const badges = g.op.fleet.labels();
     out.harbourBadgesAreShort = badges.length > 5 && badges.every((l) => l.text.length <= 12 && /^[★●] \d/.test(l.text));
     out.keyShipsWearStars = badges.some((l) => l.kind === "key" && l.text.startsWith("★"));
+    ui.setDifficulty(pageMode);
     return out;
   });
   for (const [name, value] of Object.entries(mechanics)) check(`harbour ${name}`, value === true);
-
-  const runs = await page.evaluate(`(${harbourPilot.toString()})([6, 7, 8])`);
-  for (const run of runs) {
-    console.log(
-      `  harbour 1.${run.index + 1}: ${run.status} ${run.reason || ""} used ${run.used}/${run.par} in ${run.time}s stars ${run.stars} lost ${run.lost} ships left ${run.left} marks ${run.marks}`,
-    );
-    check(`harbour mission 1.${run.index + 1} completed by scripted pilot`, run.status === "success");
-  }
-  return runs;
 }
