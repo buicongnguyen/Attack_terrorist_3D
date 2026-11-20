@@ -120,8 +120,16 @@ export async function checkFeel(browser, url, check) {
     g.hurtPlayer(g.player.position.clone().add({ x: -3, y: 0, z: 0.4 }), 1);
     r.dir = edge.dataset.dir;
     const hitAt = performance.now();
-    while (edge.dataset.dir && performance.now() - hitAt < 1000) await frame();
+    // The edge clears on the first HUD frame after 350 ms. CI's SwiftShader frames can take
+    // seconds, so the check is that it was still set on the last frame before 400 ms and gone on
+    // the next one, not a wall-clock bound.
+    let last = hitAt;
+    while (edge.dataset.dir && performance.now() - hitAt < 8000) {
+      last = performance.now();
+      await frame();
+    }
     r.cleared = !edge.dataset.dir ? performance.now() - hitAt : Infinity;
+    r.clearedOnTime = r.cleared >= 350 && last - hitAt <= 400;
     g.hurtPlayer(g.player.position.clone().add({ x: 0.2, y: 0, z: -3 }), 1);
     r.top = edge.dataset.dir;
     // A second hit 200 ms into the first one's fade starts the fade again.
@@ -172,7 +180,7 @@ export async function checkFeel(browser, url, check) {
     `after 200 kills #pops has ${out.pops.children} children and ${out.pops.mutations} child mutations; the newest read ${out.pops.texts.join(", ")}`,
     out.pops.children === 16 && out.pops.mutations === 0 && JSON.stringify(out.pops.texts) === JSON.stringify(out.pops.expected) && out.pops.text,
   );
-  check(`a hit from the left sets #hurt-edge data-dir=left (${out.dir}), cleared in ${Math.round(out.cleared)} ms; one from ahead says top (${out.top}); a second hit restarts the flash (${out.restart})`, out.dir === "left" && out.cleared <= 400 && out.top === "top" && out.restart);
+  check(`a hit from the left sets #hurt-edge data-dir=left (${out.dir}), cleared on the first frame after 350 ms (${Math.round(out.cleared)} ms); one from ahead says top (${out.top}); a second hit restarts the flash (${out.restart})`, out.dir === "left" && out.clearedOnTime && out.top === "top" && out.restart);
   check("3 shields or fewer set the low-shield pulse and say SHIELDS LOW; a refill clears it", out.low && out.lowOff);
   check("trauma 1 with a kick moves the rendered camera, yet project(), screenDirection(), steerHeli() and the camera after render() are unchanged", out.shake.same && out.shake.camera && out.shake.moved);
   await page.close();
