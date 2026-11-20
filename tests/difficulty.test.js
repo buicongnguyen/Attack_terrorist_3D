@@ -2,6 +2,8 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { DIFFICULTIES, DIFFICULTY, DEFAULT_DIFFICULTY, BASE_HIT, hitChance, scalePayload, seededRandom, percent } from "../src/difficulty.js";
 import { MISSIONS, chapterStart } from "../src/data.js";
+import { mulberry32 } from "../src/rng.js";
+import { readFileSync, readdirSync } from "node:fs";
 
 test("four modes, Easy first and the default", () => {
   assert.deepEqual(DIFFICULTIES, ["easy", "normal", "hard", "crazy"]);
@@ -69,4 +71,32 @@ test("the random source counts its own draws and keeps the 5.0 sequence", () => 
   other();
   assert.equal(other.calls, 1, "each source keeps its own count");
   assert.equal(r.calls, 3);
+});
+
+test("one mulberry32 (src/rng.js) draws what the four 5.0 copies drew", () => {
+  // The 5.0 function, as it was copied in difficulty, city, strike-data and swarm.
+  const before = (seed) => {
+    let a = seed >>> 0;
+    return () => {
+      a = (a + 0x6d2b79f5) >>> 0;
+      let t = a;
+      t = Math.imul(t ^ (t >>> 15), t | 1);
+      t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  };
+  for (const seed of [1, 7919, 104729]) {
+    const now = mulberry32(seed),
+      then = before(seed),
+      mission = seededRandom(seed);
+    for (let i = 0; i < 1000; i++) {
+      const x = then();
+      assert.equal(now(), x, `seed ${seed}, draw ${i}`);
+      assert.equal(mission(), x);
+    }
+    assert.equal(mission.calls, 1000);
+  }
+  const copies = readdirSync("src")
+    .filter((name) => /\.m?js$/.test(name) && readFileSync(`src/${name}`, "utf8").includes("function mulberry32"));
+  assert.deepEqual(copies, ["rng.js"]);
 });

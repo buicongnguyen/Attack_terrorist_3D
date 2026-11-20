@@ -247,6 +247,8 @@ export class RingPool {
       transparent: true,
       depthWrite: false,
       side: THREE.DoubleSide,
+      // One pass for both faces: two would re-derive the program twice a frame.
+      forceSinglePass: true,
       fog: true,
     });
     this.mesh = new THREE.Mesh(geometry, this.material);

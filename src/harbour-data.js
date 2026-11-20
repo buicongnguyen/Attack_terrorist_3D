@@ -97,7 +97,7 @@ export function hullHits(cls, pose, points, radius) {
 }
 
 // Civilians are flagged a little before a blast would actually reach them, like the city shelter.
-export const CIVILIAN_MARGIN = 0.4;
+const CIVILIAN_MARGIN = 0.4;
 
 // Once bombs are away, a ship the pattern would catch waits REACTION seconds, then sidesteps
 // straight away from the nearest bomblet at its class's evade speed until they land. The
@@ -173,33 +173,44 @@ function slot(formation, i, n, length = 4.4) {
   }
 }
 
-// Where ship `i` sits at a station, in world metres, plus the heading it holds there.
-function stationPose(station, i, n, time) {
+// Where ship `i` sits at a station, in world metres, plus the heading it holds there (written
+// into `out`).
+function stationPose(station, i, n, time, out = {}) {
   const theta = rad(station.heading ?? 0);
   if (station.slots) {
     const s = station.slots[i % station.slots.length];
-    return { x: s.x, z: s.z, heading: rad(s.heading ?? station.heading ?? 0) };
+    out.x = s.x;
+    out.z = s.z;
+    out.heading = rad(s.heading ?? station.heading ?? 0);
+    return out;
   }
   if (station.formation === "ring") {
     // Escorts circle their charge; the ring turns at `station.orbit` metres per second.
     const radius = station.radius ?? RING_RADIUS;
     const a = (i / n) * Math.PI * 2 + ((station.orbit ?? 1) / radius) * time;
-    return {
-      x: station.x + Math.cos(a) * radius,
-      z: station.z + Math.sin(a) * radius,
-      heading: a + Math.PI / 2,
-    };
+    out.x = station.x + Math.cos(a) * radius;
+    out.z = station.z + Math.sin(a) * radius;
+    out.heading = a + Math.PI / 2;
+    return out;
   }
   const { f, l } = slot(station.formation, i, n, station.length);
   const fx = Math.cos(theta),
     fz = Math.sin(theta);
-  return { x: station.x + f * fx - l * fz, z: station.z + f * fz + l * fx, heading: theta };
+  out.x = station.x + f * fx - l * fz;
+  out.z = station.z + f * fz + l * fx;
+  out.heading = theta;
+  return out;
 }
 
 // Column slots are spaced by the group's longest hull.
+// Kept per group and station: every ship's pose is asked for every step.
+const columns = new WeakMap();
 function sized(group, station) {
   if (station.formation !== "column") return station;
-  return { ...station, length: Math.max(...group.ships.map((cls) => SHIPS[cls].length)) };
+  let stations = columns.get(group);
+  if (!stations) columns.set(group, (stations = new Map()));
+  if (!stations.has(station)) stations.set(station, { ...station, length: Math.max(...group.ships.map((cls) => SHIPS[cls].length)) });
+  return stations.get(station);
 }
 
 // A group's timetable: it holds at each station, then sails to the next at `speed`. A leg lasts
@@ -229,22 +240,36 @@ export function fleetPlan(group) {
 }
 
 const ease = (u) => u * u * (3 - 2 * u);
+// A leg's two ends, filled and read within one shipPose call.
+const legFrom = {},
+  legTo = {};
 
 // Pose of ship `i` of a group at absolute `time`. Legs blend each ship from its slot at one
-// station to its slot at the next, so formations change shape while they sail.
-export function shipPose(group, i, time, plan = fleetPlan(group)) {
+// station to its slot at the next, so formations change shape while they sail. Written into `out`
+// (the live fleet passes one object it reuses every step).
+export function shipPose(group, i, time, plan = fleetPlan(group), out = {}) {
   const n = group.ships.length;
-  const at = (s) => sized(group, s);
   const local = (((time - (group.start ?? 0)) % plan.period) + plan.period) % plan.period;
-  const seg = plan.segments.find((s) => local >= s.t0 && local < s.t1) || plan.segments[plan.segments.length - 1];
+  const segments = plan.segments;
+  let seg = segments[segments.length - 1];
+  for (let k = 0; k < segments.length; k++)
+    if (local >= segments[k].t0 && local < segments[k].t1) {
+      seg = segments[k];
+      break;
+    }
   if (seg.type === "hold") {
     const station = group.stations[seg.station];
-    return { ...stationPose(at(station), i, n, time), station: seg.station, holding: true, moored: Boolean(station.moored) };
+    stationPose(sized(group, station), i, n, time, out);
+    out.station = seg.station;
+    out.holding = true;
+    out.moving = false;
+    out.moored = Boolean(station.moored);
+    return out;
   }
   const raw = Math.min(1, Math.max(0, (local - seg.t0) / (seg.t1 - seg.t0)));
   const u = ease(raw);
-  const a = stationPose(at(group.stations[seg.from]), i, n, time),
-    b = stationPose(at(group.stations[seg.to]), i, n, time);
+  const a = stationPose(sized(group, group.stations[seg.from]), i, n, time, legFrom),
+    b = stationPose(sized(group, group.stations[seg.to]), i, n, time, legTo);
   // Turn from the station heading onto the course in the first fifth of the leg, hold it, and
   // turn onto the next station's heading in the last fifth: continuous, so hulls never snap.
   const chord = Math.hypot(b.x - a.x, b.z - a.z);
@@ -254,15 +279,14 @@ export function shipPose(group, i, time, plan = fleetPlan(group)) {
   else if (raw < 0.2) heading = a.heading + wrap(course - a.heading) * ease(raw / 0.2);
   else if (raw > 0.8) heading = course + wrap(b.heading - course) * ease((raw - 0.8) / 0.2);
   else heading = course;
-  return {
-    x: a.x + (b.x - a.x) * u,
-    z: a.z + (b.z - a.z) * u,
-    heading,
-    station: null,
-    holding: false,
-    moored: false,
-    moving: course !== null,
-  };
+  out.x = a.x + (b.x - a.x) * u;
+  out.z = a.z + (b.z - a.z) * u;
+  out.heading = heading;
+  out.station = null;
+  out.holding = false;
+  out.moored = false;
+  out.moving = course !== null;
+  return out;
 }
 
 // One pose model for the forecast and the live ships (kept as a separate name for callers).
@@ -281,9 +305,19 @@ export function stationStatus(group, stationIndex, time, plan = fleetPlan(group)
 
 // ------------------------------------------------------------------ missions
 
-// Harbour quays and piers are land rectangles [x0, z0, x1, z1]; everything else is water.
+// Harbour quays and piers are land rectangles [x0, z0, x1, z1]; everything else is water. Fish,
+// splashes and bombs ask every step, so each list is flattened once into a Float64Array (never
+// Float32: bounds such as -6.2 are not exact there) and read with a plain indexed loop.
+const flatLand = new WeakMap();
 export function onLand(land, x, z) {
-  return Boolean(land?.some(([x0, z0, x1, z1]) => x >= x0 && x <= x1 && z >= z0 && z <= z1));
+  if (!land) return false;
+  let flat = flatLand.get(land);
+  if (!flat) {
+    flat = Float64Array.from(land.flat());
+    flatLand.set(land, flat);
+  }
+  for (let i = 0; i < flat.length; i += 4) if (x >= flat[i] && x <= flat[i + 2] && z >= flat[i + 1] && z <= flat[i + 3]) return true;
+  return false;
 }
 
 const warehouse = (id, x, z, floors, name, color) => ({

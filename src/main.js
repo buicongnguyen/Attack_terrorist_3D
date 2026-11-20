@@ -5,8 +5,10 @@ import { WorldView } from "./world.js";
 import { Game } from "./game.js";
 import { AudioBus } from "./audio.js";
 import { FixedClock } from "./physics.js";
+import { createLoop } from "./loop.js";
+import { mulberry32 } from "./rng.js";
 import { UI, readSave } from "./ui.js";
-import { detectDevice, rendererOptions, loadGovernor, saveGovernor, GRACE } from "./quality.js";
+import { detectDevice, rendererOptions, loadGovernor } from "./quality.js";
 import { firstOpenMission } from "./data.js";
 import * as strikeData from "./strike-data.js";
 import * as rescueData from "./rescue-data.js";
@@ -17,6 +19,9 @@ document.documentElement.dataset.boot = "started";
 async function boot() {
   const params = new URLSearchParams(location.search),
     qa = params.has("qa");
+  // Deterministic renders for QA (?qa&det=1): every cosmetic random number comes from one fixed
+  // seed, so two runs of the same steps draw the same pixels. game.random is never touched.
+  if (qa && params.get("det") === "1") Math.random = mulberry32(1);
   // 2.9: phones start at a modest resolution without antialiasing; Auto adapts after that.
   const device = detectDevice(),
     governor = loadGovernor(device);
@@ -40,27 +45,9 @@ async function boot() {
   document.getElementById("app").hidden = false;
   view.resize();
   const clock = new FixedClock();
-  let previous = performance.now();
-  let wasPaused = false;
+  const loop = createLoop({ clock, governor, game, ui, view, now: performance.now(), hidden: () => document.hidden });
   const animate = (now) => {
-    const real = (now - previous) / 1000,
-      delta = Math.min(real, 0.1);
-    previous = now;
-    const change = governor.sample(real, !game.paused && game.status === "playing" && !document.hidden && game.time > GRACE);
-    if (change) {
-      view.applyQuality(governor);
-      game.ambientBudget = governor.profile.life;
-      if (change === "level") saveGovernor(governor);
-      ui.updateGraphics?.();
-    }
-    ui.updateInput();
-    if (!game.paused) clock.advance(delta, (dt) => game.update(dt));
-    else clock.reset();
-    ui.updateHUD();
-    if (!game.paused || !wasPaused || view.needsRender) {
-      view.render(game.time, game.reducedMotion ? 0 : game.shake);
-    }
-    wasPaused = game.paused;
+    loop.frame(now);
     requestAnimationFrame(animate);
   };
   requestAnimationFrame(animate);

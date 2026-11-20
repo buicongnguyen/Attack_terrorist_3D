@@ -15,6 +15,9 @@ import { Ambient, waterAt } from "./ambient.js";
 
 const V = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
 const forward = V(0, 0, -1);
+// Scratch for the per-step paths (shield rings, wakes, aim, shot headings, hit tests, missile
+// steering), so a fight allocates nothing per step. Each is filled and read within one call.
+const scratch = { lift: V(), wake: V(), centre: V(), aim: V(), heading: V(), goal: V(), turn: new THREE.Quaternion(), limited: new THREE.Quaternion() };
 
 // Shared shot geometry: friendly rounds are bright tracers in a soft halo, hostile rounds are
 // glowing fireballs. Neither is disposed with a shot.
@@ -81,6 +84,8 @@ export class Game {
     this.upgrades = {};
     // Starts per mission in this page: the attempt number in each mission's seed.
     this.attemptsBy = new Map();
+    // Lantern's aim point, rewritten each step (steerHeli).
+    this.heliAim = V();
   }
 
   // QA: the next start of mission `index` plays attempt `n` (the balance sweep walks n = 1..8).
@@ -95,8 +100,6 @@ export class Game {
   }
 
   start(index) {
-    if (this.physics)
-      for (const body of [...this.physics.world.bodies]) this.physics.world.removeBody(body);
     this.view.clear();
     this.index = index;
     this.mission = MISSIONS[index];
@@ -153,14 +156,12 @@ export class Game {
     this.playerTurret = null;
     this.boatParts = {};
     this.shieldMeshes = [];
-    this.rescue = null;
     this.op =
       this.chapter === 0
         ? new StrikeOperation(this)
         : this.chapter === 1
           ? new RiverOperation(this)
           : new RescueOperation(this);
-    if (this.chapter === 2) this.rescue = this.op;
     // 2.9: fish, birds and reeds, sized by the graphics level and calmed by reduced motion.
     this.restock();
     this.reticle = this.view.ring(V(0, 0.04, -8), 0.65, COLORS.gold, 0.08);
@@ -311,14 +312,14 @@ export class Game {
     }
     if (!river) this.view.followPlayer(this.player.position, dt);
     for (let i = 0; i < 3; i++) {
-      this.shieldMeshes[i].position.copy(this.player.position).add(V(0, river ? 0.45 : -0.6, 0));
+      this.shieldMeshes[i].position.copy(this.player.position).add(scratch.lift.set(0, river ? 0.45 : -0.6, 0));
       this.shieldMeshes[i].visible = this.shields[i] > 0;
       this.shieldMeshes[i].material.opacity = river ? 0.18 + this.shields[i] * 0.1 : 0.5;
     }
     this.wakeCooldown = (this.wakeCooldown ?? 0) - dt;
     if (this.wakeCooldown <= 0) {
       this.wakeCooldown = river ? 0.17 : 0.65;
-      const p = this.player.position.clone();
+      const p = scratch.wake.copy(this.player.position);
       p.y = river ? 0.11 : 1.3;
       if (river) p.z += 2;
       this.shockRing(p, river ? 0.55 : 2, 0xdff9f2, river ? 0.07 : 0.025, river ? 1.2 : 1.8, river ? 1.2 : 2);
@@ -337,12 +338,12 @@ export class Game {
       // The stick points from where Lantern appears on screen (she flies high, so that is not
       // over her own spot on the ground): find the ground under that screen point and aim there.
       const screen = this.view.project(p);
-      const reach = Math.min(this.view.canvas.clientWidth, this.view.canvas.clientHeight) * 0.3;
+      const reach = Math.min(this.view.viewWidth, this.view.viewHeight) * 0.3;
       const ground = this.view.aim(screen.x + this.input.stickAim.x * reach, screen.y + this.input.stickAim.z * reach);
-      dir = V(ground.x - p.x, 0, ground.z - p.z);
+      dir = scratch.aim.set(ground.x - p.x, 0, ground.z - p.z);
     }
     else if (this.input.pointerAim) {
-      const d = V(this.input.aim.x - p.x, 0, this.input.aim.z - p.z);
+      const d = scratch.aim.set(this.input.aim.x - p.x, 0, this.input.aim.z - p.z);
       if (d.lengthSq() > 1) dir = d;
     }
     if (dir && dir.lengthSq() > 1e-6) this.fireDir.copy(dir).normalize();
@@ -353,7 +354,7 @@ export class Game {
     if (lock) this.fireDir.set(lock.position.x - p.x, 0, lock.position.z - p.z).normalize();
     const face = dir || this.input.fire ? this.fireDir : this.heading;
     this.player.rotation.y = dampAngle(this.player.rotation.y, Math.atan2(-face.x, -face.z), 7, dt);
-    return p.clone().addScaledVector(this.fireDir, 14).setY(1.3);
+    return this.heliAim.copy(p).addScaledVector(this.fireDir, 14).setY(1.3);
   }
 
   // The hostile best lined up with a direction from Lantern: within `cos` of it and `reach` metres.
@@ -413,7 +414,7 @@ export class Game {
   }
 
   collect(pickup) {
-    if (this.rescue) return this.rescue.collect(pickup);
+    if (this.chapter === 2) return this.op.collect(pickup);
     if (pickup.dead || this.status !== "playing") return;
     const info = PICKUPS[pickup.kind];
     pickup.dead = true;
@@ -453,10 +454,11 @@ export class Game {
     this.player.updateMatrixWorld(true);
   }
 
-  targetPosition(e) {
-    if (e.hostile || e.type === "drone") return e.position.clone();
+  // Where to aim at a target, written into `out` (a new vector without one).
+  targetPosition(e, out = V()) {
+    if (e.hostile || e.type === "drone") return out.copy(e.position);
     const lift = e.lift ?? HOSTILE_TARGET_LIFT[e.type] ?? 0.1;
-    return e.position.clone().add(V(0, lift, e.type === "cave" ? 1.5 : 0));
+    return out.copy(e.position).add(scratch.lift.set(0, lift, e.type === "cave" ? 1.5 : 0));
   }
 
   nearestTarget() {
@@ -481,7 +483,7 @@ export class Game {
       ...this.projectiles.filter((p) => p.hostile && p.missile && !p.dead),
     ];
     for (const target of candidates) {
-      const delta = this.targetPosition(target).sub(this.player.position);
+      const delta = this.targetPosition(target, scratch.centre).sub(this.player.position);
       const distance = delta.length();
       if (distance > 55) continue;
       const dot = delta.setY(0).normalize().dot(direction);
@@ -503,10 +505,10 @@ export class Game {
     // lock (a wide cone), rockets take one if a target is close to the line and fly straight if not.
     const target = heli && rocket ? this.coneTarget(this.fireDir, guided ? 0.7 : 0.9, guided ? 55 : 46) : null;
     if (guided && !target) return false;
-    if (this.rescue && rocket) {
+    if (heli && rocket) {
       const key = guided ? "guided" : "rockets";
-      if (this.rescue.gear[key] <= 0) return false;
-      this.rescue.gear[key]--;
+      if (this.op.gear[key] <= 0) return false;
+      this.op.gear[key]--;
     }
     if (rocket) this.rocketCooldown = 1.2;
     else this.cooldown = this.chapter === 1 ? WEAPONS.gun.interval : SHOT_INTERVAL;
@@ -625,8 +627,12 @@ export class Game {
   }
 
   updateProjectiles(dt) {
+    let dead = false;
     for (const shot of this.projectiles) {
-      if (shot.dead) continue;
+      if (shot.dead) {
+        dead = true;
+        continue;
+      }
       shot.age += dt;
       shot.life -= dt;
       shot.last.copy(shot.position);
@@ -642,7 +648,7 @@ export class Game {
       shot.position.addScaledVector(shot.velocity, dt);
       // Flat rounds drop from the chin gun to just above the ground and fly on level.
       if (shot.flat) shot.position.y += (FLAT.y - shot.position.y) * Math.min(1, dt * 9);
-      shot.mesh.quaternion.setFromUnitVectors(forward, shot.velocity.clone().normalize());
+      shot.mesh.quaternion.setFromUnitVectors(forward, scratch.heading.copy(shot.velocity).normalize());
       if (shot.hostile) this.resolveHostileShot(shot);
       else this.resolveFriendlyShot(shot);
       const struck = shot.dead;
@@ -655,30 +661,35 @@ export class Game {
       )
         shot.dead = true;
       if (shot.dead && !struck && shot.position.y < 0.3 && waterAt(this, shot.position.x, shot.position.z)) this.splash(shot.position, shot.missile ? 0.8 : 0.25);
+      if (shot.dead) dead = true;
     }
-    this.projectiles = this.projectiles.filter((shot) => {
-      if (!shot.dead) return true;
-      this.view.disposeObject(shot.mesh);
-      return false;
-    });
+    // Compact in place, in order, only when a shot died (on this step, or since the last one).
+    if (!dead) return;
+    const shots = this.projectiles;
+    let kept = 0;
+    for (let i = 0; i < shots.length; i++) {
+      if (shots[i].dead) this.view.disposeObject(shots[i].mesh);
+      else shots[kept++] = shots[i];
+    }
+    shots.length = kept;
   }
 
   steerMissile(shot, dt) {
     const homing = shot.homing?.barge ? (shot.homing.barge.alive ? shot.homing.barge.position : null) : null;
     const goal =
-      shot.hostile && (shot.distracted || this.rescue?.countermeasures > 0)
+      shot.hostile && (shot.distracted || (this.chapter === 2 && this.op.countermeasures > 0))
         ? null
         : shot.hostile
-          ? (homing || this.player.position).clone().add(V(0, this.chapter === 1 ? 1 : 0, 0))
+          ? scratch.goal.copy(homing || this.player.position).add(scratch.lift.set(0, this.chapter === 1 ? 1 : 0, 0))
           : shot.target && !shot.target.dead
-            ? this.targetPosition(shot.target)
+            ? this.targetPosition(shot.target, scratch.goal)
             : null;
     if (goal) {
       if (shot.flat) goal.y = shot.position.y;
       const desired = goal.sub(shot.position).normalize();
-      const direction = shot.velocity.clone().normalize();
-      const turn = new THREE.Quaternion().setFromUnitVectors(direction, desired);
-      const limited = new THREE.Quaternion().rotateTowards(turn, dt * (shot.hostile ? 1.2 : 3.5));
+      const direction = scratch.heading.copy(shot.velocity).normalize();
+      const turn = scratch.turn.setFromUnitVectors(direction, desired);
+      const limited = scratch.limited.identity().rotateTowards(turn, dt * (shot.hostile ? 1.2 : 3.5));
       direction.applyQuaternion(limited);
       shot.speed = Math.min(shot.hostile ? 11 : 22, shot.speed + dt * 0.65);
       shot.velocity.copy(direction).multiplyScalar(shot.speed);
@@ -695,7 +706,7 @@ export class Game {
   }
 
   resolveHostileShot(shot) {
-    const centre = this.player.position.clone().add(V(0, this.chapter === 1 ? 0.85 : 0, 0));
+    const centre = scratch.centre.copy(this.player.position).add(scratch.lift.set(0, this.chapter === 1 ? 0.85 : 0, 0));
     const radius = this.chapter === 1 ? 2.6 : 3.1;
     const t = segmentSphere(shot.last, shot.position, centre, radius);
     const other = this.op.friendlyHit?.(shot);
@@ -735,7 +746,7 @@ export class Game {
       if (!isHostileEntity(e) || shot.struck?.has(e)) continue;
       // Tall targets (the gate towers) carry a stack of hit spheres from base to top, not one at their aim point.
       for (const lift of e.hitLifts || [null]) {
-        const centre = lift === null ? this.targetPosition(e) : e.position.clone().add(V(0, lift, 0));
+        const centre = lift === null ? this.targetPosition(e, scratch.centre) : scratch.centre.copy(e.position).add(scratch.lift.set(0, lift, 0));
         const t = test(centre, (e.hitRadius ?? e.radius) + shot.radius);
         if (t !== null && (!hit || t < hit.t)) hit = { t, entity: e };
       }
@@ -776,7 +787,7 @@ export class Game {
     const near = (e, r) =>
       shot.flat
         ? Math.hypot(e.position.x - shot.position.x, e.position.z - shot.position.z) < r
-        : this.targetPosition(e).distanceTo(shot.position) < r;
+        : this.targetPosition(e, scratch.centre).distanceTo(shot.position) < r;
     if (shot.missile)
       for (const e of this.entities) {
         if (e !== hit.entity && !e.dead && isHostileEntity(e) && near(e, 3.7)) this.damage(e, 3, true);
@@ -1113,12 +1124,16 @@ export class Game {
     return group;
   }
 
+  // Fragments and emitters update and compact in one pass, in place and in order.
   updateFragments(dt) {
-    this.fragments = this.fragments.filter((f) => {
+    const fragments = this.fragments;
+    let kept = 0;
+    for (let i = 0; i < fragments.length; i++) {
+      const f = fragments[i];
       f.life -= dt;
       if (f.life <= 0) {
         this.view.disposeObject(f.mesh);
-        return false;
+        continue;
       }
       const p = f.mesh.position;
       f.velocity.y -= 18 * dt;
@@ -1138,9 +1153,13 @@ export class Game {
         }
       }
       if (f.life < 0.5) f.mesh.scale.copy(f.scale).multiplyScalar(Math.max(0.01, f.life / 0.5));
-      return true;
-    });
-    this.emitters = this.emitters.filter((e) => {
+      fragments[kept++] = f;
+    }
+    fragments.length = kept;
+    const emitters = this.emitters;
+    kept = 0;
+    for (let i = 0; i < emitters.length; i++) {
+      const e = emitters[i];
       e.t -= dt;
       e.next -= dt;
       if (e.next <= 0) {
@@ -1151,8 +1170,9 @@ export class Game {
         // A spark lifting out of the fire now and then.
         if (e.fire && !this.reducedMotion && Math.random() < 0.3 * (this.ambientBudget ?? 1)) this.ember(base.clone().add(V((Math.random() - 0.5) * 0.5 * e.size, 0, (Math.random() - 0.5) * 0.5 * e.size)), 0xffc062, 0.14, 1.4, { x: (Math.random() - 0.5) * 0.8, y: 2 + Math.random() * 1.5, z: (Math.random() - 0.5) * 0.8 });
       }
-      return e.t > 0;
-    });
+      if (e.t > 0) emitters[kept++] = e;
+    }
+    emitters.length = kept;
   }
 
   // Fragments are rigid bodies that only collide with the ground plane.
@@ -1173,19 +1193,21 @@ export class Game {
   updateEffects(dt) {
     this.updateFragments(dt);
     // Glows, smoke, rings and scorches live in the GPU pools (fx.js); only their clocks advance here.
-    for (const pool of Object.values(this.view.fx)) pool.update(dt);
-    this.debris = this.debris.filter((e) => {
+    for (const pool of this.view.fxPools) pool.update(dt);
+    const debris = this.debris;
+    let kept = 0;
+    for (let i = 0; i < debris.length; i++) {
+      const e = debris[i];
       e.life -= dt;
       e.mesh.position.copy(e.body.position);
       e.mesh.quaternion.copy(e.body.quaternion);
       if (e.life <= 0) {
         this.physics.world.removeBody(e.body);
         this.view.disposeObject(e.mesh);
-        return false;
-      }
-      return true;
-    });
-    this.debrisActive = this.debris.length > 0;
+      } else debris[kept++] = e;
+    }
+    debris.length = kept;
+    this.debrisActive = kept > 0;
   }
 
   finish(success, reason = null) {
@@ -1243,7 +1265,7 @@ export class Game {
       progress: this.status === "success" ? 1 : (op.progress ?? 0),
       remaining: this.chapter === 0 ? op.left.enemies : 0,
       op,
-      rescue: this.rescue ? op : null,
+      rescue: this.chapter === 2 ? op : null,
     };
   }
 }

@@ -9,7 +9,9 @@ import {
   resolveBuildings,
   buildBlocks,
   buildingAt,
+  buildingsNear,
   blockHits,
+  firstBlockHit,
   cityBounds,
   laneLimits,
   turnPoint,
@@ -22,6 +24,7 @@ import {
   storyY,
 } from "../src/strike-data.js";
 import { scalePayload } from "../src/difficulty.js";
+import { mulberry32 } from "../src/rng.js";
 
 const CITY_COUNT = 6;
 // Generated lots are named by kind and lot: C (tower), B (barracks), G (crewed barracks), e.g. "G-1_2".
@@ -229,4 +232,65 @@ test("road works dig up one lane of an inner street, clear of the walking line, 
     }
   }
   assert.ok(STRIKE_MISSIONS.slice(0, CITY_COUNT).some((m) => m.convoy));
+});
+
+test("buildingsNear returns what 5.0's string-keyed index returned, in the same order", () => {
+  // 5.0's index and query, kept here as the reference (5.1 P1 moved to numeric keys and stamps).
+  const indexBefore = (list) => {
+    const cells = new Map();
+    for (const b of list)
+      for (let cx = Math.floor(b.min[0] / CITY.pitch); cx <= Math.floor(b.max[0] / CITY.pitch); cx++)
+        for (let cz = Math.floor(b.min[2] / CITY.pitch); cz <= Math.floor(b.max[2] / CITY.pitch); cz++) {
+          const key = `${cx},${cz}`;
+          if (!cells.has(key)) cells.set(key, []);
+          cells.get(key).push(b);
+        }
+    return cells;
+  };
+  const nearBefore = (cells, x0, z0, x1, z1) => {
+    const found = new Set();
+    for (let cx = Math.floor(Math.min(x0, x1) / CITY.pitch); cx <= Math.floor(Math.max(x0, x1) / CITY.pitch); cx++)
+      for (let cz = Math.floor(Math.min(z0, z1) / CITY.pitch); cz <= Math.floor(Math.max(z0, z1) / CITY.pitch); cz++)
+        for (const b of cells.get(`${cx},${cz}`) || []) found.add(b);
+    return [...found];
+  };
+  const random = mulberry32(2026);
+  let found = 0;
+  for (const index of [5, 7]) {
+    const layout = STRIKE_MISSIONS[index];
+    const buildings = resolveBuildings(layout);
+    const cells = indexBefore(buildings);
+    const b = cityBounds(layout);
+    for (let i = 0; i < 1000; i++) {
+      // Boxes from a point to 40 m across, either way round, some past the city's edge.
+      const x0 = b.minX - 10 + random() * (b.maxX - b.minX + 20),
+        z0 = b.minZ - 10 + random() * (b.maxZ - b.minZ + 20);
+      const x1 = x0 + (random() - 0.5) * 80 * random(),
+        z1 = z0 + (random() - 0.5) * 80 * random();
+      const near = buildingsNear(buildings, x0, z0, x1, z1).map((n) => n.id);
+      assert.deepEqual(near, nearBefore(cells, x0, z0, x1, z1).map((n) => n.id));
+      found += near.length;
+    }
+  }
+  assert.ok(found > 1000, `${found} buildings found`);
+  // An unindexed list is returned as it is.
+  const plain = [{ id: "a" }];
+  assert.equal(buildingsNear(plain, 0, 0, 1, 1), plain);
+});
+
+test("firstBlockHit is blockHits' nearest hit", () => {
+  const layout = STRIKE_MISSIONS[5];
+  const buildings = resolveBuildings(layout);
+  const blocks = buildBlocks(buildings);
+  const b = cityBounds(layout);
+  const random = mulberry32(17);
+  let hits = 0;
+  for (let i = 0; i < 2000; i++) {
+    const a = { x: b.minX + random() * (b.maxX - b.minX), y: 1 + random() * 30, z: b.minZ + random() * (b.maxZ - b.minZ) };
+    const s = { x: a.x + (random() - 0.5) * 30, y: a.y - random() * 20, z: a.z + (random() - 0.5) * 30 };
+    const all = blockHits(blocks, buildings, a, s);
+    assert.deepEqual(firstBlockHit(blocks, buildings, a, s), all[0] ?? null);
+    if (all.length) hits++;
+  }
+  assert.ok(hits > 100, `${hits} segments hit a block`);
 });

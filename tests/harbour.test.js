@@ -316,3 +316,37 @@ test("harbour missions sit in Chapter 1 with enough payload, their own lessons a
   assert.equal(points.length, 5);
   assert.ok(Math.abs(points[4].x - points[0].x - (points[4].z - points[0].z)) < 1e-9, "turned 45°");
 });
+
+// 5.0's onLand, kept here as the reference for the flat-array version (5.1 P1).
+const onLandBefore = (land, x, z) => Boolean(land?.some(([x0, z0, x1, z1]) => x >= x0 && x <= x1 && z >= z0 && z <= z1));
+
+test("onLand answers as 5.0 did on a 5 cm grid within a metre of every quay and pier edge", () => {
+  let points = 0,
+    land = 0;
+  for (const mission of HARBOUR_MISSIONS) {
+    const rects = mission.harbour.land;
+    const check = (x, z) => {
+      const before = onLandBefore(rects, x, z);
+      assert.equal(onLand(rects, x, z), before, `(${x}, ${z})`);
+      points++;
+      if (before) land++;
+    };
+    for (const [x0, z0, x1, z1] of rects) {
+      // Across each edge (-1 m to +1 m, the edge itself exactly) and along it.
+      for (let i = -20; i <= 20; i++) {
+        const across = i * 0.05;
+        for (let x = x0 - 1; x <= x1 + 1; x += 0.05) {
+          check(x, z0 + across);
+          check(x, z1 + across);
+        }
+        for (let z = z0 - 1; z <= z1 + 1; z += 0.05) {
+          check(x0 + across, z);
+          check(x1 + across, z);
+        }
+      }
+    }
+  }
+  assert.ok(points > 100000 && land > 0 && land < points, `${points} points, ${land} on land`);
+  assert.equal(onLand(null, 0, 0), false);
+  assert.equal(onLand([], 0, 0), false);
+});

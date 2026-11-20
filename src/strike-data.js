@@ -1,6 +1,7 @@
 // Chapter 1 "Breakwater": city layouts, enemy schedules, ordnance and ballistics.
 // Everything here is deterministic and free of Three.js so it can be unit tested.
 import { HARBOUR_MISSIONS, WATER_LEVEL, onLand, patternPoints } from "./harbour-data.js";
+import { mulberry32 } from "./rng.js";
 
 export const CITY = Object.freeze({
   ground: 1,
@@ -502,17 +503,6 @@ export const WORKS = Object.freeze({ lane: 1.2, width: 1.3, length: 4.4, shift: 
 const POWER = [1.6, 1.5, 1.4, 1.3, 1.25, 1.2];
 const ASSIST = [4.5, 4, 3.5, 3, 3, 2.5];
 
-function seeded(seed) {
-  let a = seed >>> 0;
-  return () => {
-    a = (a + 0x6d2b79f5) >>> 0;
-    let t = a;
-    t = Math.imul(t ^ (t >>> 15), t | 1);
-    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
-}
-
 export function expandCity(layout, index) {
   const extraCols = layout.cols * (CITY_GROWTH.cols - 1),
     extraRows = layout.rows * (CITY_GROWTH.rows - 1) + CITY_GROWTH.extraRows;
@@ -522,7 +512,7 @@ export function expandCity(layout, index) {
     minRow: -Math.floor(extraRows / 2),
     maxRow: layout.rows - 1 + Math.ceil(extraRows / 2),
   };
-  const random = seeded(4099 + index * 977);
+  const random = mulberry32(4099 + index * 977);
   const buildings = [...layout.buildings],
     parks = [],
     yards = [];
@@ -647,28 +637,47 @@ export function storyY(f) {
 }
 
 // Buildings are indexed by grid cell and carry their own blocks, so lookups in a big city only
-// look at the buildings a point or segment can touch.
+// look at the buildings a point or segment can touch. Cell keys are numbers (a city spans far
+// fewer than 2048 cells each way), and each building's last query id sits in `stamps` by its index.
+const cellKey = (cx, cz) => cx * 4096 + cz;
 function indexBuildings(buildings) {
   const cells = new Map();
   for (const b of buildings)
     for (let cx = Math.floor(b.min[0] / CITY.pitch); cx <= Math.floor(b.max[0] / CITY.pitch); cx++)
       for (let cz = Math.floor(b.min[2] / CITY.pitch); cz <= Math.floor(b.max[2] / CITY.pitch); cz++) {
-        const key = `${cx},${cz}`;
+        const key = cellKey(cx, cz);
         if (!cells.has(key)) cells.set(key, []);
         cells.get(key).push(b);
       }
   buildings.cells = cells;
+  buildings.stamps = new Float64Array(buildings.length);
   return buildings;
 }
 
-// Buildings whose cells overlap the box [x0, x1] × [z0, z1] (all of them for an unindexed list).
+// Buildings whose cells overlap the box [x0, x1] × [z0, z1] (all of them for an unindexed list),
+// in cell order without repeats. The result is a shared scratch array, refilled by the next query:
+// never query again while walking it, and never change it. The same holds for the unindexed list,
+// which is returned itself.
+const near = [];
+let query = 0;
 export function buildingsNear(buildings, x0, z0, x1, z1) {
   if (!buildings.cells) return buildings;
-  const found = new Set();
+  const stamps = buildings.stamps,
+    id = ++query;
+  let n = 0;
   for (let cx = Math.floor(Math.min(x0, x1) / CITY.pitch); cx <= Math.floor(Math.max(x0, x1) / CITY.pitch); cx++)
-    for (let cz = Math.floor(Math.min(z0, z1) / CITY.pitch); cz <= Math.floor(Math.max(z0, z1) / CITY.pitch); cz++)
-      for (const b of buildings.cells.get(`${cx},${cz}`) || []) found.add(b);
-  return [...found];
+    for (let cz = Math.floor(Math.min(z0, z1) / CITY.pitch); cz <= Math.floor(Math.max(z0, z1) / CITY.pitch); cz++) {
+      const cell = buildings.cells.get(cellKey(cx, cz));
+      if (!cell) continue;
+      for (let i = 0; i < cell.length; i++) {
+        const b = cell[i];
+        if (stamps[b.index] === id) continue;
+        stamps[b.index] = id;
+        near[n++] = b;
+      }
+    }
+  near.length = n;
+  return near;
 }
 
 const blocksOf = (blocks, building) => building.blocks || blocks.filter((block) => block.b === building.index);
@@ -819,6 +828,21 @@ export function blockHits(blocks, buildings, a, b) {
     }
   }
   return hits.sort((x, y) => x.t - y.t);
+}
+
+// The nearest of those hits (blockHits(...)[0]), or null, without building the list: bombs and
+// forecasts ask every step.
+export function firstBlockHit(blocks, buildings, a, b) {
+  let first = null;
+  for (const building of buildingsNear(buildings, Math.min(a.x, b.x) - 0.1, Math.min(a.z, b.z) - 0.1, Math.max(a.x, b.x) + 0.1, Math.max(a.z, b.z) + 0.1)) {
+    if (segmentBox(a, b, building.min, building.max, 0.1) === null) continue;
+    for (const block of blocksOf(blocks, building)) {
+      if (!block.alive) continue;
+      const t = segmentBox(a, b, block.min, block.max);
+      if (t !== null && (!first || t < first.t)) first = { t, block };
+    }
+  }
+  return first;
 }
 
 // Line of sight for blast damage: walls and slabs shelter people unless they are broken.
@@ -1130,6 +1154,11 @@ export function bombletFall(vy, h) {
 // Continuously computed impact point. Drill forecasts report the floor that will detonate;
 // every forecast reports `time`, the seconds from release until it lands.
 // `opts.land` marks a harbour's quays (everything else is water); `opts.angle` turns a pattern.
+// Each forecast step's two ends, reused: anything kept (points, bursts, detonations) is a copy.
+const stepFrom = { x: 0, y: 0, z: 0 },
+  stepTo = { x: 0, y: 0, z: 0 };
+const copy3 = (p) => ({ x: p.x, y: p.y, z: p.z });
+
 export function forecastImpact(blocks, buildings, release, kind, floor = 1, opts = {}) {
   const land = opts.land || null;
   const state = { ...release };
@@ -1139,16 +1168,22 @@ export function forecastImpact(blocks, buildings, release, kind, floor = 1, opts
   const def = BOMBS[kind];
   // Same step as the live simulation, so the pipper is exact even at building edges.
   const dt = STEP;
+  const a = stepFrom,
+    b = stepTo;
   for (let step = 0; step < 1200; step++) {
-    const a = { x: state.x, y: state.y, z: state.z };
+    a.x = state.x;
+    a.y = state.y;
+    a.z = state.z;
     stepBomb(state, dt);
-    const b = { x: state.x, y: state.y, z: state.z };
-    if (step % 8 === 0) points.push(b);
+    b.x = state.x;
+    b.y = state.y;
+    b.z = state.z;
+    if (step % 8 === 0) points.push(copy3(b));
     if (kind === "scatter" || def.pattern) {
       const below = surfaceBelow(buildings, blocks, b.x, b.z, land);
-      const hit = blockHits(blocks, buildings, a, b)[0];
+      const hit = firstBlockHit(blocks, buildings, a, b);
       if (hit || b.y <= below + def.burst) {
-        const burst = hit ? lerp3(a, b, hit.t) : b;
+        const burst = hit ? lerp3(a, b, hit.t) : copy3(b);
         // Measure the ground under the burst exactly as the live canister does.
         const ground = burstGround(buildings, blocks, burst, state, land);
         const centre = scatterCentre(burst, state, ground);
@@ -1178,14 +1213,15 @@ export function forecastImpact(blocks, buildings, release, kind, floor = 1, opts
         const target = Math.min(floor - 1, building.floors);
         const detonateY = target >= building.floors ? building.top : storyY(target) + DRILL_BURST;
         if (b.y <= detonateY) {
-          points.push(b);
+          const detonation = copy3(b);
+          points.push(detonation);
           // Report the floor the bomb actually reaches: a release that clips a corner
           // low down detonates on that floor, not the one that was set.
           const reached = Math.floor((b.y - storyY(0) + CITY.slab) / CITY.floorH);
           return {
             points,
             impact: { x: b.x, y: Math.min(building.top, b.y), z: b.z },
-            detonation: b,
+            detonation,
             building,
             floor: Math.max(0, Math.min(target, building.floors, reached)),
             crossesShelter,
@@ -1195,7 +1231,7 @@ export function forecastImpact(blocks, buildings, release, kind, floor = 1, opts
         continue;
       }
     } else {
-      const hit = blockHits(blocks, buildings, a, b)[0];
+      const hit = firstBlockHit(blocks, buildings, a, b);
       if (hit) {
         const p = lerp3(a, b, hit.t);
         points.push(p);

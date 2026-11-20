@@ -1,21 +1,18 @@
 import * as THREE from "three";
 import { CITY, WORKS, storyY, lotCenter, cityBounds } from "./strike-data.js";
-import { material } from "./world.js";
+import { material, shareInstancedDepth } from "./world.js";
+import { mulberry32 } from "./rng.js";
 
 const V = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
 const unitBox = new THREE.BoxGeometry(1, 1, 1);
 const zero = new THREE.Matrix4().makeScale(0, 0, 0);
-
-export function seeded(seed) {
-  let a = seed >>> 0;
-  return () => {
-    a = (a + 0x6d2b79f5) >>> 0;
-    let t = a;
-    t = Math.imul(t ^ (t >>> 15), t | 1);
-    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
-}
+// Decor batches keep their own copy of each colour's material: one material shared by instanced
+// and plain meshes re-derives its shader program at every switch between them, twice a frame.
+const decorMaterials = new Map();
+const decorMaterial = (color) => {
+  if (!decorMaterials.has(color)) decorMaterials.set(color, material(color).clone());
+  return decorMaterials.get(color);
+};
 
 let windowTexture = null;
 function facadeTexture() {
@@ -134,7 +131,7 @@ export class CityView {
     this.layout = layout;
     this.buildings = buildings;
     this.blocks = blocks;
-    this.random = seeded(1009 + missionIndex * 7919);
+    this.random = mulberry32(1009 + missionIndex * 7919);
     this.group = new THREE.Group();
     view.level.add(this.group);
     this.decor = new Map();
@@ -172,9 +169,10 @@ export class CityView {
     const matrix = new THREE.Matrix4(),
       rotation = new THREE.Quaternion();
     for (const [color, list] of this.decor) {
-      const mesh = new THREE.InstancedMesh(unitBox, material(color), list.length);
+      const mesh = new THREE.InstancedMesh(unitBox, decorMaterial(color), list.length);
       list.forEach(([position, size], i) => mesh.setMatrixAt(i, matrix.compose(position, rotation, size)));
       mesh.castShadow = mesh.receiveShadow = true;
+      shareInstancedDepth(mesh);
       mesh.instanceMatrix.needsUpdate = true;
       mesh.computeBoundingSphere();
       this.group.add(mesh);
@@ -494,6 +492,7 @@ export class CityView {
       });
       mesh.instanceMatrix.needsUpdate = true;
       if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
+      shareInstancedDepth(mesh);
       this.group.add(mesh);
       this.meshes[kind] = mesh;
     }

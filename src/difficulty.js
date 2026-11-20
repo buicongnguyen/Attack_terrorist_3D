@@ -1,6 +1,8 @@
 // Difficulty (2.5; 3.2 made Normal the default and the barges need escorting on every mode). Each mode pulls the same few
 // levers across all three chapters, so a mission plays the same way, only more or less kindly.
 
+import { mulberry32 } from "./rng.js";
+
 export const DIFFICULTIES = ["easy", "normal", "hard", "crazy"];
 export const DEFAULT_DIFFICULTY = "normal";
 
@@ -108,14 +110,10 @@ export function percent(chance) {
 // counts its own calls (random.calls), so the golden runs can prove that nothing cosmetic draws
 // from it, including calls made while a mission is being built.
 export function seededRandom(seed) {
-  let a = seed >>> 0;
+  const next = mulberry32(seed);
   const random = () => {
     random.calls++;
-    a = (a + 0x6d2b79f5) >>> 0;
-    let t = a;
-    t = Math.imul(t ^ (t >>> 15), t | 1);
-    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    return next();
   };
   random.calls = 0;
   return random;

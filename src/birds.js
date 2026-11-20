@@ -6,7 +6,8 @@
 // - Circlers are background flocks (gulls, swallows, hawks, bats) on looping paths computed in
 //   the vertex shader: no CPU at all beyond one time uniform.
 import * as THREE from "three";
-import { mulberry32, angleDelta } from "./swarm.js";
+import { angleDelta } from "./swarm.js";
+import { mulberry32 } from "./rng.js";
 
 const TAU = Math.PI * 2;
 const PERCHED = 0,
@@ -16,7 +17,7 @@ const PERCHED = 0,
 
 // A 20-triangle bird, span 1, nose at +z: wedge body, two-part wings, fan tail and beak. Vertex
 // colours are shades (instance colour multiplies them): dark wing tips, a pale belly.
-export function birdGeometry() {
+function birdGeometry() {
   const body = [1, 1, 1],
     wing = [0.88, 0.88, 0.9],
     tip = [0.42, 0.42, 0.46],

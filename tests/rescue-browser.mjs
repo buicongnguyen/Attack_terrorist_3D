@@ -11,7 +11,7 @@ export function rescuePilot(index) {
   const { game: g, ui } = window.__TIDELOCK__;
   ui.start(index);
   g.paused = false;
-  const r = g.rescue;
+  const r = g.op;
   const kinds = ["enemy", "cannon", "aa-truck", "drone", "cave", "missile-site", "missile-truck", "drone-pad", "barracks", "gunship"];
   for (let steps = 0; steps < 120 * 240 && g.status === "playing"; steps++) {
     const p = g.player.position;
@@ -51,7 +51,7 @@ export function siegePilot(index) {
   const { game: g, ui } = window.__TIDELOCK__;
   ui.start(index);
   g.paused = false;
-  const r = g.rescue,
+  const r = g.op,
     station = r.siege.cfg.station,
     camp = r.layout.landing;
   let repairing = false;
@@ -112,8 +112,8 @@ export async function checkRescue(page, browser, url, check, errors) {
     g.paused = false;
     g.time = 180;
     g.update(1 / 120);
-    out.noTimerVictory = g.status === "playing" && g.rescue.rescued === 0;
-    const r = g.rescue;
+    out.noTimerVictory = g.status === "playing" && g.op.rescued === 0;
+    const r = g.op;
     const soldier = r.soldiers[0],
       hp = soldier.hp;
     g.damage(soldier, 100, true);
@@ -226,7 +226,7 @@ export async function checkRescue(page, browser, url, check, errors) {
     g.rounds = { ap: 0, he: 0, plasma: 0 };
     g.noteRound();
     for (const shot of g.projectiles) shot.dead = true;
-    const r2 = g.rescue;
+    const r2 = g.op;
     // Plasma carries on through a line of targets.
     const line = [8, 13].map((d) => g.opponent(V(g.player.position.x, 1.15, g.player.position.z - d), { hp: 20 }));
     g.gainRounds("plasma");
@@ -332,7 +332,7 @@ export async function checkRescue(page, browser, url, check, errors) {
     run(0.2);
     out.truckStopsAndRaises = truck.state === "erect";
     // A truck parked on a signal doesn't pin it: only people and emplacements do.
-    out.trucksDoNotPinSignals = g.rescue.guards({ position: truck.position }) === 0;
+    out.trucksDoNotPinSignals = g.op.guards({ position: truck.position }) === 0;
     run(4.6);
     out.noMissileBeforeFiveSeconds = !truck.fired && hostileMissiles() === 0 && truck.rack?.rotation.x > 0.5;
     run(0.6);
@@ -391,7 +391,7 @@ export async function checkRescue(page, browser, url, check, errors) {
     g.damage(cave, 1, false);
     out.caveHitDisables = cave.phase === "disabled" && !cave.launcher.visible && !cave.crew.visible;
     out.inFlightMissileRemains = !incoming.dead && g.projectiles.includes(incoming);
-    for (let i = 0; i < 2400; i++) g.rescue.updateCaves(1 / 120);
+    for (let i = 0; i < 2400; i++) g.op.updateCaves(1 / 120);
     out.caveNeverRearms = cave.phase === "disabled";
     // Every map fields its own mix.
     ui.start(17);
@@ -517,7 +517,7 @@ export async function checkRescue(page, browser, url, check, errors) {
   });
   check("held mouse aim follows the moving camera", followsAim);
   await page.locator("#next-signal").click();
-  check("rescue waypoint selection", await page.evaluate(() => __TIDELOCK__.game.rescue.selected === 1));
+  check("rescue waypoint selection", await page.evaluate(() => __TIDELOCK__.game.op.selected === 1));
 
   // Three sorties, three different countries: each map renders, and none looks like another.
   const visuals = await page.evaluate(() => {

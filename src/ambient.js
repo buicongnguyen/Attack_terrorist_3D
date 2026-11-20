@@ -5,7 +5,8 @@
 // the waders. Each kind is one instanced draw that casts no shadow, and everything runs on its
 // own random numbers, so missions and scripted runs play out exactly as before.
 import * as THREE from "three";
-import { Swarm, rectWater, mulberry32 } from "./swarm.js";
+import { Swarm, rectWater } from "./swarm.js";
+import { mulberry32 } from "./rng.js";
 import { Perchers, createCirclers } from "./birds.js";
 import { chapterStart } from "./data.js";
 import { CITY } from "./strike-data.js";

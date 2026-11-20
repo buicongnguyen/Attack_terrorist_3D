@@ -20,6 +20,7 @@ const FALLBACK = { "patrol-boat": "skiff", "missile-boat": "skiff", frigate: "bo
 const wrap = (a) => Math.atan2(Math.sin(a), Math.cos(a));
 // Damp an angle toward a target the short way round.
 export const dampAngle = (from, to, rate, dt) => from + wrap(to - from) * (1 - Math.exp(-rate * dt));
+const flying = (a) => a.alive;
 
 // The Front's flotilla in a harbour mission: scheduled formations, evasive turns, hull hits.
 export class Fleet {
@@ -27,6 +28,8 @@ export class Fleet {
     this.op = op;
     this.game = op.game;
     this.land = op.layout.harbour?.land || null;
+    // Each step's course for one ship, reused (see shipPose).
+    this.course = {};
     this.groups = (op.layout.fleet || []).map((data) => ({ data, plan: fleetPlan(data), ships: [] }));
     this.ships = [];
     for (const group of this.groups)
@@ -121,7 +124,7 @@ export class Fleet {
         this.updateSinking(ship, dt);
         continue;
       }
-      const course = shipPose(ship.group.data, ship.index, t, ship.group.plan);
+      const course = shipPose(ship.group.data, ship.index, t, ship.group.plan, this.course);
       ship.moored = course.moored;
       this.updateDodge(ship, course, dt);
       const x = course.x + ship.dodge.x,
@@ -167,13 +170,14 @@ export class Fleet {
   }
 
   updateGuns(ship, dt) {
-    const lead = this.op.aircraft.find((a) => a.alive);
+    const lead = this.op.aircraft.find(flying);
     if (!lead || !ship.guns.length) return;
+    const dx = lead.mesh.position.x - ship.position.x,
+      dz = lead.mesh.position.z - ship.position.z;
     for (const gun of ship.guns) {
       // A turret that carries the ship's flak is aimed by the flak code instead.
       if (gun === ship.nest?.turret) continue;
-      const d = lead.mesh.position.clone().sub(ship.position);
-      gun.rotation.y = dampAngle(gun.rotation.y, Math.atan2(-d.x, -d.z) - ship.mesh.rotation.y, 3, dt);
+      gun.rotation.y = dampAngle(gun.rotation.y, Math.atan2(-dx, -dz) - ship.mesh.rotation.y, 3, dt);
     }
   }
 
@@ -271,12 +275,20 @@ export class Fleet {
   }
 
   // Boats still to sink: the mission's quota, and never fewer than its key ships still afloat.
+  // (Counted in one pass: the outcome check asks every step.)
   left() {
-    const hostile = this.hostile();
-    const alive = hostile.filter((s) => !s.dead);
-    const layout = this.op.layout;
-    const keys = alive.filter((s) => layout.required?.includes(s.group.data.id)).length;
-    return Math.max(this.needed() - (hostile.length - alive.length), keys);
+    const required = this.op.layout.required;
+    let hostile = 0,
+      alive = 0,
+      keys = 0;
+    for (const s of this.ships) {
+      if (s.civilian) continue;
+      hostile++;
+      if (s.dead) continue;
+      alive++;
+      if (required?.includes(s.group.data.id)) keys++;
+    }
+    return Math.max(this.needed() - (hostile - alive), keys);
   }
 
   needed() {

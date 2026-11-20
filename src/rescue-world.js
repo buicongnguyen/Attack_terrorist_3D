@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import { rescueLayout, riverAt, riverEdge, nearestOnRoad } from "./rescue-data.js";
-import { seeded } from "./city.js";
+import { mulberry32 } from "./rng.js";
 import { chapterStart } from "./data.js";
 
 const V = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
@@ -102,7 +102,7 @@ export function createRescueScenery(view, mission, index = chapterStart(2)) {
   const layout = rescueLayout(index - chapterStart(2), mission.crew);
   const map = layout.map;
   const biome = BIOMES[map.biome] || BIOMES.jungle;
-  const random = seeded(4242 + (index - chapterStart(2)) * 97);
+  const random = mulberry32(4242 + (index - chapterStart(2)) * 97);
   const noise = noise2(3 + index);
   view.sceneryChunks = [];
   buildTerrain(view, map, biome, noise);

@@ -10,7 +10,7 @@ export const QUALITY = {
   // Tidelock's long-standing desktop cap.
   high: { label: "Sharp", ratio: 1.75, shadow: 2048, life: 1 },
 };
-export const QUALITY_KEY = "tidelock-graphics";
+const QUALITY_KEY = "tidelock-graphics";
 // Seconds after a mission starts that don't count: shaders compile and the scene settles.
 export const GRACE = 4;
 

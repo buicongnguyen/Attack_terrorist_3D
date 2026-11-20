@@ -19,6 +19,7 @@ import {
   stepBomb,
   forecastImpact,
   blockHits,
+  firstBlockHit,
   blocksNear,
   boxDistance,
   blastDistance,
@@ -58,6 +59,14 @@ import { bonuses } from "./requisition.js";
 import { Ripples, healthMaterial } from "./ripples.js";
 
 const V = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
+// Live targets counted without building a list (the outcome check runs every step).
+const standing = (t) => !t.dead,
+  firing = (t) => !t.dead && !t.mounted;
+const countLive = (list, keep) => {
+  let n = 0;
+  for (const item of list) if (keep(item)) n++;
+  return n;
+};
 const forward = V(0, 0, -1);
 const LIVERY = ["#ffc62b", "#ff8a6b", "#33d69f"];
 const HIDE_SECONDS = 18;
@@ -269,6 +278,11 @@ export class StrikeOperation {
   // Ripples under every live target (key targets wide and gold); see ripples.js.
   createRipples() {
     const count = this.enemies.length + this.aa.length + this.masts.length + this.trucks.length + (this.fleet?.ships.length || 0);
+    // Reused each frame: a target's style never changes, and the item list is refilled in place.
+    this.rippleStyles = new WeakMap();
+    this.rippleItems = [];
+    this.rippleTargets = [];
+    this.rippleTunnels = new Set();
     return new Ripples(this.game.view, count);
   }
 
@@ -287,22 +301,33 @@ export class StrikeOperation {
     // Ripples change slowly: once per rendered frame is plenty.
     if (this.game.time - (this.rippledAt ?? -1) < 1 / 60) return;
     this.rippledAt = this.game.time;
-    const items = [];
-    const tunnels = new Set();
-    for (const t of this.targets()) {
+    const items = this.rippleItems,
+      tunnels = this.rippleTunnels;
+    let count = 0;
+    tunnels.clear();
+    for (const t of this.targets(this.rippleTargets)) {
       if (t.inTunnel) {
         if (tunnels.has(t.inTunnel)) continue;
         tunnels.add(t.inTunnel);
       }
-      const style = this.rippleStyle(t);
+      let style = this.rippleStyles.get(t);
+      if (!style) this.rippleStyles.set(t, (style = this.rippleStyle(t)));
       let y = t.position.y + 0.12;
       // Someone indoors ripples on the roof above them, where the eye can see it.
       if (t.cur?.b && !t.inTunnel) {
         const b = buildingById(this.buildings, t.cur.b);
         if (t.cur.f < b.floors) y = b.top + 0.15;
       }
-      items.push({ x: t.position.x, y, z: t.position.z, ...style });
+      const item = items[count] || (items[count] = {});
+      count++;
+      item.x = t.position.x;
+      item.y = y;
+      item.z = t.position.z;
+      item.size = style.size;
+      item.color = style.color;
+      item.gain = style.gain;
     }
+    items.length = count;
     this.ripples.update(this.game.time, items);
   }
 
@@ -353,7 +378,7 @@ export class StrikeOperation {
       for (const angle of [0, Math.PI / 2]) {
         const tick = new THREE.Mesh(
           new THREE.PlaneGeometry(2.6, 0.12),
-          new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, depthWrite: false, side: THREE.DoubleSide }),
+          new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, depthWrite: false, side: THREE.DoubleSide, forceSinglePass: true }),
         );
         tick.rotation.set(-Math.PI / 2, 0, angle);
         tick.userData.disposable = true;
@@ -798,7 +823,7 @@ export class StrikeOperation {
   patrolEdge(dir) {
     if (!(this.layout.grid || this.layout.harbour?.wide) || this.aim) return Infinity;
     let edge = -Infinity;
-    for (const t of this.targets()) edge = Math.max(edge, t.position.x * dir);
+    for (const t of this.targets((this.edgeTargets ||= []))) edge = Math.max(edge, t.position.x * dir);
     for (const e of this.events) if (e.alive > 0) edge = Math.max(edge, e.centre.x * dir);
     return edge === -Infinity ? Infinity : edge + PATROL_MARGIN;
   }
@@ -953,14 +978,18 @@ export class StrikeOperation {
     return candidates.find((c) => this.lanceReaches(release, c.t))?.t || null;
   }
 
-  targets() {
-    return [
-      ...this.trucks.filter((t) => !t.dead),
-      ...(this.fleet ? this.fleet.hostile().filter((s) => !s.dead) : []),
-      ...this.masts.filter((t) => !t.dead),
-      ...this.aa.filter((t) => !t.dead && !t.mounted),
-      ...this.enemies.filter((t) => !t.dead),
-    ];
+  // Every live target, in this order: trucks, hostile ships, jammer masts, flak, people. `out`
+  // is refilled when given.
+  // (Overwritten, then cut to length: emptying it first would drop its storage.)
+  targets(out = []) {
+    let n = 0;
+    for (const t of this.trucks) if (!t.dead) out[n++] = t;
+    if (this.fleet) for (const s of this.fleet.ships) if (!s.civilian && !s.dead) out[n++] = s;
+    for (const t of this.masts) if (!t.dead) out[n++] = t;
+    for (const t of this.aa) if (!t.dead && !t.mounted) out[n++] = t;
+    for (const t of this.enemies) if (!t.dead) out[n++] = t;
+    out.length = n;
+    return out;
   }
 
   // ------------------------------------------------------------------ simulation
@@ -1452,10 +1481,10 @@ export class StrikeOperation {
       if (bomb.kind === "drill") this.updateDrill(bomb, a, b);
       else if (bomb.kind === "scatter" || isPattern(bomb.kind)) {
         const below = surfaceBelow(this.buildings, this.blocks, b.x, b.z, this.land);
-        const hit = blockHits(this.blocks, this.buildings, a, b)[0];
+        const hit = firstBlockHit(this.blocks, this.buildings, a, b);
         if (hit || b.y <= below + BOMBS[bomb.kind].burst) this.burst(bomb, hit ? lerp3(a, b, hit.t) : b);
       } else {
-        const hit = blockHits(this.blocks, this.buildings, a, b)[0];
+        const hit = firstBlockHit(this.blocks, this.buildings, a, b);
         if (hit) this.detonate(bomb, lerp3(a, b, hit.t));
       }
       const ground = groundAt(this.land, b.x, b.z);
@@ -1506,7 +1535,7 @@ export class StrikeOperation {
       const a = { x: s.x, y: s.y, z: s.z };
       stepBomb(s, STEP);
       const b = { x: s.x, y: s.y, z: s.z };
-      const hit = blockHits(this.blocks, this.buildings, a, b)[0];
+      const hit = firstBlockHit(this.blocks, this.buildings, a, b);
       const ground = groundAt(this.land, b.x, b.z);
       const end = hit ? lerp3(a, b, hit.t) : b.y <= ground ? lerp3(a, b, (a.y - ground) / (a.y - b.y)) : null;
       if (!end) continue;
@@ -1896,10 +1925,10 @@ export class StrikeOperation {
 
   remaining() {
     return {
-      enemies: this.enemies.filter((e) => !e.dead).length,
-      aa: this.aa.filter((a) => !a.dead && !a.mounted).length,
-      masts: this.masts.filter((m) => !m.dead).length,
-      trucks: this.trucks.filter((t) => !t.dead).length,
+      enemies: countLive(this.enemies, standing),
+      aa: countLive(this.aa, firing),
+      masts: countLive(this.masts, standing),
+      trucks: countLive(this.trucks, standing),
       ships: this.fleet ? this.fleet.left() : 0,
     };
   }

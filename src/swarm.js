@@ -3,20 +3,9 @@
 // (a goal, a capped turn rate, the short way round) and writes one matrix per fish. From the
 // lightweight-game-objects skill's swarm template, after Zoo Garden's pond fish.
 import * as THREE from "three";
+import { mulberry32 } from "./rng.js";
 
 const TAU = Math.PI * 2;
-
-// Cosmetic randomness of its own, so missions, retries and scripted runs replay exactly.
-export function mulberry32(seed) {
-  let a = seed >>> 0;
-  return () => {
-    a = (a + 0x6d2b79f5) >>> 0;
-    let t = a;
-    t = Math.imul(t ^ (t >>> 15), t | 1);
-    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
-}
 
 // The signed angle from a to b, the short way round.
 export const angleDelta = (a, b) => Math.atan2(Math.sin(b - a), Math.cos(b - a));
@@ -143,6 +132,8 @@ export class Swarm {
     Object.assign(this, { x: F(), z: F(), h: F(), v: F(), cruise: F(), gx: F(), gz: F(), gt: F(), flee: F(), fh: F() });
     Object.assign(this, { phase: F(), amp: F(), size: F(), bob: F(), ox: F(), oz: F(), leader: new Int32Array(count) });
     this.swim = new Float32Array(count * 2);
+    // Whether each fish's stored position is in the water: -1 until asked, and again after it moves.
+    this.wet = new Int8Array(count).fill(-1);
     const body = new Float32Array(count * 3),
       accent = new Float32Array(count * 3),
       color = new THREE.Color();
@@ -210,6 +201,7 @@ export class Swarm {
       this.z[i] += dz;
       this.gz[i] += dz;
     }
+    this.wet.fill(-1);
     for (let i = 0; i < count; i++) {
       if (this.leader[i] !== i || this.z[i] <= water.maxZ) continue;
       for (let j = i; j < count && this.leader[j] === i; j++) {
@@ -262,9 +254,10 @@ export class Swarm {
         nz = z[i] + Math.cos(h[i]) * v[i] * dt;
       // A fish already outside (a follower trailing over the end of a scrolling canal) swims
       // freely back to its school.
-      if (water.contains(nx, nz) || !water.contains(x[i], z[i])) {
+      if (water.contains(nx, nz) || !this.inWater(i)) {
         x[i] = nx;
         z[i] = nz;
+        this.wet[i] = -1;
       } else {
         // At the edge: hold position and keep turning one way until open water lies ahead (a
         // winding river has no single centre to turn back to).
@@ -300,6 +293,13 @@ export class Swarm {
     }
     this.mesh.instanceMatrix.needsUpdate = true;
     this.swimAttribute.needsUpdate = true;
+  }
+
+  // The water test at a fish's stored position, asked once while it holds there (a fish at an
+  // edge holds for many steps).
+  inWater(i) {
+    if (this.wet[i] < 0) this.wet[i] = this.water.contains(this.x[i], this.z[i]) ? 1 : 0;
+    return this.wet[i] === 1;
   }
 
   inside() {

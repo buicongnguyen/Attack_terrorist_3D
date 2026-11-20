@@ -2,7 +2,7 @@
 // lowland, a canyon of broken crossings in the storm, a ridge at dusk), starts at one base and
 // lands at another, and picks people up by flying over them.
 // (2.7: ±41 across, inside the valley walls that climb from ±43.)
-export const RESCUE_BOUNDS = { left: -41, right: 41, near: 26, far: -224 };
+const RESCUE_BOUNDS = { left: -41, right: 41, near: 26, far: -224 };
 export const RESCUE_HEIGHT = 7.5;
 // Fly within this of a signal and the soldier is pulled aboard; the ride up takes LIFT_SECONDS.
 export const PICKUP_RADIUS = 5.5;

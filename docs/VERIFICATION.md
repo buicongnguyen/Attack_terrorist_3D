@@ -1,5 +1,65 @@
 # Release Verification
 
+## Tidelock 5.1, P1: headroom and a bit-identical clean-up
+
+[PLAN-5.1.md](PLAN-5.1.md) P1 was verified on 2026-11-21 against the production build (`vite preview`), Chrome 155 on the GPU unless noted. No gameplay change: **all 50 golden rows are byte-identical**, and the isolation, four interleave and two randomCalls checks pass (`npm run golden`, 1.7 min).
+
+**What changed.** Rings draw in one pass (`forceSinglePass` on `view.ring()`, the ring pool and the pipper ticks) and share their geometry by exact shape; instanced shadow casters bring their own depth material and decor batches their own material copies, so no material switches between plain and instanced meshes mid-frame; the HUD writes text, `hidden` and classes only when they change (`setText`, `setHidden`, `setClass` in ui.js, also used by rescue-hud.js); a ResizeObserver keeps `view.viewWidth` and `viewHeight`; the per-step paths reuse scratch objects (game.js, world.js `followPlayer`, the harbour's `onLand`, ship poses, fish water tests, `buildingsNear`, `firstBlockHit`, forecasts, targets and ripples); fragments, emitters and debris compact in place, and shots only when one died; the frame loop is `src/loop.js` (main.js only calls it); `?qa&det=1` replaces `Math.random` with `mulberry32(1)` (never `game.random`); one `mulberry32` lives in `src/rng.js`; `game.rescue`, the body-removal loop in `Game.start` and four needless exports are gone.
+
+**Tests.** 135 Node tests (10 new: tests/loop.test.js with fake 16.7 ms, 33 ms, 250 ms, paused and hidden frames; `onLand` against the 5.0 function on a 5 cm grid within 1 m of every quay edge in 1.7-1.9, 6.7 million points; `buildingsNear` against 5.0's string-keyed index for 1000 random boxes on 1.6 and on 1.8; `firstBlockHit` against `blockHits(...)[0]` for 2000 segments; `mulberry32` against the 5.0 copies for seeds 1, 7919 and 104729, 1000 draws each, and `function mulberry32` only in src/rng.js). **450 browser checks** with GPU=1 and zero errors (421 before, plus 29 in the new tests/perf-browser.mjs, which the suite runs and `npm run perf` runs alone). Under SwiftShader `npm run perf` passes its 28 gated checks twice in a row (the allocation check is logged there).
+
+| Measure (perf-browser) | 5.0 (ab4e065) | P1 |
+|---|---|---|
+| Shader program look-ups a frame, 1.1 / 1.6 / 1.8 / 2.3 / 3.1 / 3.4 | 29 / 102 / 65 / 2 / 12 / 20 | 0 / 0 / 0 / 0 / 0 / 0 |
+| Draw calls at 390x844 (Sharp), 1.1 / 1.6 / 1.8 / 2.3 / 3.2 / 3.4 | 215 / 562 / 375 / 183 / 343 / 420 | 203 / 516 / 344 / 182 / 335 / 411 |
+| RingGeometry objects in 1.6 (84 rings) | 84 | 13 |
+| Allocation per fixed step on 1.8, 480 steps (sampled heap profile, collected objects included) | 576 KB | 53 KB (51.6 KB under SwiftShader) |
+| Same-value `class`/`hidden` writes in 3 s of play, 1.3 / 2.2 / 3.4 | 216 / 374 / 420 | 0 / 0 / 0 |
+| Canvas `clientHeight` reads in 60 frames after a resize | (every frame) | 0 |
+
+- **Ceilings enforced from now on** (`DRAW_CEILINGS`): 1.6 at most 565, 1.8 at most 374, 3.2 at most 343 draw calls at 390x844. A later item that adds draws raises its line in the same commit and says why.
+- **Rings:** every `view.ring` mesh on 1.6, 2.2 and 2.5 has the world-space outer radius it asked for times its caller's scale (worst error 2.6e-15 over 1996 looks); mine halos and pincer rings still pulse. No visible material on 1.1, 1.6, 1.8, 2.3, 3.1 or 3.4 is transparent, two-sided and drawn in two passes.
+- **The canvas size:** a canvas-only resize (the visual viewport's kind, no window event) reaches `viewHeight` before the next frame.
+- **Deterministic renders:** two `?qa&det=1` renders of 1.6 after the same 600 steps are pixel-identical. Against 5.0 with `Math.random` seeded the same way, 1.6 differs in 163 of 921,600 pixels (0.018%) and 1.8 in 96 (0.010%), all on the strike flight's small glows, whose cosmetic draws shifted because P1 makes fewer three.js objects (each takes four random numbers for its id). The diff images were reviewed: `.scratch/P1/p1-render-1.6-diff.png` and `.scratch/P1/p1-render-1.8-diff.png` (with their before and after renders).
+- **Fragments:** the first 20 fragments of a 1.6 blast fly exactly the trajectory recorded on 5.0 for 120 steps (tests/golden/fragments-5.0.json holds its SHA-256); smoke columns keep puffing until spent, and debris meshes follow their physics bodies.
+
+**Baselines** (`npm run perf -- --baseline` rewrites this block; they do not gate). Coverage counts the touch layout's painted HUD elements, whether or not they let taps through. The frame times are the real frame loop with no input; p95 moved between 16.8 and 33.4 ms from run to run on 1.6 and 1.8, so compare medians of several runs.
+
+<!-- perf-baseline:start (written by npm run perf -- --baseline) -->
+HUD coverage at 390x844, touch layout (share of a 10 px grid under a painted HUD element, after 1 s of play; 2026-11-21):
+
+| Mission | Coverage |
+|---|---|
+| 1.1 Wake-Up Call | 41.3% |
+| 1.2 Floors Below | 46.8% |
+| 1.3 Shift Change | 44.1% |
+| 1.4 Flak Alley | 47.2% |
+| 1.5 Scatter | 46.8% |
+| 1.6 The Glass Tower | 45.6% |
+| 1.7 Harbour Mouth | 53.9% |
+| 1.8 Dry Dock | 53.0% |
+| 1.9 The Ring | 50.9% |
+| 2.1 Mangrove Mile | 34.9% |
+| 2.2 The Narrows | 28.3% |
+| 2.3 Floodplain | 28.0% |
+| 2.4 Sawmill Reach | 28.5% |
+| 2.5 The Cut | 27.8% |
+| 2.6 Lock Gate | 29.0% |
+| 3.1 Hidden Signals | 37.9% |
+| 3.2 Broken Crossing | 37.9% |
+| 3.3 Last Light | 37.9% |
+| 3.4 Eye of the Storm | 36.8% |
+
+Frame times at 390x844 with the CPU slowed 4x (GPU, the real frame loop, no input, 5 s after 2 s to settle):
+
+| Mission | Frames | p50 | p95 |
+|---|---|---|---|
+| 1.6 | 280 | 16.7 ms | 33.3 ms |
+| 1.8 | 298 | 16.7 ms | 16.8 ms |
+| 3.4 | 293 | 16.7 ms | 16.8 ms |
+
+<!-- perf-baseline:end -->
+
 ## Tidelock 5.1, G1: the golden scripted runs
 
 The drift gate from [PLAN-5.1.md](PLAN-5.1.md) G1 was verified on 2026-11-19 against the production build (`vite preview`), with no gameplay change.

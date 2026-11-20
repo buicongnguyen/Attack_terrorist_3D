@@ -1,4 +1,5 @@
 import { isHostileEntity, riverAt } from "./rescue-data.js";
+import { setText } from "./ui.js";
 
 export class RescueHUD {
   constructor(game) {
@@ -6,13 +7,13 @@ export class RescueHUD {
     this.canvas = document.getElementById("rescue-map");
     this.context = this.canvas.getContext("2d");
     this.canvas.addEventListener("pointerdown", (event) => {
-      if (!game.rescue || game.paused) return;
+      if (game.chapter !== 2 || game.paused) return;
       const r = this.canvas.getBoundingClientRect();
       const x = ((event.clientX - r.left) / r.width) * this.canvas.width;
       const y = ((event.clientY - r.top) / r.height) * this.canvas.height;
       let selected = -1,
         best = 26;
-      game.rescue.soldiers.forEach((s, i) => {
+      game.op.soldiers.forEach((s, i) => {
         const p = this.mapPoint(s.position);
         const d = Math.hypot(p.x - x, p.y - y);
         if (!s.rescued && d < best) {
@@ -20,11 +21,11 @@ export class RescueHUD {
           selected = i;
         }
       });
-      if (selected >= 0) game.rescue.select(selected);
+      if (selected >= 0) game.op.select(selected);
     });
     document.getElementById("next-signal").onclick = () => {
-      const r = game.rescue;
-      if (!r) return;
+      if (game.chapter !== 2) return;
+      const r = game.op;
       for (let n = 1; n <= r.soldiers.length; n++) {
         const index = (r.selected + n) % r.soldiers.length;
         if (!r.soldiers[index].rescued) {
@@ -36,7 +37,7 @@ export class RescueHUD {
   }
 
   mapPoint(p) {
-    const b = this.game.rescue.layout.bounds;
+    const b = this.game.op.layout.bounds;
     return {
       x: 14 + ((p.x - b.left) / (b.right - b.left)) * (this.canvas.width - 28),
       y: 12 + ((p.z - b.far) / (b.near - b.far)) * (this.canvas.height - 24),
@@ -47,13 +48,13 @@ export class RescueHUD {
     const r = state.rescue;
     if (!r) return;
     const $ = (id) => document.getElementById(id);
-    $("rescue-signal").textContent = r.objective.name;
-    $("rescue-distance").textContent = `${Math.round(r.distance)} m`;
-    $("rescue-status").textContent = r.state;
-    $("rescue-count").textContent = r.siege ? `${Math.floor(r.siege.gate * 100)}%` : `${r.rescued} / ${r.total}`;
-    $("rocket-stock").textContent = r.gear.rockets;
-    $("guided-stock").textContent = r.gear.guided;
-    $("flare-stock").textContent = r.gear.flares;
+    setText($("rescue-signal"), r.objective.name);
+    setText($("rescue-distance"), `${Math.round(r.distance)} m`);
+    setText($("rescue-status"), r.state);
+    setText($("rescue-count"), r.siege ? `${Math.floor(r.siege.gate * 100)}%` : `${r.rescued} / ${r.total}`);
+    setText($("rocket-stock"), r.gear.rockets);
+    setText($("guided-stock"), r.gear.guided);
+    setText($("flare-stock"), r.gear.flares);
     $("flare-action").disabled =
       r.gear.flares === 0 || r.flareCooldown > 0 || state.status !== "playing";
     $("rocket-weapon").disabled = r.gear.rockets <= 0;
@@ -63,7 +64,7 @@ export class RescueHUD {
 
   draw() {
     const g = this.game,
-      r = g.rescue,
+      r = g.op,
       c = this.context,
       w = this.canvas.width,
       h = this.canvas.height;

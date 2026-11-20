@@ -11,6 +11,25 @@ import { chapterStart } from "./data.js";
 
 const materialCache = new Map();
 const boxGeometry = new THREE.BoxGeometry(1, 1, 1);
+// Ring geometry is shared by its exact (inner, outer, segments) shape and never disposed with a
+// ring; callers that pulse or grow a ring scale its mesh, so no radius may live in mesh.scale.
+const ringGeometries = new Map();
+const ringGeometry = (inner, outer, segments) => {
+  const key = `${inner},${outer},${segments}`;
+  if (!ringGeometries.has(key)) ringGeometries.set(key, new THREE.RingGeometry(inner, outer, segments));
+  return ringGeometries.get(key);
+};
+// The shadow pass draws casters with one shared depth material, and three.js re-derives its
+// program whenever the caster switches between a plain mesh, an instanced one and an instanced one
+// with colours: several times a frame. Instanced casters bring their own, one per kind.
+const instancedDepth = [new THREE.MeshDepthMaterial(), new THREE.MeshDepthMaterial()];
+export const shareInstancedDepth = (mesh) => {
+  mesh.customDepthMaterial = instancedDepth[mesh.instanceColor ? 1 : 0];
+};
+// The sun's place above the camera target until a mood sets its own, and the follow camera's
+// offset from the helicopter: read only.
+const SUN_OFFSET = new THREE.Vector3(-26, 44, 30);
+const FOLLOW_OFFSET = new THREE.Vector3(0, 65, 68);
 const sphereGeometry = new THREE.IcosahedronGeometry(1, 2);
 export const material = (color) => {
   if (!materialCache.has(color))
@@ -173,9 +192,21 @@ export class WorldView {
       scorch: new ScorchPool({ capacity: 64 }),
     };
     this.scene.add(this.fx.glow.mesh, this.fx.smoke.mesh, this.fx.rings.mesh, this.fx.scorch.mesh);
+    // Every effect step walks the pools; the list never changes.
+    this.fxPools = Object.values(this.fx);
     this.missing = new Set();
     this.lastRender = 0;
+    this.followGoal = new THREE.Vector3();
+    this.followPoint = new THREE.Vector3();
+    this.followAt = new THREE.Vector3();
     this.resize();
+    // The canvas size is read once per resize (viewWidth, viewHeight), never per frame. The
+    // observer also catches what the window's resize event misses: the iOS toolbar, the visual
+    // viewport and fullscreen. It runs after layout, so the cache is fresh before the next frame.
+    new ResizeObserver(([entry]) => {
+      const { width, height } = entry.contentRect;
+      if (Math.round(width) !== this.viewWidth || Math.round(height) !== this.viewHeight) this.resize();
+    }).observe(canvas);
   }
 
   async loadAssets(progress) {
@@ -248,6 +279,7 @@ export class WorldView {
       });
       batch.castShadow = options.shadow ?? true;
       batch.receiveShadow = true;
+      shareInstancedDepth(batch);
       batch.instanceMatrix.needsUpdate = true;
       batch.computeBoundingSphere();
       if (paint) batch.userData.ownedMaterial = true;
@@ -316,23 +348,25 @@ export class WorldView {
   }
 
   resizeBadge(badge) {
-    const size = badgeWorldSize(this.camera, this.canvas.clientHeight, this.canvas.clientWidth < 700 ? 46 : 50);
+    const size = badgeWorldSize(this.camera, this.viewHeight, this.viewWidth < 700 ? 46 : 50);
     badge.scale.set(size.width, size.height, 1);
   }
 
+  // A flat ring marker. Its material is its own (callers fade and recolour it); one pass draws
+  // both faces, so three.js never re-derives the shader program twice a frame for it.
   ring(position, radius, color, thickness = 0.06, parent = this.level) {
-    const geometry = new THREE.RingGeometry(radius - thickness, radius, 56);
     const mat = new THREE.MeshBasicMaterial({
       color,
       transparent: true,
       opacity: 0.65,
       side: THREE.DoubleSide,
+      forceSinglePass: true,
       depthWrite: false,
     });
-    const ring = new THREE.Mesh(geometry, mat);
+    const ring = new THREE.Mesh(ringGeometry(radius - thickness, radius, 56), mat);
     ring.rotation.x = -Math.PI / 2;
     ring.position.copy(position);
-    ring.userData.disposable = true;
+    ring.userData.ownedMaterial = true;
     parent.add(ring);
     return ring;
   }
@@ -352,7 +386,7 @@ export class WorldView {
 
   clear() {
     this.disposeObject(this.level);
-    for (const pool of Object.values(this.fx || {})) pool.reset();
+    for (const pool of this.fxPools) pool.reset();
     this.level = new THREE.Group();
     this.scene.add(this.level);
     this.scrollProps = [];
@@ -577,8 +611,10 @@ export class WorldView {
   }
 
   resize() {
-    const width = this.canvas.clientWidth || innerWidth,
-      height = this.canvas.clientHeight || innerHeight;
+    this.viewWidth = this.canvas.clientWidth;
+    this.viewHeight = this.canvas.clientHeight;
+    const width = this.viewWidth || innerWidth,
+      height = this.viewHeight || innerHeight;
     this.renderer.setSize(width, height, false);
     this.canvasRect = this.canvas.getBoundingClientRect();
     const aspect = width / height,
@@ -609,7 +645,7 @@ export class WorldView {
     if (this.chapter === 2 && this.followPlayerPosition) this.followPlayer(this.followPlayerPosition, 0, true);
     else if (this.strikeWindow) this.applyStrikeCamera();
     else {
-      this.sun.position.copy(this.sunOffset || new THREE.Vector3(-26, 44, 30));
+      this.sun.position.copy(this.sunOffset || SUN_OFFSET);
       this.sun.target.position.set(0, 0, 0);
     }
     this.level.traverse((object) => {
@@ -652,7 +688,7 @@ export class WorldView {
     const band = this.strikePortrait ? [-w * 0.3, w] : [-sweep, sweep];
     for (const x of band) for (const z of [-d + 3, d - 3]) include(x, FLIGHT.altitude, z);
     // HUD bands the district must avoid: top bar, flight panel, and (landscape phones) the side panel.
-    const tall = this.canvas.clientHeight || innerHeight;
+    const tall = this.viewHeight || innerHeight;
     const landscapePhone = aspect > 1 && tall < 520;
     const smallLandscape = landscapePhone && tall <= 420;
     const topShare = this.strikePortrait ? 0.14 : landscapePhone ? 0.15 : mobile ? 0.12 : 0.1;
@@ -711,7 +747,7 @@ export class WorldView {
     this.camera.updateMatrixWorld();
     this.baseCamera.copy(this.camera.position);
     // The sun and its shadow map travel with the window.
-    this.sun.position.set(f.x, 0, f.z).add(this.sunOffset || new THREE.Vector3(-26, 44, 30));
+    this.sun.position.set(f.x, 0, f.z).add(this.sunOffset || SUN_OFFSET);
     this.sun.target.position.set(f.x, 0, f.z);
     this.sun.target.updateMatrixWorld();
     this.needsRender = true;
@@ -739,15 +775,15 @@ export class WorldView {
   }
 
   followPlayer(position, dt, snap = false) {
-    this.followPlayerPosition = position.clone();
-    const goal = new THREE.Vector3(position.x, 0, position.z - 7);
-    if (!this.followPosition || snap) this.followPosition = goal;
+    this.followPlayerPosition = this.followPoint.copy(position);
+    const goal = this.followGoal.set(position.x, 0, position.z - 7);
+    if (!this.followPosition || snap) this.followPosition = this.followAt.copy(goal);
     else this.followPosition.lerp(goal, 1 - Math.exp(-dt * 5));
-    this.baseCamera.copy(this.followPosition).add(new THREE.Vector3(0, 65, 68));
+    this.baseCamera.copy(this.followPosition).add(FOLLOW_OFFSET);
     this.camera.position.copy(this.baseCamera);
     this.camera.lookAt(this.followPosition);
     this.camera.updateMatrixWorld();
-    this.sun.position.copy(this.followPosition).add(this.sunOffset || new THREE.Vector3(-26, 44, 30));
+    this.sun.position.copy(this.followPosition).add(this.sunOffset || SUN_OFFSET);
     this.sun.target.position.copy(this.followPosition);
     for (const chunk of this.sceneryChunks || []) chunk.visible = Math.abs(chunk.userData.centerZ - position.z) < 75;
   }
@@ -758,7 +794,7 @@ export class WorldView {
     this.ray.setFromCamera(new THREE.Vector2(0, 0), this.camera);
     this.ray.ray.intersectPlane(this.plane, origin);
     this.ray.setFromCamera(
-      new THREE.Vector2((raw.x * 0.1 * this.canvas.clientHeight) / this.canvas.clientWidth, -raw.z * 0.1),
+      new THREE.Vector2((raw.x * 0.1 * this.viewHeight) / this.viewWidth, -raw.z * 0.1),
       this.camera,
     );
     this.ray.ray.intersectPlane(this.plane, endpoint);
@@ -801,7 +837,7 @@ export class WorldView {
     this.camera.updateMatrixWorld();
     this.sky.position.copy(this.camera.position);
     // Keep floating symbols out of HUD text and controls; the supply case stays visible.
-    const pixelScale = this.canvas.clientHeight / ((this.camera.top - this.camera.bottom) / this.camera.zoom);
+    const pixelScale = this.viewHeight / ((this.camera.top - this.camera.bottom) / this.camera.zoom);
     for (const badge of this.pickupBadges) {
       const point = this.project(badge.getWorldPosition(this.badgePoint));
       const halfWidth = (badge.scale.x * pixelScale) / 2;

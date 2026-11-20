@@ -1,0 +1,17 @@
+{
+  "note": "Recorded on the 5.0 source as of ab4e065 (G1, before P1): 20 fragments from game.shatter(at (f.x, 4, f.z) with f = view.strikeFollow, [0x6b5a4a, 0x2f2c35, 0xb08a64], 20, 1.5) on mission 1.6 after 60 steps, Math.random = mulberry32(1) just before; positions of all 20 after each of 120 steps, as float64, hashed",
+  "mission": 5,
+  "warmup": 60,
+  "seed": 1,
+  "fragments": 20,
+  "steps": 120,
+  "sha256": "1febba06c251a68896f1376bb1c991b95c6adab5524128b163d39d8dce96afb5",
+  "first": [
+    -28.835622478961703,
+    4.717663612103948,
+    0.7391828513789949,
+    -28.75536497530321,
+    4.616722167981818,
+    0.13486802339490545
+  ]
+}

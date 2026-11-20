@@ -9,6 +9,7 @@ import { checkProgress } from "./progress-browser.mjs";
 import { checkStrike } from "./strike-browser.mjs";
 import { checkRiver } from "./river-browser.mjs";
 import { checkHarbour } from "./harbour-browser.mjs";
+import { checkPerf } from "./perf-browser.mjs";
 import { MODELS, MISSIONS } from "../src/data.js";
 
 const url = process.env.GAME_URL || "http://127.0.0.1:5183/";
@@ -346,6 +347,7 @@ try {
   await checkAmbient(browser, url, check);
   await checkFx(browser, url, check);
   await checkProgress(browser, url, check);
+  await checkPerf(browser, url, check, { gpu });
   const flow = await page.evaluate(() => {
     const { game: g, ui } = __TIDELOCK__,
       out = {};

@@ -212,6 +212,20 @@ const setHTML = (el, html) => {
   el.innerHTML = html;
 };
 
+// The HUD's writes happen 12 times a second: each one only touches the DOM when the value
+// changes. A same-value class or hidden write still queues a mutation record, and the shared
+// gesture helper re-measures every control on each one.
+export function setText(el, value) {
+  const text = String(value ?? "");
+  if (el.textContent !== text) el.textContent = text;
+}
+export function setHidden(el, hidden) {
+  if (el.hidden !== Boolean(hidden)) el.hidden = Boolean(hidden);
+}
+export function setClass(el, name, on) {
+  if (el.classList.contains(name) !== Boolean(on)) el.classList.toggle(name, Boolean(on));
+}
+
 const escape = (text) =>
   String(text).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
 
@@ -483,7 +497,7 @@ window.addEventListener('mobile-game-interruption', () => this.touches.clear());
     $("guided-weapon").onclick = () => this.weapon("guided");
     $("laser-weapon").onclick = () => this.weapon("laser");
     $("strike-action").onclick = () => this.game.op?.callAirStrike?.();
-    $("flare-action").onclick = () => this.game.rescue?.flare();
+    $("flare-action").onclick = () => this.game.chapter === 2 && this.game.op.flare();
     $("flight-cards").addEventListener("click", (event) => {
       const chip = event.target.closest("[data-bomb]");
       if (chip) this.strike?.select(chip.dataset.bomb);
@@ -799,7 +813,7 @@ window.addEventListener('mobile-game-interruption', () => {
       return;
     }
     if (digit) this.weapon(this.arsenal()[digit - 1] || this.game.weapon);
-    if (code === "KeyF") this.game.rescue?.flare();
+    if (code === "KeyF" && this.game.chapter === 2) this.game.op.flare();
     if (code === "KeyQ" && this.game.chapter === 1) this.game.op.callAirStrike();
   }
 
@@ -1366,20 +1380,23 @@ window.addEventListener('mobile-game-interruption', () => {
   updateHUD(force = false) {
     if (!this.game.mission) return;
     const now = performance.now();
-    if (now > this.toastTime) $("toast").classList.remove("visible", "checkpoint");
-    if (now > this.comboTime) $("combo").classList.remove("visible");
+    if (now > this.toastTime) {
+      setClass($("toast"), "visible", false);
+      setClass($("toast"), "checkpoint", false);
+    }
+    if (now > this.comboTime) setClass($("combo"), "visible", false);
     if (!force && now - this.lastHUD < 80) return;
     this.lastHUD = now;
     const state = this.game.snapshot(),
       chapter = state.chapter,
       op = state.op;
-    $("score").textContent = String(state.score).padStart(5, "0");
+    setText($("score"), String(state.score).padStart(5, "0"));
     $("mission-progress").style.width = `${state.progress * 100}%`;
-    $("mission-percent").textContent = `${Math.floor(state.progress * 100)}%`;
+    setText($("mission-percent"), `${Math.floor(state.progress * 100)}%`);
     if (chapter === 0) this.updateStrike(op);
     else {
       const total = state.shields.reduce((a, b) => a + b, 0);
-      $("shield-count").textContent = `${total} / 9`;
+      setText($("shield-count"), `${total} / 9`);
       setHTML(
         $("shield-segments"),
         state.shields
@@ -1390,28 +1407,28 @@ window.addEventListener('mobile-game-interruption', () => {
     }
     if (chapter === 1) this.updateRiver(state, op);
     const surge = $("surge-chip");
-    surge.hidden = chapter !== 0 || op.surge === undefined;
+    setHidden(surge, chapter !== 0 || op.surge === undefined);
     if (!surge.hidden) {
       const left = Math.ceil(op.surge);
-      surge.textContent = `SURGE ${Math.floor(left / 60)}:${String(left % 60).padStart(2, "0")}`;
-      surge.classList.toggle("urgent", left <= 60);
+      setText(surge, `SURGE ${Math.floor(left / 60)}:${String(left % 60).padStart(2, "0")}`);
+      setClass(surge, "urgent", left <= 60);
     }
     if (chapter === 2 && op.siege) {
       // The finale: the gates are the objective; the station and Marrow carry world labels.
-      $("objective-count").textContent = `${Math.floor(op.siege.gate * 100)}%`;
-      $("objective-unit").textContent = "GATES CLOSED";
+      setText($("objective-count"), `${Math.floor(op.siege.gate * 100)}%`);
+      setText($("objective-unit"), "GATES CLOSED");
     } else if (chapter === 2) {
-      $("objective-count").textContent = `${op.rescued} / ${op.total}`;
-      $("objective-unit").textContent = "SOLDIERS ABOARD";
+      setText($("objective-count"), `${op.rescued} / ${op.total}`);
+      setText($("objective-unit"), "SOLDIERS ABOARD");
     }
     const bonuses = activeBonuses({ ...state, heli: op.help?.heli, ally: op.help?.ally });
-    $("powerup").hidden = chapter !== 1 || bonuses.length === 0;
+    setHidden($("powerup"), chapter !== 1 || bonuses.length === 0);
     for (const kind of ["star", "gun", "heli", "ally"]) {
       const bonus = bonuses.find((entry) => entry.kind === kind);
       const row = $(`bonus-${kind}`);
-      row.hidden = !bonus;
+      setHidden(row, !bonus);
       if (!bonus) continue;
-      row.querySelector("strong").textContent = `${bonus.remaining.toFixed(1)}s`;
+      setText(row.querySelector("strong"), `${bonus.remaining.toFixed(1)}s`);
       row.querySelector(".bonus-fill").style.transform = `scaleX(${Math.min(1, bonus.remaining / bonus.duration)})`;
     }
     this.updateLabels(op.labels || []);
@@ -1422,7 +1439,7 @@ window.addEventListener('mobile-game-interruption', () => {
   updateStrike(op) {
     this.drawRadar(op);
     const left = op.left.enemies + op.left.aa + op.left.masts + op.left.trucks + (op.left.ships || 0);
-    $("objective-count").textContent = String(left).padStart(2, "0");
+    setText($("objective-count"), String(left).padStart(2, "0"));
     const parts = [
       op.left.enemies && `${op.left.enemies} HOSTILES`,
       op.left.ships && `${op.left.ships} SHIPS`,
@@ -1430,40 +1447,40 @@ window.addEventListener('mobile-game-interruption', () => {
       op.left.masts && `${op.left.masts} JAMMER`,
       op.left.trucks && `${op.left.trucks} TRUCKS`,
     ].filter(Boolean);
-    $("objective-unit").textContent = parts.join(" / ") || "TARGETS LEFT";
+    setText($("objective-unit"), parts.join(" / ") || "TARGETS LEFT");
     op.aircraft.forEach((a, i) => {
       const card = document.querySelector(`[data-aircraft="${i}"]`);
       if (!card) return;
-      card.classList.toggle("down", !a.alive);
+      setClass(card, "down", !a.alive);
       setHTML(
         card.querySelector(".hp"),
         a.alive ? Array.from({ length: a.maxHp }, (_, k) => `<i class="${k < a.hp ? "" : "lost"}"></i>`).join("") : "DOWN",
       );
       card.querySelectorAll("[data-bomb]").forEach((chip) => {
         const kind = chip.dataset.bomb;
-        chip.querySelector("strong").textContent = a.payload[kind] ?? 0;
+        setText(chip.querySelector("strong"), a.payload[kind] ?? 0);
         chip.disabled = !a.alive || !a.payload[kind];
-        chip.classList.toggle("selected", kind === op.selected && a.payload[kind] > 0);
+        setClass(chip, "selected", kind === op.selected && a.payload[kind] > 0);
       });
     });
     // The dial reads the pattern angle while a pattern bomb is selected, else the Drill floor.
     const pattern = op.pattern;
     const mode = this.dialMode();
-    $("floor-kind").textContent = mode === "angle" ? "ANGLE" : "DRILL";
-    $("floor-value").textContent = mode === "angle" ? `${pattern?.angle ?? 0}°` : mode === "floor" ? `F${op.floor}` : "–";
-    $("floor-control").classList.toggle("angle", mode === "angle");
+    setText($("floor-kind"), mode === "angle" ? "ANGLE" : "DRILL");
+    setText($("floor-value"), mode === "angle" ? `${pattern?.angle ?? 0}°` : mode === "floor" ? `F${op.floor}` : "–");
+    setClass($("floor-control"), "angle", mode === "angle");
     $("floor-control").setAttribute("aria-label", mode === "angle" ? "Pattern angle" : "Drill detonation floor");
     $("floor-up").disabled = $("floor-down").disabled = !mode;
-    $("formation-label").textContent = op.wide ? "WIDE" : "TIGHT";
+    setText($("formation-label"), op.wide ? "WIDE" : "TIGHT");
     // In the portrait camera the flight runs down the screen flying east.
     const arrow = this.view.strikePortrait ? (op.dir > 0 ? "↓" : "↑") : op.dir > 0 ? "→" : "←";
-    $("speed-value").textContent = `${arrow} ${Math.round((op.speed / FLIGHT.maxSpeed) * 100)}%`;
+    setText($("speed-value"), `${arrow} ${Math.round((op.speed / FLIGHT.maxSpeed) * 100)}%`);
     $("reverse").disabled = !op.reversible;
     const ready = op.phase === "pass" && this.game.status === "playing";
     const any = op.aircraft.some((a) => a.alive && Object.values(a.payload).some((n) => n > 0));
     $("drop").disabled = !ready || !any;
     $("salvo").disabled = !ready || !any;
-    $("drop-label").textContent = ready ? `Release ${BOMBS[op.selected]?.name || ""}` : `Turning ${Math.max(0, op.turn).toFixed(1)}s`;
+    setText($("drop-label"), ready ? `Release ${BOMBS[op.selected]?.name || ""}` : `Turning ${Math.max(0, op.turn).toFixed(1)}s`);
     // The most urgent first: gatherings on now, then the soonest. CSS shows as many as fit.
     const events = op.events.filter((e) => e.alive > 0).sort((a, b) => b.active - a.active || a.next - b.next);
     const intelKey = events.map((e) => e.label).join("|");
@@ -1483,13 +1500,11 @@ window.addEventListener('mobile-game-interruption', () => {
       const there = e.active && e.present > 0;
       const className = `intel-chip ${there ? "hot" : e.active ? "scattered" : e.next < 8 ? "soon" : ""}`;
       if (chip.className !== className) chip.className = className;
-      const text = e.active ? (there ? `${e.present}/${e.alive} ${Math.ceil(e.remaining)}s` : "SCATTERED") : `${Math.ceil(e.next)}s`;
-      const strong = chip.querySelector("strong");
-      if (strong.textContent !== text) strong.textContent = text;
+      setText(chip.querySelector("strong"), e.active ? (there ? `${e.present}/${e.alive} ${Math.ceil(e.remaining)}s` : "SCATTERED") : `${Math.ceil(e.next)}s`);
     });
-    $("intel").hidden = events.length === 0;
+    setHidden($("intel"), events.length === 0);
     const flak = op.flak || [];
-    $("flak-warning").hidden = flak.length === 0;
+    setHidden($("flak-warning"), flak.length === 0);
     if (flak.length) {
       // The most urgent lock leads; any others are counted.
       const [first] = flak;
@@ -1499,22 +1514,22 @@ window.addEventListener('mobile-game-interruption', () => {
       const narrow = innerWidth < 1100;
       const who = narrow ? `K${["one", "two", "three"].indexOf(first.callsign.split(" ").pop().toLowerCase()) + 1}` : first.callsign.toUpperCase();
       const text = `FLAK${narrow ? "" : " LOCK"} / ${who} / ${first.solved ? "BREAK!" : `${Math.max(0, first.in).toFixed(1)}s`} / ${risk}${flak.length > 1 ? ` +${flak.length - 1}` : ""}`;
-      $("flak-warning").classList.toggle("break", first.solved);
-      if ($("flak-text").textContent !== text) $("flak-text").textContent = text;
+      setClass($("flak-warning"), "break", first.solved);
+      setText($("flak-text"), text);
     }
     // Coach hints give way to a flak warning, which is the more urgent callout.
     const coach = flak.length || !op.hint ? "" : COACH[op.hint]?.[this.touch ? 1 : 0] || "";
     if (coach !== this.coachKey) {
       this.coachKey = coach;
-      $("coach").textContent = coach;
-      $("coach").hidden = !coach;
-      $("coach").classList.toggle("go", op.hint === "release" || op.hint === "lance");
+      setText($("coach"), coach);
+      setHidden($("coach"), !coach);
+      setClass($("coach"), "go", op.hint === "release" || op.hint === "lance");
     }
     if (op.harbour) return this.updatePattern(op);
     const ladder = op.ladder;
-    $("ladder").classList.toggle("empty", !ladder);
-    $("ladder-name").textContent = ladder ? `${ladder.name}${ladder.kind === "shelter" ? " / NO STRIKE" : ""}` : "PIPPER ON OPEN GROUND";
-    $("ladder").classList.toggle("shelter", ladder?.kind === "shelter" || op.shelter);
+    setClass($("ladder"), "empty", !ladder);
+    setText($("ladder-name"), ladder ? `${ladder.name}${ladder.kind === "shelter" ? " / NO STRIKE" : ""}` : "PIPPER ON OPEN GROUND");
+    setClass($("ladder"), "shelter", ladder?.kind === "shelter" || op.shelter);
     const ladderKey = ladder ? `${ladder.name}|${ladder.floors.length}` : "";
     if (ladderKey !== this.ladderKey) {
       this.ladderKey = ladderKey;
@@ -1527,11 +1542,9 @@ window.addEventListener('mobile-game-interruption', () => {
     if (ladder)
       [...$("ladder-floors").children].forEach((row, i) => {
         const f = ladder.floors[i];
-        row.classList.toggle("drill", f.f === ladder.drillFloor);
-        row.classList.toggle("set", f.f + 1 === op.floor);
-        const marks = `${"●".repeat(Math.min(6, f.count))}${f.props ? "▲".repeat(f.props) : ""}`;
-        const em = row.querySelector("em");
-        if (em.textContent !== marks) em.textContent = marks;
+        setClass(row, "drill", f.f === ladder.drillFloor);
+        setClass(row, "set", f.f + 1 === op.floor);
+        setText(row.querySelector("em"), `${"●".repeat(Math.min(6, f.count))}${f.props ? "▲".repeat(f.props) : ""}`);
       });
   }
 
@@ -1571,9 +1584,9 @@ window.addEventListener('mobile-game-interruption', () => {
   updatePattern(op) {
     const p = op.pattern;
     const panel = $("ladder");
-    panel.classList.remove("empty");
-    panel.classList.toggle("shelter", Boolean(p?.civilian || op.shelter));
-    $("ladder-name").textContent = p ? `${p.name.toUpperCase()} / ${p.angle}°` : `${(BOMBS[op.selected]?.name || "").toUpperCase()}`;
+    setClass(panel, "empty", false);
+    setClass(panel, "shelter", p?.civilian || op.shelter);
+    setText($("ladder-name"), p ? `${p.name.toUpperCase()} / ${p.angle}°` : `${(BOMBS[op.selected]?.name || "").toUpperCase()}`);
     const key = p ? `${p.kind}|${p.angle}|${this.view.strikePortrait}` : op.selected;
     if (key !== this.patternKey) {
       this.patternKey = key;
@@ -1598,8 +1611,10 @@ window.addEventListener('mobile-game-interruption', () => {
     else if (p.civilian) text = "CIVILIAN IN THE PATTERN";
     else if (p.hits) text = `${p.hits} ON TARGET${p.sinks ? ` / ${p.sinks} SINK` : ""}`;
     else text = "NO SHIPS UNDER IT";
-    if (count && count.textContent !== text) count.textContent = text;
-    count?.classList.toggle("hot", Boolean(p && p.sinks && !p.civilian));
+    if (count) {
+      setText(count, text);
+      setClass(count, "hot", p && p.sinks && !p.civilian);
+    }
   }
 
   // The gun button shows the rounds in use (2.7): nothing for standard rounds, else the kind and
@@ -1607,38 +1622,34 @@ window.addEventListener('mobile-game-interruption', () => {
   updateRounds(round) {
     const badge = $("round-stock");
     const special = round && round.kind !== "standard";
-    badge.hidden = !special;
+    setHidden(badge, !special);
     if (special) {
-      const text = `${round.kind === "plasma" ? "PL" : round.short}${round.count}`;
-      if (badge.textContent !== text) badge.textContent = text;
-      badge.dataset.round = round.kind;
+      setText(badge, `${round.kind === "plasma" ? "PL" : round.short}${round.count}`);
+      if (badge.dataset.round !== round.kind) badge.dataset.round = round.kind;
     }
     const gun = this.game.chapter === 1 ? "DECK GUN" : "CHAIN GUN";
-    if (this.game.weapon === "gun") {
-      const label = special ? `${gun} / ${round.name} ${round.count}` : gun;
-      if ($("weapon-label").textContent !== label) $("weapon-label").textContent = label;
-    }
+    if (this.game.weapon === "gun") setText($("weapon-label"), special ? `${gun} / ${round.name} ${round.count}` : gun);
   }
 
   updateRiver(state, op) {
     // The top banner says how likely enemy fire is to hurt when a gun has you in its sights.
     const incoming = op.incoming;
-    $("flak-warning").hidden = !incoming.aiming;
-    $("flak-warning").classList.add("calm");
+    setHidden($("flak-warning"), !incoming.aiming);
+    setClass($("flak-warning"), "calm", true);
     if (incoming.aiming) {
       const risk = incoming.chance > 0 ? `${percent(incoming.chance)} HIT CHANCE` : "CAN'T HIT YOU YET";
       const text = innerWidth < 700 ? `${incoming.aiming} AIMING / ${incoming.chance > 0 ? `${percent(incoming.chance)} HIT` : "SAFE"}` : `ENEMY FIRE / ${incoming.aiming} AIMING / ${risk}`;
-      if ($("flak-text").textContent !== text) $("flak-text").textContent = text;
+      setText($("flak-text"), text);
     }
     const w = op.weapons;
-    $("rocket-stock").textContent = w.rockets;
-    $("rocket-weapon").classList.toggle("empty", w.rockets <= 0);
+    setText($("rocket-stock"), w.rockets);
+    setClass($("rocket-weapon"), "empty", w.rockets <= 0);
     $("laser-heat").style.transform = `scaleX(${w.heat.toFixed(3)})`;
-    $("laser-weapon").classList.toggle("overheated", w.overheated);
-    $("strike-stock").textContent = w.strikes;
+    setClass($("laser-weapon"), "overheated", w.overheated);
+    setText($("strike-stock"), w.strikes);
     $("strike-action").disabled = w.strikes <= 0 || w.striking;
-    $("objective-count").textContent = `${Math.max(0, Math.ceil(op.length - op.distance))}`;
-    $("objective-unit").textContent = op.holding ? "CONVOY HOLDING" : "METRES TO GO";
+    setText($("objective-count"), `${Math.max(0, Math.ceil(op.length - op.distance))}`);
+    setText($("objective-unit"), op.holding ? "CONVOY HOLDING" : "METRES TO GO");
     setHTML(
       $("barge-bars"),
       op.barges
@@ -1648,7 +1659,7 @@ window.addEventListener('mobile-game-interruption', () => {
         )
         .join(""),
     );
-    $("boss-bars").hidden = !op.boss || op.boss.phase === "approach";
+    setHidden($("boss-bars"), !op.boss || op.boss.phase === "approach");
     if (op.boss)
       setHTML($("boss-bars"), [
         ...op.boss.towers.map((hp, i) => `<div class="bar hostile"><span>GATE TOWER ${i ? "EAST" : "WEST"}</span><div><i style="transform:scaleX(${hp.toFixed(3)})"></i></div></div>`),
@@ -1669,8 +1680,8 @@ window.addEventListener('mobile-game-interruption', () => {
         this.labels.set(label.id, el);
       }
       const p = this.view.project(label);
-      if (el.textContent !== label.text) el.textContent = label.text;
-      el.classList.toggle("hot", Boolean(label.hot));
+      setText(el, label.text);
+      setClass(el, "hot", label.hot);
       if ((el.dataset.kind || "") !== (label.kind || "")) el.dataset.kind = label.kind || "";
       el.style.transform = `translate(${p.x}px, ${p.y}px) translate(-50%, -100%)`;
     }
