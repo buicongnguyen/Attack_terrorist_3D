@@ -8,6 +8,10 @@ import {
   SUPPORT,
   SCENERY,
   BARRACKS,
+  BOOM,
+  ENGAGE_Z,
+  LAUNCH_Z,
+  boomFlow,
   skiffPath,
   riverStars,
   strikeLine,
@@ -71,6 +75,7 @@ export class RiverOperation {
     this.barges = RIVER.bargeZ.map((z, i) => this.createBarge(z, i));
     this.orders = [];
     this.boss = null;
+    this.boom = null;
     this.bargeDamage = 0;
     this.blocked = 0;
     this.combo = { count: 0, timer: 0 };
@@ -107,6 +112,7 @@ export class RiverOperation {
         skiff: { size: 1.7, color: 0xff4b2b, gain: 0.7 },
         tower: { size: 3.8, color: 0xffc62b, gain: 1 },
         generator: { size: 3.2, color: 0xffc62b, gain: 1 },
+        boom: { size: 4, color: 0xffc62b, gain: 1 },
         enemy: { size: 1.1, color: 0xff4b2b, gain: 0.45 },
       }[e.type] || null
     );
@@ -264,11 +270,12 @@ export class RiverOperation {
       if (event.pattern !== "pincer") this.say("skiffs");
     } else if (event.type === "barracks") this.spawnBarracks(event, z);
     else if (event.type === "bridge") this.spawnBridge(z);
+    else if (event.type === "boom") this.spawnBoom(z);
     else if (event.type === "radio") this.say(event.key);
     else if (event.type === "checkpoint") {
       g.notify("checkpoint", event.name);
       // A stretch cleared (not the name of the next one) plays the objective stinger (5.1 J1).
-      if (event.d > 0) g.audio.play("objectiveMet");
+      if (event.d > 0 && !event.ahead) g.audio.play("objectiveMet");
     }
   }
 
@@ -457,6 +464,21 @@ export class RiverOperation {
     }
   }
 
+  // 2.1's chain boom (5.1 K1): floats on a chain from bank to bank, one target as wide as the
+  // channel (`span`: a round or the beam strikes it where it crosses). Primitives only.
+  spawnBoom(z) {
+    const g = this.game,
+      view = g.view,
+      span = RIVER.bank - 0.6;
+    const boom = g.entity("boom", null, V(0, 0, z), { hp: BOOM.hp, maxHp: BOOM.hp, radius: BOOM.radius, lift: BOOM.lift, span, scrolling: true });
+    view.box(V(0, 0.3, 0), V(span * 2, 0.14, 0.14), 0x3a4048, boom.mesh);
+    for (let i = 0; i < BOOM.floats; i++)
+      view.sphere(V(-span + (2 * span * i) / (BOOM.floats - 1), 0.28, 0), V(0.85, 0.48, 0.62), i % 2 ? 0xffcc1f : 0xff4b2b, boom.mesh);
+    for (const s of [-1, 1]) view.box(V(s * (span + 1.1), 0.9, 0), V(0.7, 1.8, 0.7), 0x3a4048, boom.mesh);
+    this.addHealthBar(boom);
+    this.boom = boom;
+  }
+
   spawnGate() {
     const g = this.game,
       view = g.view,
@@ -511,7 +533,14 @@ export class RiverOperation {
   update(dt) {
     const g = this.game;
     this.say("start");
-    const flow = this.holding ? 0 : this.data.speed;
+    // A standing boom brakes the convoy to a hold short of it (5.1 K1), as the Lock Gate does.
+    const boom = this.boom;
+    const flow = this.holding ? 0 : boom ? boomFlow(this.data.speed, boom.position.z, dt) : this.data.speed;
+    if (boom) {
+      if (flow === 0) this.holding = true;
+      // Marlin cannot sail through it.
+      this.vehicle.bounds.far = Math.max(RIVER.far, boom.position.z + 2.5);
+    }
     this.flow = flow;
     this.distance += flow * dt;
     while (this.scriptIndex < this.data.script.length && this.data.script[this.scriptIndex].d <= this.distance)
@@ -719,7 +748,7 @@ export class RiverOperation {
     }
     const origin = e.position.clone().add(V(0, 1.1, 0));
     if (this.aimAt(e, origin, 0.9, (from, to) => g.spawnShot(from, to, false, true, null, e.target))) return;
-    if (e.cooldown <= 0 && e.position.z > -44) {
+    if (e.cooldown <= 0 && e.position.z > ENGAGE_Z) {
       e.parity = (e.parity || 0) + 1;
       e.target = this.chooseTarget(e, e.parity);
       e.aim = 0.9;
@@ -744,7 +773,7 @@ export class RiverOperation {
     const g = this.game;
     e.cooldown -= dt;
     e.light.material.opacity = e.cooldown < 1.2 ? 0.5 + Math.sin(g.time * 18) * 0.45 : 0.08;
-    if (e.cooldown <= 0 && e.position.z > -46) {
+    if (e.cooldown <= 0 && e.position.z > LAUNCH_Z) {
       const target = this.chooseTarget(e, 1);
       const shot = g.spawnShot(e.position.clone().add(V(0, 2.7, 0)), target.position.clone().add(V(0, 1, 0)), true, true, null, target);
       shot.homing = target;
@@ -835,7 +864,7 @@ export class RiverOperation {
         }
         tower.warning.material.opacity = tower.cooldown < 1.4 ? 0.5 + Math.sin(g.time * 16) * 0.4 : 0.12;
         if (tower.cooldown < 1.4 && !tower.target) tower.target = this.chooseTarget(tower, 1);
-        if (tower.cooldown <= 0) {
+        if (tower.cooldown <= 0 && tower.position.z > LAUNCH_Z) {
           const t = tower.target || target;
           const shot = g.spawnShot(tower.position.clone().add(V(0, 6.2, 0)), t.position.clone().add(V(0, 1, 0)), true, true, null, t);
           shot.homing = t;
@@ -930,6 +959,15 @@ export class RiverOperation {
         g.notify("toast", `BARRACKS DOWN / ${e.crew} INSIDE`);
         e.crew = 0;
       }
+    }
+    if (e.type === "boom") {
+      // It parts from bank to bank, and the convoy sails on at once.
+      for (const x of [-9, 0, 9]) g.blast(V(x, 0.5, e.position.z), 2.2, 0xff8a2b, { quiet: x !== 0 });
+      g.shatter(e.position.clone().add(V(0, 0.4, 0)), [0xff4b2b, 0xffcc1f, 0x3a4048], 14, 1.6);
+      g.notify("toast", "BOOM BROKEN / CONVOY MOVING");
+      this.boom = null;
+      this.holding = false;
+      this.vehicle.bounds.far = RIVER.far;
     }
     if (e.type === "skiff") {
       g.blast(e.position.clone().add(V(0, 0.4, 0)), SKIFF.chain, 0xff8a2b, { quiet: true });
@@ -1098,6 +1136,8 @@ export class RiverOperation {
       if (!isHostileEntity(e)) continue;
       for (const lift of e.hitLifts || [null]) {
         const centre = lift === null ? g.targetPosition(e) : e.position.clone().add(V(0, lift, 0));
+        // A target across the channel (the boom) is struck where the beam crosses it.
+        if (e.span) centre.x = clamp(origin.x + ((far.x - origin.x) * (centre.z - origin.z)) / (far.z - origin.z || 1e-6), e.position.x - e.span, e.position.x + e.span);
         const t = segmentSphere(origin, far, centre, (e.hitRadius ?? e.radius) + spec.width * 0.4);
         if (t !== null && (!hit || t < hit.t)) hit = { t, entity: e };
       }
@@ -1427,6 +1467,8 @@ export class RiverOperation {
       progress: Math.min(1, this.distance / this.data.length),
       barges: this.barges.map((b) => ({ hp: b.hp, max: b.max, alive: b.alive })),
       holding: this.holding,
+      // The one hint the canal gives (5.1 K1): while the boom stands in sight.
+      hint: this.boom && this.boom.position.z > ENGAGE_Z ? "boom" : null,
       boss: boss
         ? {
             phase: boss.phase,

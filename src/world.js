@@ -6,7 +6,7 @@ import { createPickupBadgeMaterial, badgeWorldSize } from "./pickups.js";
 import { createRescueScenery } from "./rescue-world.js";
 import { STRIKE_MISSIONS, CITY, FLIGHT, cityBounds } from "./strike-data.js";
 import { consolidate } from "./consolidate.js";
-import { RIVER, RIVER_THEMES, SCENERY } from "./river-data.js";
+import { RIVER, RIVER_THEMES, SCENERY, CANAL_CAMERA, canalHeight } from "./river-data.js";
 import { chapterStart } from "./data.js";
 
 const materialCache = new Map();
@@ -679,21 +679,21 @@ void main() {
     if (this.chapter === 0 && this.strikeLayout) this.frameCity(aspect, mobile);
     else {
       this.strikeWindow = null;
-      // Narrow screens keep the whole width in view: the canal and its banks, or the valley.
-      const across = this.chapter === 1 ? RIVER.bank * 2 + 9 : 38;
-      const heightWorld = Math.max(43, across / aspect);
+      // Narrow screens keep the whole width in view: the canal and its banks, or the valley. The
+      // canal zooms out a little on landscape screens (5.1 K1, see CANAL_CAMERA).
+      const heightWorld = this.chapter === 1 ? canalHeight(aspect) : Math.max(43, 38 / aspect);
       this.camera.left = (-heightWorld * aspect) / 2;
       this.camera.right = (heightWorld * aspect) / 2;
       this.camera.top = heightWorld / 2;
       this.camera.bottom = -heightWorld / 2;
       if (this.chapter === 1) {
-        this.camera.position.set(0, 38, 31);
-        this.target.set(0, 0, -5);
+        this.target.copy(CANAL_CAMERA.target);
+        this.camera.position.copy(CANAL_CAMERA.offset).multiplyScalar(CANAL_CAMERA.distance).add(this.target);
       } else {
         this.camera.position.set(mobile ? 0 : 5, 32, 34);
         this.target.set(0, 1, -1);
+        this.camera.position.sub(this.target).multiplyScalar(2.1).add(this.target);
       }
-      this.camera.position.sub(this.target).multiplyScalar(2.1).add(this.target);
       this.camera.lookAt(this.target);
       this.camera.updateProjectionMatrix();
     }

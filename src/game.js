@@ -69,6 +69,7 @@ const KILL_SCORE = {
   crate: 150,
   tower: 600,
   generator: 900,
+  boom: 300,
 };
 const KILL_LABEL = {
   launcher: "LAUNCHER",
@@ -78,9 +79,10 @@ const KILL_LABEL = {
   barracks: "BARRACKS",
   tower: "TOWER",
   generator: "GENERATOR",
+  boom: "BOOM BROKEN",
 };
 // Key targets: their kill holds the frame (FEEL.stop.heavy) and shakes it hard.
-const KEY_KILLS = new Set(["tower", "generator", "launcher", "missile-site", "drone-pad"]);
+const KEY_KILLS = new Set(["tower", "generator", "launcher", "missile-site", "drone-pad", "boom"]);
 // Radio events that are goals reached: they play the objectiveMet stinger.
 const OBJECTIVE_EVENTS = new Set(["gatheringStruck", "reyesAboard"]);
 const HOSTILE_TARGET_LIFT = {
@@ -847,6 +849,8 @@ export class Game {
       // Tall targets (the gate towers) carry a stack of hit spheres from base to top, not one at their aim point.
       for (const lift of e.hitLifts || [null]) {
         const centre = lift === null ? this.targetPosition(e, scratch.centre) : scratch.centre.copy(e.position).add(scratch.lift.set(0, lift, 0));
+        // A target across the channel (2.1's boom, 5.1 K1) is struck where the round crosses it.
+        if (e.span) centre.x = clamp(shot.position.x, e.position.x - e.span, e.position.x + e.span);
         const t = test(centre, (e.hitRadius ?? e.radius) + shot.radius);
         if (t !== null && (!hit || t < hit.t)) hit = { t, entity: e };
       }

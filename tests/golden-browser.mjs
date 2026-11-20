@@ -104,6 +104,23 @@ export function playRow(play, spec) {
     loop.settle(now);
     loop.draw(now);
   };
+  // The canal's launches (5.1 K1): hostile shots and missiles, and how many left from a point
+  // outside the free play rect as the HUD lays it out at that moment (refreshed first, as the frame
+  // loop would; the camera's matrix too, which only a render would otherwise bring up to date).
+  const launches = { shots: 0, missiles: 0, outside: 0 };
+  const at = { x: 0, y: 0, visible: false };
+  g.spawnShot = function (origin, aim, missile, hostile, ...rest) {
+    if (hostile && this.chapter === 1) {
+      if (missile) launches.missiles++;
+      else launches.shots++;
+      ui.updateHUD(true);
+      view.camera.updateMatrixWorld();
+      const free = ui.freeRect;
+      view.projectInto(at, origin);
+      if (at.x < free.left || at.x > free.right || at.y < free.top || at.y > free.bottom) launches.outside++;
+    }
+    return Object.getPrototypeOf(this).spawnShot.call(this, origin, aim, missile, hostile, ...rest);
+  };
   if (spec.fixture === "cosmetic-draw") {
     // Test only: the first wake ring, a cosmetic effect, also draws once from the mission's source.
     let drawn = false;
@@ -120,6 +137,7 @@ export function playRow(play, spec) {
   } finally {
     g.paused = true;
     delete g.update;
+    delete g.spawnShot;
     delete g.shockRing;
     if (gl) for (const name of draws) delete gl[name];
   }
@@ -150,7 +168,7 @@ export function playRow(play, spec) {
     // RUN resupply ({ at, sticks }); null elsewhere and when it never came.
     standDown: chapter === 0 ? (op.fleet?.standDown ?? null) : null,
     resupply: chapter === 0 ? op.resupply : null,
-    launches: null,
+    launches: chapter === 1 ? launches : null,
     runsBroken: null,
     phase: null,
     // The radio director's log (5.1 N1, ticked at 1/120 per step): [said, shown, who, key, held].
@@ -367,7 +385,10 @@ function judge({ plain, checks, results }) {
       detail = `${done.result.plain} draws while mission ${job.start} is built, ${done.result.extra} with one more`;
     } else {
       const base = byKey.get(job.run.key);
-      const changes = base ? diffRows([base], [done.result]) : [];
+      // Where a launch lands on screen depends on the viewport (5.1 K1): a check played at another
+      // size compares every field but that count.
+      const sized = (row) => (job.viewport === VIEWPORT || !row.launches ? row : { ...row, launches: { ...row.launches, outside: null } });
+      const changes = base ? diffRows([sized(base)], [sized(done.result)]) : [];
       if (!base) detail = `no plain row for ${job.run.key}`;
       else if (job.run.fixture) {
         pass = changes.some((c) => c.key === job.run.key && c.field === "randomCalls");

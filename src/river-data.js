@@ -34,6 +34,49 @@ export const SKIFF = Object.freeze({
 // Marlin's deck gun reaches about 36 m, so threats at the top of the screen get a turn to shoot.
 export const DECK_GUN_RANGE = 36;
 
+// The engage line (5.1 K1), the same on every viewport so play stays deterministic: a bank gun
+// starts aiming once it scrolls past ENGAGE_Z and fires 0.9 s later; launchers and the Lock Gate's
+// towers fire only past LAUNCH_Z. (5.0 aimed from -44 and launched from -46, above the frame.)
+export const ENGAGE_Z = -32;
+export const LAUNCH_Z = -30;
+
+// The canal camera: an orthographic view down the canal from `offset` (times `distance`) above a
+// target that never moves, so the barges and Marlin's near bound stay on screen. The frame is
+// `height` metres tall, taller on narrow screens so both banks fit (`across`), and landscape
+// screens zoom out by `landscape` (5.1 K1, at most 10%) to bring the engage line further in.
+export const CANAL_CAMERA = Object.freeze({
+  target: Object.freeze({ x: 0, y: 0, z: -5 }),
+  offset: Object.freeze({ x: 0, y: 38, z: 36 }),
+  distance: 2.1,
+  height: 43,
+  landscape: 1.1,
+  across: RIVER.bank * 2 + 9,
+});
+
+export const canalHeight = (aspect, cam = CANAL_CAMERA) => Math.max(cam.height * (aspect > 1 ? cam.landscape : 1), cam.across / aspect);
+
+// Where the frame's top and bottom edges meet the water on the canal's centre line (z, metres).
+export function canalFrame(aspect, cam = CANAL_CAMERA) {
+  const half = canalHeight(aspect, cam) / 2;
+  // Looking down the offset, a metre of water along z spans this much of the frame's height.
+  const perMetre = cam.offset.y / Math.hypot(cam.offset.y, cam.offset.z);
+  return { height: half * 2, far: cam.target.z - half / perMetre, near: cam.target.z + half / perMetre };
+}
+
+// 2.1's chain boom (5.1 K1): floats on a chain across the whole channel. The world eases to a stop
+// once the boom is `ease` metres from `holdZ` (8 m ahead of Marlin's hold station at z 2) and holds
+// there until the boom breaks: 7 deck-gun rounds, one rocket salvo or 1.6 s of laser.
+export const BOOM = Object.freeze({ hp: 14, holdZ: -6, ease: 6, radius: 1.3, lift: 0.35, floats: 9 });
+
+// The convoy's speed this step with a standing boom at z: the mission's speed until the boom is
+// within `ease` of its hold line, then a steady brake that stops the boom exactly on it (v² = 2as).
+export function boomFlow(speed, z, dt, spec = BOOM) {
+  const left = spec.holdZ - z;
+  if (left <= 1e-9) return 0;
+  const v = left >= spec.ease ? speed : speed * Math.sqrt(left / spec.ease);
+  return Math.min(v, left / dt);
+}
+
 // Marlin's three weapons (keys 1-3). The deck gun hits twice as hard as it used to; rockets fly
 // in salvos of three and burst; the laser burns whatever its beam touches until it overheats.
 export const WEAPONS = Object.freeze({
@@ -143,13 +186,16 @@ const skiffs = (d, pattern, count, opts = {}) => ({
 });
 const pickup = (d, kind, x = 0) => ({ d, type: "pickup", kind, x: x * WIDEN });
 const radio = (d, key) => ({ d, type: "radio", key });
-const mark = (d, name) => ({ d, type: "checkpoint", name });
+// A checkpoint names a stretch as the convoy enters it, or one cleared; `ahead` names a set piece still
+// to come (no cleared stinger).
+const mark = (d, name, opts = {}) => ({ d, type: "checkpoint", name, ...opts });
 
 export const RIVER_MISSIONS = [
   {
-    // 2.1 Mangrove Mile: learn the wake, the red aim lines and the fuel drums.
+    // 2.1 Mangrove Mile: learn the wake, the red aim lines and the fuel drums; then a chain boom
+    // across the mouth holds the convoy under two gun nests until Marlin breaks it (5.1 K1).
     speed: 3.4,
-    length: 210,
+    length: 270,
     fireRate: 2.8,
     script: [
       mark(0, "MANGROVE MILE"),
@@ -174,8 +220,13 @@ export const RIVER_MISSIONS = [
       mines(150, [-2, 5]),
       pickup(156, "gun", -3),
       guns(166, -1, { count: 2, crew: 2, drums: true }),
+      radio(176, "boom"),
+      mark(176, "THE BOOM", { ahead: true }),
       skiffs(178, "column", 3, { x: -7 }),
-      mark(200, "MANGROVE MILE CLEAR"),
+      guns(180, 1, { crew: 2 }),
+      guns(180, -1, { crew: 2 }),
+      { d: 186, type: "boom" },
+      mark(262, "MANGROVE MILE CLEAR"),
     ],
   },
   {

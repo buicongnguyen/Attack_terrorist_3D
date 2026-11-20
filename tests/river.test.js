@@ -15,7 +15,16 @@ import {
   SCENERY,
   RIVER_THEMES,
   BARRACKS,
+  BOOM,
+  ENGAGE_Z,
+  LAUNCH_Z,
+  CANAL_CAMERA,
+  boomFlow,
+  canalFrame,
+  canalHeight,
 } from "../src/river-data.js";
+import { readFileSync } from "node:fs";
+import { MISSION_STORY } from "../src/story.js";
 import { PICKUPS } from "../src/pickups.js";
 import { DIFFICULTIES, difficulty } from "../src/difficulty.js";
 
@@ -111,9 +120,105 @@ test("wedges come downriver and columns overtake from behind", () => {
   assert.ok(skiffPath({ ...column, index: 0 }, 20).done);
 });
 
-test("threats at the top of the screen are out of the deck gun's reach", () => {
+test("threats at the top of the screen are out of the deck gun's reach, on a 16:9 screen and in portrait", () => {
   assert.ok(DECK_GUN_RANGE < Math.abs(RIVER.spawnZ));
   assert.ok(DECK_GUN_RANGE > 30);
+  for (const aspect of [16 / 9, 844 / 390, 390 / 844]) {
+    const frame = canalFrame(aspect);
+    // Everything spawns above the frame, out of the gun's reach from Marlin's station.
+    assert.ok(RIVER.spawnZ < frame.far, `${aspect}: spawn at ${RIVER.spawnZ}, frame top at ${frame.far}`);
+    assert.ok(4 - DECK_GUN_RANGE > RIVER.spawnZ, `${aspect}`);
+  }
+});
+
+// ---------------------------------------------------------------- 5.1 K1: the engage line
+
+test("5.1 K1: the engage line lies inside the frame on 16:9, landscape-phone and portrait screens, and the camera never moves", () => {
+  assert.ok(ENGAGE_Z > -44 && LAUNCH_Z > -46, "the line moved down from 5.0's -44 and -46");
+  for (const aspect of [16 / 9, 844 / 390, 390 / 844]) {
+    const frame = canalFrame(aspect);
+    // On the water, with room for a muzzle above it; the barges and Marlin's near bound below.
+    assert.ok(ENGAGE_Z > frame.far + 2 && LAUNCH_Z > frame.far + 2, `${aspect}: top of the frame at ${frame.far.toFixed(1)}`);
+    assert.ok(Math.max(RIVER.near, ...RIVER.bargeZ) < frame.near - 3, `${aspect}: bottom of the frame at ${frame.near.toFixed(1)}`);
+  }
+  // 16:9 used to show the water from -34.6 to +24.6; landscape zooms out by at most 10%.
+  assert.ok(Math.abs(canalFrame(16 / 9).far - -34.6) < 3.5);
+  for (const aspect of [16 / 9, 844 / 390]) assert.ok(canalHeight(aspect) <= CANAL_CAMERA.height * 1.1 + 1e-9);
+  // Portrait keeps both banks in view, as before.
+  assert.equal(canalHeight(390 / 844), CANAL_CAMERA.across / (390 / 844));
+  assert.deepEqual({ ...CANAL_CAMERA.target }, { x: 0, y: 0, z: -5 });
+});
+
+test("5.1 K1: gun aim, launcher fire and the gate towers read ENGAGE_Z and LAUNCH_Z", () => {
+  const source = readFileSync(new URL("../src/river.js", import.meta.url), "utf8");
+  const body = (name) => {
+    const start = source.indexOf(`  ${name}(`);
+    return source.slice(start, source.indexOf("\n  }\n", start));
+  };
+  assert.match(body("updateGun"), /e\.position\.z > ENGAGE_Z/);
+  assert.match(body("updateLauncher"), /e\.position\.z > LAUNCH_Z/);
+  assert.match(body("updateBoss"), /tower\.position\.z > LAUNCH_Z/);
+  // No shooter keeps 5.0's lines (-46 stays only as the range in which entities are updated).
+  assert.doesNotMatch(source, /cooldown <= 0 && \w+\.position\.z > -4[46]/);
+});
+
+// ---------------------------------------------------------------- 5.1 K1: 2.1's boom
+
+test("5.1 K1: 2.1 has one boom at d 186 under two crewed gun nests, its radio line and checkpoint once", () => {
+  const leg = RIVER_MISSIONS[0];
+  const of = (type) => leg.script.filter((e) => e.type === type);
+  assert.deepEqual(of("boom").map((e) => e.d), [186]);
+  for (const [i, m] of RIVER_MISSIONS.entries()) if (i) assert.ok(!m.script.some((e) => e.type === "boom"), `2.${i + 1}`);
+  const nests = of("guns").filter((e) => e.d === 180);
+  assert.deepEqual(nests.map((e) => [e.side, e.count, e.crew]).sort(), [[-1, 1, 2], [1, 1, 2]]);
+  assert.deepEqual(of("radio").filter((e) => e.key === "boom").map((e) => e.d), [176]);
+  assert.deepEqual(of("checkpoint").filter((e) => e.name === "THE BOOM").map((e) => [e.d, e.ahead]), [[176, true]]);
+  assert.equal(MISSION_STORY[9].radio.boom.who, "okafor");
+  assert.equal(MISSION_STORY[9].radio.boom.text, "Chain boom across the mouth, Marlin. Break it or the barges sit under those guns.");
+  // The convoy reaches the hold before the end, and the mission goes on past it once it breaks.
+  const holdAt = 186 + (BOOM.holdZ - RIVER.spawnZ);
+  assert.ok(holdAt < leg.length - 10, `hold at ${holdAt}, length ${leg.length}`);
+  assert.ok(of("checkpoint").at(-1).d > holdAt, "the stretch is cleared past the boom");
+  // The boom holds 8 m ahead of Marlin's hold station (the skipper's z 2), in the frame on every screen.
+  assert.equal(2 - BOOM.holdZ, 8);
+  for (const aspect of [16 / 9, 844 / 390, 390 / 844]) assert.ok(BOOM.holdZ > canalFrame(aspect).far);
+});
+
+test("5.1 K1: convoy travel stops at the boom while it stands and resumes at mission speed once it breaks", () => {
+  const speed = RIVER_MISSIONS[0].speed,
+    dt = 1 / 120;
+  let z = RIVER.spawnZ,
+    distance = 0,
+    t = 0,
+    last = speed;
+  // Full speed until the brake, a brake that never speeds up, and an exact stop on the line.
+  while (t < 60) {
+    const flow = boomFlow(speed, z, dt);
+    assert.ok(flow <= last + 1e-12, `speeds up at z=${z}`);
+    if (BOOM.holdZ - z >= BOOM.ease) assert.equal(flow, speed);
+    last = flow;
+    z += flow * dt;
+    distance += flow * dt;
+    t += dt;
+    if (flow === 0) break;
+  }
+  assert.ok(Math.abs(z - BOOM.holdZ) < 1e-9, `stopped at ${z}`);
+  // The brake takes 2 x ease / speed seconds (constant deceleration), within a few steps.
+  const cruise = (BOOM.holdZ - RIVER.spawnZ - BOOM.ease) / speed;
+  assert.ok(Math.abs(t - (cruise + (2 * BOOM.ease) / speed)) < 0.05, `stopped after ${t.toFixed(2)} s`);
+  // Held: nothing moves for a minute.
+  const held = distance;
+  for (let i = 0; i < 120 * 60; i++) distance += boomFlow(speed, z, dt) * dt;
+  assert.equal(distance, held);
+});
+
+test("5.1 K1: 7 deck-gun rounds break the boom and 6 do not; a rocket salvo or 1.6 s of laser also breaks it", () => {
+  const after = (rounds) => BOOM.hp - rounds * WEAPONS.gun.damage;
+  assert.ok(after(6) > 0);
+  assert.ok(after(7) <= 0);
+  // A rocket strikes for 5 (game.js resolveFriendlyShot); a salvo is three.
+  assert.ok(WEAPONS.rocket.salvo * 5 >= BOOM.hp);
+  assert.ok(WEAPONS.laser.dps * 1.6 >= BOOM.hp && WEAPONS.laser.dps * 1.5 < BOOM.hp);
 });
 
 test("river stars reward protecting the barges", () => {

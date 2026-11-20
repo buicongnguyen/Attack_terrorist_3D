@@ -1,5 +1,77 @@
 # Release Verification
 
+## Tidelock 5.1, K1: canal fairness
+
+[PLAN-5.1.md](PLAN-5.1.md) K1 was verified on 2026-11-21 against the production build (`vite preview`), Chrome 155 on the GPU. One golden re-baseline with `--allow '9/*/*,10/*/*,11/*/*,12/*/*,13/*/*,14/*/*'`; every other row is byte-identical.
+
+**What changed.**
+- **2.1 'The Boom'** (`{ d: 186, type: "boom" }`, `BOOM` in river-data.js). A float-and-chain boom across the channel (primitives: one chain bar, 9 floats, 2 bank posts; no model bytes) with 14 hp and health pips. It is one target as wide as the channel (`span`): a round (game.js `resolveFriendlyShot`) or the laser (river.js `updateLaser`) strikes it where it crosses. Two crewed gun nests (`guns(180, ±1, { crew: 2 })`), Okafor's `boom` line and the checkpoint THE BOOM at d 176 (`ahead: true`, so no cleared stinger). While it stands in sight the coach lane reads 'Shoot the boom to let the barges through'. If it is still standing, `boomFlow` keeps mission speed until the boom is 6 m from its hold line at z -6 (8 m ahead of Marlin's hold station, z 2), then brakes at a constant rate to stop exactly on it; the hold sets `holding` (the Lock Gate's path: CONVOY HOLDING, flow 0) and Marlin's far bound sits 2.5 m behind the boom. Broken (+300 BOOM BROKEN, three bursts, floats thrown up, a toast), the hold ends and the convoy is back at mission speed on the next step. 2.1 is now 270 m (was 210) so the convoy sails past the boom; MANGROVE MILE CLEAR moved from d 200 to 262.
+- **Engage line** (`ENGAGE_Z` -32, `LAUNCH_Z` -30 in river-data.js, the same on every viewport). Guns start aiming past ENGAGE_Z (was -44) and fire 0.9 s later; launchers (was -46) and the gate's towers fire only past LAUNCH_Z. `near` (-46 to 24) still bounds which entities are updated.
+- **Camera** (`CANAL_CAMERA`, `canalHeight`, `canalFrame`): world.js now reads the canal camera from river-data.js. The target never moves; landscape screens are 10% taller (47.3 m, the cap), so 16:9 shows the water from z -37.6 to +27.6 (was -34.6 to +24.6). Portrait is unchanged.
+- **Edge chevrons:** a canal aimer or launcher gets one when it is out of sight: past the free rect's top or bottom, off the screen, or on screen under a HUD panel (`ui.outOfSight`, hit-testing `hudRects`). A bank gun in plain view beside a narrow free rect (the right nest at about x 800 on 1024x768) gets none, so no chevron blinks with its aim cycle (review: 176 visibility changes in 95 s there before).
+- **The hint's place:** desktop keeps the coach centred at the bottom, under the convoy. Portrait phones lift it over the weapon bar, the sticks and the radio ticker (`--comms-clear`); landscape phones put it at the top left beside the centred ticker (`--comms-left`), wrapping instead of the old full-width strip.
+- **No fireRate lever:** do-nothing's Normal rate did not rise on any of 2.2-2.6. A trial of 2.5 at fireRate 1.92 (about 9% more fire) left the skipper's stars at 3.00 and was reverted.
+
+**Tests.**
+- `npm test`: **199 Node tests**, all passing (5 new and 1 extended in river.test.js: the frame depth at 16:9, 844x390 and portrait with the engage line, barges and near bound inside it and the zoom capped at 10%; gun, launcher and tower code reading the constants; 2.1's boom, nests, line and checkpoint once in the script, the hold before the end; the brake (full speed, never speeding up, an exact stop on the line in 2 x ease / speed, then no travel for 60 s); 7 rounds break it and 6 do not, a salvo, 1.6 s of laser; and 1 new in golden.test.js for the `launches` field and the 2.1 rows).
+- `npm run test:browser`: **771 checks passed, 0 failed**, no page errors. New: 11 boom and line checks in river-browser (played from the script at d 170 on Normal: the hold at z -6 after a full-speed approach and a brake that never speeds up; no travel for 3 s held; Marlin held 2.5 m behind it; the hint shown, and gone with the boom; 6 deck-gun rounds fired 8 m off the centre line leave 2 hp, the 7th breaks it; the convoy moves 3.40 m in the next second; 'boom' said once and THE BOOM shown once through to success; a gun 0.5 m short of ENGAGE_Z never aims and 0.5 m past it aims; the same for a launcher and both gate towers at LAUNCH_Z), and 30 frame checks (below; 17 of them for the hint's place and the chevrons at 1280x720, 1024x768, 844x390, 390x844 and 360x740: the hint clear of the ticker on portrait phones and of the barges and of Marlin at her start and her near bound elsewhere; over 60 s of 2.1, 0 chevrons shown for 1,218-2,369 in-sight aimer samples per size and 0 changes).
+- `npm run perf`: 29 of 29 checks passed.
+- `npm run golden`: the re-baseline rewrote only the allowed keys (80 changes in 14 rows), and a verify run after it matched all 50 rows with all 11 checks passing (isolation, the four interleave checks plain and `&feel=1`, the cosmetic draw and the Game.start draws). The interleave checks play at 480x320, so they compare every field but `launches.outside`, which depends on the viewport.
+- The `launches` field (golden-browser.mjs `playRow`): `{ shots, missiles, outside }` on the canal rows, counting each hostile launch and whether its origin projected outside `ui.freeRect` as laid out at that moment (the HUD refreshed first), at the default 1280x720.
+
+**The golden diff** (`UPDATE_GOLDEN=1 npm run golden -- --allow '9/*/*,10/*/*,11/*/*,12/*/*,13/*/*,14/*/*'`). Every canal row gained `launches`; 9/idle/normal and the 2.1 skipper rows gained Okafor's `boom` line in the radio log. Nothing outside missions 9-14 moved.
+
+| Row | status | endTime | stars | score | bargeHp | randomCalls | launches (shots, missiles, outside) |
+|---|---|---|---|---|---|---|---|
+| 9/idle/normal | success -> **failed (hull)** | 61.77 -> 103.41 | 1 -> 0 | 976 -> 40 | [0, 15.35] -> [0, 7.85] | 109 -> 173 | 167, 8, 9 |
+| 9/skipper/normal | success | 61.77 -> 79.42 | 3 | 22263 -> 24131 | [24, 24] | 4 -> 2 | 2, 0, 0 |
+| 9/skipper/easy | success | 61.77 -> 79.42 | 3 | 17820 -> 19315 | [24, 24] | 4 -> 2 | 2, 0, 0 |
+| 10/skipper/normal | success | 69.45 | 3 | 27588 -> 27363 | same | same | 1, 0, 0 |
+| 10/skipper/easy | success | 69.45 | 3 | 21500 -> 21320 | same | 2 -> 1 | 1, 0, 0 |
+| 11/skipper/normal | success | 66.67 | 3 | 67419 -> 67334 | [21.6, 21.6] -> [21.6, 20.35] | 175 -> 173 | 17, 0, 0 |
+| 11/skipper/easy | success | 66.67 | 3 | 48200 -> 49605 | [22.75, 24] -> [24, 24] | 171 -> 170 | 15, 0, 0 |
+| 12/skipper/normal | success | 74.29 | 3 | 59019 -> 58559 | [21.6, 21.6] -> [21.6, 20.35] | 79 -> 75 | 3, 0, 0 |
+| 12/skipper/easy | success | 74.29 | 3 | 49760 -> 49425 | same | 78 -> 75 | 3, 0, 0 |
+| 13/skipper/normal | success | 72.23 | 2 -> 3 | 97380 -> 100140 | [18.85, 21.6] -> [20.35, 21.6] | 173 -> 159 | 12, 2, 2 |
+| 13/skipper/easy | success | 72.23 | 2 -> 3 | 73615 -> 78740 | [11.5, 24] -> [24, 24] | 170 -> 159 | 11, 2, 2 |
+| 14/skipper/normal | success | 59.42 -> 59.27 | 3 | 23400 -> 23313 | same | 95 -> 89 | 8, 1, 1 |
+| 14/skipper/easy | success | 59.28 | 3 | 19035 -> 18855 | same | 76 -> 72 | 4, 0, 0 |
+| 14/idle/normal | failed (hull) | 27.59 -> 27.94 | 0 | 140 -> 100 | same | same | 51, 0, 0 |
+
+Why: guns now aim from z -32 and launchers fire from -30, so the skipper kills most of them before they shoot (fewer hostile rounds, fewer `hitRoll` draws in randomCalls; hitsTaken drops by 1-3 on four Normal rows). On 2.1 the skipper breaks the boom before any hold (it shoots the nearest hostile past z -40), and the longer mission adds 7 kills; doing nothing is held under the nests until Marlin's hull goes at 103.41 s.
+
+**Balance, 8 seeds** (`npm run balance -- --missions 9-14 --modes easy,normal,hard --seeds 8 --players pilot,idle`, 36 cells in 0.5 min), against the G1 baseline:
+
+| Mission | Player | Easy (G1 -> K1) | Normal (G1 -> K1) | Hard (G1 -> K1) |
+|---|---|---|---|---|
+| 2.1 | skipper | 8/8 ★3.00, 61.8 s -> 8/8 ★3.00, 79.4 s | 8/8 ★3.00 -> 8/8 ★3.00, 79.4 s | 8/8 ★3.00 -> 8/8 ★3.00, 79.4 s |
+| 2.1 | idle | **8/8 ★2.00 -> 0/8** (hull 7, barges 1, 565.8 s) | **5/8 ★0.88 -> 0/8** (hull 7, barges 1, 86.2 s) | 0/8 -> 0/8 (hull 8) |
+| 2.2 | skipper | 8/8 ★3.00 -> 8/8 ★3.00 | 8/8 ★3.00 -> 8/8 ★3.00 | 8/8 ★3.00 -> 8/8 ★3.00 |
+| 2.2 | idle | 7/8 ★1.75 -> 8/8 ★2.00 | 0/8 -> 0/8 | 0/8 -> 0/8 |
+| 2.3 | skipper | 8/8 ★3.00 -> 8/8 ★3.00 | 8/8 ★2.75 -> 8/8 ★2.88 | 8/8 ★2.00 -> 8/8 ★2.25 |
+| 2.3 | idle | 6/8 ★1.13 -> 5/8 ★1.25 | 0/8 -> 0/8 | 0/8 -> 0/8 |
+| 2.4 | skipper | 8/8 ★3.00 -> 8/8 ★3.00 | 8/8 ★3.00 -> 8/8 ★3.00 | 8/8 ★3.00 -> 8/8 ★3.00 |
+| 2.4 | idle | 1/8 ★0.25 -> 2/8 ★0.50 | 0/8 -> 0/8 | 0/8 -> 0/8 |
+| 2.5 | skipper | 8/8 **★2.00 -> ★3.00** | 8/8 **★2.00 -> ★3.00** | 6/8 ★1.50 -> 8/8 ★2.00 |
+| 2.5 | idle | 0/8 -> 0/8 | 0/8 -> 0/8 | 0/8 -> 0/8 |
+| 2.6 | skipper | 8/8 ★3.00 -> 8/8 ★3.00 | 8/8 ★3.00 -> 8/8 ★3.00 | 8/8 ★3.00 -> 8/8 ★3.00 |
+| 2.6 | idle | 0/8 -> 0/8 | 0/8 -> 0/8 | 0/8 -> 0/8 |
+
+- **Met:** doing nothing loses 2.1 on Easy and on Normal in 8/8 (8/8 and 5/8 wins in G1). The skipper wins each of 2.1-2.6 on Easy and Normal in 8/8, its G1 rate. Do-nothing's Normal rate on 2.2-2.6 is 0/8, as in G1.
+- **Not met: mean stars within 0.25.** 2.5 rose from 2.00 to 3.00 on Easy and Normal (2.3 Normal +0.13, inside). The skipper now kills 2.5's gun lines before they fire, so the barges stay above 80%: softer, not harder. The fireRate lever only adds enemy fire; a trial at about +9% on 2.5 left all 8 seeds on 3 stars, so it was reverted. Owner decision: accept, or tune 2.5 another way in 5.2.
+- Easy do-nothing on 2.2 and 2.4 rose by one seed each (7/8 -> 8/8, 1/8 -> 2/8); the plan sets no Easy idle target.
+
+**On the screen** (river-browser `checkCanalFrame`: a gun's muzzle 1.1 m over its mount at ENGAGE_Z and a launcher's 2.7 m over it at LAUNCH_Z, both banks; the free rect as H1 lays it out on 2.1 after 2 s; launches counted with the HUD refreshed at each one):
+
+| Viewport | Engage line | Skipper launches outside the free rect, 2.1-2.6 Normal (C1 build -> K1) |
+|---|---|---|
+| 1280x720 | inside the canvas; 25 px outside the free rect, above its top (the 64 px top bar). 5.0's line was off the canvas. | 74 of 110 (67.3%) -> **3 of 46 (6.5%)**: the first missile of launchers at z -30 |
+| 844x390 | inside the canvas; 82 px above the free rect's top (the top bar to 48 px and the centred radio ticker to 103 px). | 98 of 110 (89.1%) -> **31 of 46 (67.4%)**: from the top band, and from column skiffs at z 20-21 under the controls |
+| 390x844 | inside the free rect | not measured (no target) |
+
+- **Not met: the line inside the free rect at 1280x720 and 844x390, and fewer than 5% of launches outside it.** With the camera target fixed and the zoom capped at 10%, the line would need a 19% zoom-out at 1280x720; at 844x390 the ticker puts the free rect's top at 26% of the screen height, out of reach of any zoom within the cap. The checks hold today's numbers as ceilings (26 px and 83 px; 7% and 68%) so they cannot grow while the owner decides, as H1 did for coverage. The levers are H1's: a ticker that does not bound the free rect, or a shorter top band on landscape phones.
+- **Met:** the barges' and Marlin's mesh rects stay inside the canvas and clear of every HUD panel at 1280x720 and 844x390, sampled every 0.5 s of the first 30 s of 2.1 and of the 2.6 hold.
+
 ## Tidelock 5.1, C1: Chapter 1 peaks
 
 [PLAN-5.1.md](PLAN-5.1.md) C1 was verified on 2026-11-21 against the production build (`vite preview`), Chrome 155 on the GPU. This is the first gameplay change of 5.1: one golden re-baseline with `--allow '6/*/*,7/*/*,8/*/*,5/naive/normal'`, and only the six harbour pilot rows moved.

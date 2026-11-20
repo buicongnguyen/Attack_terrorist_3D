@@ -239,6 +239,8 @@ const COACH = {
   ],
   ferry: ["A civilian boat is inside the pattern. Hold your release", "A civilian boat is inside the pattern. Hold your release"],
   fits: ["That fits. Release with SPACE or a click", "That fits. Tap Release"],
+  // The canal's one hint (5.1 K1).
+  boom: ["Shoot the boom to let the barges through", "Shoot the boom to let the barges through"],
 };
 
 // Assigns markup only when it changed, so HUD refreshes don't rebuild identical DOM.
@@ -550,6 +552,12 @@ window.addEventListener('mobile-game-interruption', () => this.touches.clear());
     };
     style.setProperty("--panel-clear", clear("flight-panel"));
     style.setProperty("--stick-clear", clear("move-stick"));
+    style.setProperty("--weapon-clear", clear("weapon-bar"));
+    // The canal's coach hint keeps clear of the radio ticker (5.1 K1): above it on portrait phones,
+    // beside it on landscape phones.
+    style.setProperty("--comms-clear", clear("comms"));
+    const comms = $("comms").getBoundingClientRect();
+    style.setProperty("--comms-left", comms.width > 0 ? `${Math.round(comms.left)}px` : "50vw");
     // The strike camera frames the district above a full-width flight panel and the touch stick.
     if (this.game.chapter === 0) {
       const panel = $("flight-panel").getBoundingClientRect(),
@@ -1958,9 +1966,22 @@ window.addEventListener('mobile-game-interruption', () => {
     return p.visible && outside(this.freeRect, p.x, p.y);
   }
 
+  // Whether a canal threat is out of sight (5.1 K1): above or below the free play rect, off the
+  // screen at a side, or on screen under a HUD panel. A point in plain view beside the free rect
+  // (a bank gun on a wide screen) is in sight, so it gets no chevron.
+  outOfSight(point) {
+    const p = this.view.projectInto(this.screenPoint, point),
+      free = this.freeRect;
+    if (!p.visible) return false;
+    if (p.y < free.top || p.y > free.bottom || p.x < 0 || p.x > innerWidth) return true;
+    if (this.hudRects) for (const r of this.hudRects) if (p.x >= r.left && p.x <= r.right && p.y >= r.top && p.y <= r.bottom) return true;
+    return false;
+  }
+
   // Edge markers (5.1 H1), every frame: what threatens from outside the free play rect. The canal's
-  // aiming guns and launchers above the frame; the valley's missiles, launch crews and drone pads,
-  // and Marrow; the harbour's key hulls. Nothing here allocates.
+  // aiming guns and launchers out of sight (K1: past the free rect's top or bottom, or under a
+  // panel); the valley's missiles, launch crews and drone pads, and Marrow; the harbour's key
+  // hulls. Nothing here allocates.
   updateEdges() {
     const g = this.game,
       edge = this.edge,
@@ -1972,8 +1993,7 @@ window.addEventListener('mobile-game-interruption', () => {
           if (!isHostileEntity(e)) continue;
           const kind = e.type === "launcher" ? "launcher" : e.aim > 0 && e.target ? "gun" : null;
           if (!kind) continue;
-          const p = this.view.projectInto(this.screenPoint, e.position);
-          if (p.visible && p.y < free.top) edge.track(e, e.position, kind);
+          if (this.outOfSight(e.position)) edge.track(e, e.position, kind);
         }
       } else if (g.chapter === 2) {
         for (const shot of g.projectiles) if (shot.hostile && shot.missile && !shot.dead && this.offFrame(shot.position)) edge.track(shot, shot.position, "missile");
@@ -2214,6 +2234,7 @@ window.addEventListener('mobile-game-interruption', () => {
     setText($("strike-stock"), w.strikes);
     $("strike-action").disabled = w.strikes <= 0 || w.striking;
     this.objective(`${Math.max(0, Math.ceil(op.length - op.distance))}`, op.holding ? "CONVOY HOLDING" : "METRES TO GO");
+    this.callouts.hint(op.hint ? COACH[op.hint][this.touch ? 1 : 0] : "");
     setHTML(
       $("barge-bars"),
       op.barges

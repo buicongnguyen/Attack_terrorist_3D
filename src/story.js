@@ -494,6 +494,7 @@ export const MISSION_STORY = [
       drums: line("okafor", "The whole bank just went up! Good eye."),
       barge: line("okafor", "We're taking hits! Cover us!"),
       skiffs: line("iona", "Fast boats inbound. Watch their approach lines."),
+      boom: line("okafor", "Chain boom across the mouth, Marlin. Break it or the barges sit under those guns."),
       success: line("okafor", "Through the mangroves. Next is the Narrows."),
     },
     success:

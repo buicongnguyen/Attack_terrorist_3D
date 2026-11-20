@@ -1,6 +1,8 @@
 // Chapter 2 browser checks: convoy mechanics. The scripted skipper below sails the canal missions
 // for the golden runs (tests/golden-browser.mjs).
 
+import { BOOM, ENGAGE_Z, LAUNCH_Z } from "../src/river-data.js";
+
 export function skipper(index) {
   const { game: g, ui } = window.__TIDELOCK__;
   ui.start(index);
@@ -390,4 +392,369 @@ export async function checkRiver(page, check) {
     return out;
   });
   for (const [name, value] of Object.entries(mechanics)) check(`river ${name}`, value);
+  await checkBoomAndLines(page, check);
+}
+
+// 5.1 K1 in the page: 2.1's boom played from the script, and the engage line on guns, launchers
+// and the gate's towers. Game steps only, no wall clock.
+async function checkBoomAndLines(page, check) {
+  const k1 = await page.evaluate(
+    ({ engage, launch, boomSpec }) => {
+      const { game: g, ui } = window.__TIDELOCK__;
+      const out = {};
+      const pageMode = g.difficulty;
+      ui.setDifficulty("normal");
+      ui.start(9);
+      g.paused = false;
+      // Enemy rounds glance off, so the convoy lives through a long hold.
+      g.hitChance = 0;
+      const said = [],
+        marks = [];
+      g.radio = function (line, key) {
+        said.push(key);
+        return Object.getPrototypeOf(this).radio.call(this, line, key);
+      };
+      const notify = g.notify;
+      g.notify = (type, data) => {
+        if (type === "checkpoint") marks.push(data);
+        return notify(type, data);
+      };
+      const op = g.op,
+        speed = op.data.speed;
+      op.distance = 170;
+      // The approach: full speed, then a brake that never speeds up, to a hold on the line.
+      let braking = true,
+        last = speed,
+        full = true;
+      for (let i = 0; i < 120 * 60 && !op.holding; i++) {
+        g.update(1 / 120);
+        if (op.boom && boomSpec.holdZ - op.boom.position.z > boomSpec.ease + 0.1 && op.flow !== speed) full = false;
+        if (op.flow > last + 1e-9) braking = false;
+        last = op.flow;
+      }
+      const boom = op.boom;
+      out.boomHoldsTheConvoyShortOfIt = Boolean(boom) && op.holding && full && braking && Math.abs(boom.position.z - boomSpec.holdZ) < 1e-6;
+      const held = op.distance;
+      g.input.z = -1;
+      for (let i = 0; i < 120 * 3; i++) g.update(1 / 120);
+      g.input.z = 0;
+      out.travelStopsWhileTheBoomStands = op.distance === held && op.holding && g.status === "playing";
+      out.marlinCannotSailThroughTheBoom = g.player.position.z >= boom.position.z + 2.5 - 1e-6;
+      ui.updateHUD(true);
+      const coach = document.getElementById("coach");
+      out.hintShowsWhileTheBoomStands = op.snapshot().hint === "boom" && !coach.hidden && coach.textContent === "Shoot the boom to let the barges through";
+      // Deck-gun rounds from Marlin, off the centre line: the boom is struck where they cross it.
+      g.player.position.set(8, g.player.position.y, 2);
+      const round = () => {
+        for (const shot of g.projectiles) shot.dead = true;
+        g.cooldown = 0;
+        g.fire(boom.position.clone().set(8, boomSpec.lift, boom.position.z));
+        for (let i = 0; i < 90; i++) g.updateProjectiles(1 / 120);
+      };
+      for (let i = 0; i < 6; i++) round();
+      out.sixRoundsDoNotBreakIt = !boom.dead && boom.hp === boomSpec.hp - 12 && op.boom === boom;
+      round();
+      out.theSeventhBreaksIt = boom.dead && !op.boom && !op.holding;
+      const before = op.distance;
+      for (let i = 0; i < 120; i++) g.update(1 / 120);
+      out.convoyResumesAtMissionSpeed = Math.abs(op.distance - before - speed) < 1e-6;
+      ui.updateHUD(true);
+      out.hintGoesWithTheBoom = op.snapshot().hint === null && coach.hidden;
+      for (let i = 0; i < 120 * 60 && g.status === "playing"; i++) g.update(1 / 120);
+      out.radioAndCheckpointOnce =
+        g.status === "success" && said.filter((k) => k === "boom").length === 1 && marks.filter((m) => m === "THE BOOM").length === 1;
+      out.detail = JSON.stringify({ status: g.status, boom: said.filter((k) => k === "boom").length, marks });
+      delete g.radio;
+      g.notify = notify;
+
+      // The engage line: a gun aims only past ENGAGE_Z, a launcher fires only past LAUNCH_Z.
+      ui.start(10);
+      g.paused = false;
+      g.op.spawn({ d: 0, type: "guns", side: 1, count: 1, launcher: true });
+      const gun = g.entities.find((e) => e.type === "cannon"),
+        launcher = g.entities.find((e) => e.type === "launcher");
+      gun.scrolling = launcher.scrolling = false;
+      const missiles = () => g.projectiles.filter((s) => s.hostile && s.missile && !s.dead).length;
+      gun.position.z = engage - 0.5;
+      launcher.position.z = launch - 0.5;
+      gun.cooldown = launcher.cooldown = 0;
+      for (let i = 0; i < 60; i++) g.update(1 / 120);
+      const quiet = !(gun.aim > 0) && missiles() === 0;
+      gun.position.z = engage + 0.5;
+      launcher.position.z = launch + 0.5;
+      for (let i = 0; i < 2; i++) g.update(1 / 120);
+      out.gunsAimAndLaunchersFireOnlyPastTheLine = quiet && gun.aim > 0 && missiles() === 1;
+      // The gate's towers fire only past LAUNCH_Z.
+      ui.start(14);
+      g.paused = false;
+      g.op.spawnGate();
+      g.op.holding = true;
+      for (const e of g.entities) if (e.scrolling && e.type !== "pickup") e.position.z = launch - 1;
+      g.op.boss.phase = "towers";
+      const heavy = () => g.projectiles.filter((s) => s.hostile && s.heavy && !s.dead).length;
+      for (const t of g.op.boss.towers) t.cooldown = 0;
+      for (let i = 0; i < 60; i++) g.update(1 / 120);
+      const towersQuiet = heavy() === 0;
+      for (const e of g.entities) if (e.scrolling && e.type !== "pickup") e.position.z = launch + 1;
+      g.update(1 / 120);
+      out.towersFireOnlyPastTheLine = towersQuiet && heavy() === 2;
+      ui.setDifficulty(pageMode);
+      return out;
+    },
+    { engage: ENGAGE_Z, launch: LAUNCH_Z, boomSpec: BOOM },
+  );
+  const detail = k1.detail;
+  delete k1.detail;
+  for (const [name, value] of Object.entries(k1)) check(`river 5.1 K1 ${name}${name === "radioAndCheckpointOnce" ? ` (${detail})` : ""}`, value);
+}
+
+// 5.1 K1 on the screen: where the engage line and each launch fall against the free play rect,
+// the boom's hint and the chevrons, and the convoy kept clear of every HUD panel. Where the HUD's
+// own panels keep the line out of the free rect (H1's top bar and radio ticker), the measured
+// distance is held as a ceiling that may not grow until the owner decides (docs/VERIFICATION.md,
+// K1), as hud-browser does for coverage.
+const FRAME_SIZES = [
+  [1280, 720],
+  [1024, 768],
+  [844, 390],
+  [390, 844],
+  [360, 740],
+];
+// Where the engage line and the launches are measured.
+const LINE_SIZES = ["1280x720", "844x390", "390x844"];
+// Pixels the line still lies outside the free rect (a gun's or a launcher's muzzle, any side).
+const LINE_SIGNOFF = { "1280x720": 26, "844x390": 83 };
+// Share of the skipper's hostile launches on 2.1-2.6 Normal from outside the free rect.
+const LAUNCH_TARGET = 0.05;
+const LAUNCH_SIGNOFF = { "1280x720": 0.07, "844x390": 0.68 };
+
+export async function checkCanalFrame(browser, url, check) {
+  for (const [width, height] of FRAME_SIZES) {
+    const size = `${width}x${height}`,
+      touch = width < 1000;
+    const page = await browser.newPage({ viewport: { width, height }, isMobile: touch, hasTouch: touch, deviceScaleFactor: 1 });
+    const errors = [];
+    page.on("pageerror", (e) => errors.push(e.message));
+    await page.goto(`${url}?qa=1`);
+    await page.waitForFunction(() => document.documentElement.dataset.ready === "true", null, { timeout: 120000 });
+    // The boom's hint and the chevrons, on every size: the hint clear of the radio ticker
+    // (portrait phones) or of the barges and Marlin (desktop and landscape phones); no chevron for
+    // an aimer in plain view, so none blinks with the aim cycle (a bank gun beside a narrow free rect).
+    const sight = await page.evaluate(
+      ({ portrait }) => {
+        const { game: g, ui, view } = window.__TIDELOCK__;
+        document.querySelectorAll("dialog[open]").forEach((d) => d.close());
+        const overlap = (a, b) => a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;
+        const p = { x: 0, y: 0, visible: false };
+        const rectOf = (object) => {
+          const r = { left: Infinity, top: Infinity, right: -Infinity, bottom: -Infinity },
+            corner = object.position.clone();
+          object.updateMatrixWorld(true);
+          object.traverse((child) => {
+            if (!child.isMesh || !child.visible) return;
+            child.geometry.boundingBox || child.geometry.computeBoundingBox();
+            const { min, max } = child.geometry.boundingBox;
+            for (let i = 0; i < 8; i++) {
+              corner.set(i & 1 ? max.x : min.x, i & 2 ? max.y : min.y, i & 4 ? max.z : min.z).applyMatrix4(child.matrixWorld);
+              view.projectInto(p, corner);
+              r.left = Math.min(r.left, p.x);
+              r.right = Math.max(r.right, p.x);
+              r.top = Math.min(r.top, p.y);
+              r.bottom = Math.max(r.bottom, p.y);
+            }
+          });
+          return r;
+        };
+        const out = { hint: "", hintClear: true, inSight: 0, shownInSight: 0, toggles: 0, steps: 0 };
+        // The hint: the boom held in sight from the start, the start line still on the radio.
+        ui.start(9);
+        g.paused = false;
+        g.op.spawn({ d: 0, type: "boom" });
+        g.op.boom.scrolling = false;
+        g.op.boom.position.z = -20;
+        const coach = document.getElementById("coach");
+        for (let i = 0; i < 120 * 5 && coach.hidden; i++) {
+          g.update(1 / 120);
+          ui.updateHUD(true);
+        }
+        view.camera.updateMatrixWorld();
+        const hint = coach.getBoundingClientRect();
+        out.hint = `${Math.round(hint.left)},${Math.round(hint.top)},${Math.round(hint.right)},${Math.round(hint.bottom)}`;
+        out.hintShown = !coach.hidden && hint.width > 0;
+        const comms = document.getElementById("comms").getBoundingClientRect();
+        out.ticker = comms.height > 0 && document.querySelector("#comms > .radio-line") !== null;
+        out.tickerClear = !overlap(hint, comms);
+        if (!portrait) {
+          // Marlin where she starts and at her near bound, and both barges where they ride.
+          const marlin = g.player.position;
+          for (const z of [marlin.z, 17]) {
+            marlin.set(0, marlin.y, z);
+            for (const object of [g.player, ...g.op.barges.map((b) => b.mesh)])
+              if (overlap(hint, rectOf(object))) {
+                out.hintClear = false;
+                out.hint += ` over ${object === g.player ? `Marlin at z ${z}` : "a barge"}`;
+              }
+          }
+        }
+        // The chevrons: 2.1 played for 60 s, the HUD every 6 steps. An aimer is in sight when its
+        // point is on the screen, between the free rect's top and bottom, and under no panel.
+        ui.start(9);
+        g.paused = false;
+        const was = new Map();
+        for (let step = 1; step <= 120 * 60 && g.status === "playing"; step++) {
+          g.update(1 / 120);
+          if (step % 6) continue;
+          ui.updateHUD();
+          view.camera.updateMatrixWorld();
+          const free = ui.freeRect,
+            panels = ui.hudRects;
+          out.steps++;
+          for (const e of g.entities) {
+            if (e.dead || !(e.type === "launcher" || (e.aim > 0 && e.target))) continue;
+            view.projectInto(p, e.position);
+            const inSight =
+              p.visible && p.y >= free.top && p.y <= free.bottom && p.x >= 0 && p.x <= innerWidth && !panels.some((r) => p.x >= r.left && p.x <= r.right && p.y >= r.top && p.y <= r.bottom);
+            if (!inSight) continue;
+            out.inSight++;
+            const shown = ui.edge.slots.some((s) => s.shown && s.id === e);
+            if (shown) out.shownInSight++;
+            if (was.has(e) && was.get(e) !== shown) out.toggles++;
+            was.set(e, shown);
+          }
+        }
+        g.paused = true;
+        return out;
+      },
+      { portrait: height > width },
+    );
+    check(`river ${size} the boom's hint shows (${sight.hint})`, sight.hintShown);
+    if (height > width) check(`river ${size} the boom's hint stays clear of the radio ticker`, sight.ticker && sight.tickerClear);
+    else check(`river ${size} the boom's hint stays clear of the barges and of Marlin at her start and her near bound (${sight.hint})`, sight.hintClear);
+    check(
+      `river ${size} no chevron for an aimer in plain view and none blinking with the aim cycle (${sight.inSight} in-sight samples over ${sight.steps} HUD frames: ${sight.shownInSight} shown, ${sight.toggles} changes)`,
+      sight.steps > 500 && sight.inSight > 0 && sight.shownInSight === 0 && sight.toggles === 0,
+    );
+    if (LINE_SIZES.includes(size)) {
+      const line = await page.evaluate(
+        ({ engage, launch, bank }) => {
+          const { game: g, ui, view } = window.__TIDELOCK__;
+          document.querySelectorAll("dialog[open]").forEach((d) => d.close());
+          ui.start(9);
+          g.paused = false;
+          for (let i = 0; i < 240; i++) g.update(1 / 120);
+          g.paused = true;
+          ui.updateHUD(true);
+          view.camera.updateMatrixWorld();
+          const free = ui.freeRect;
+          // The muzzles: a bank gun's (1.1 m over its mount) and a launcher's (2.7 m), both banks.
+          const points = [];
+          for (const s of [-1, 1]) points.push([s * (bank + 0.2), 2.15, engage], [s * (bank + 3.4), 3.8, launch]);
+          let canvas = true,
+            beyond = 0;
+          for (const [x, y, z] of points) {
+            const p = view.projectInto({ x: 0, y: 0, visible: false }, { x, y, z });
+            canvas &&= p.visible && p.x >= 0 && p.x <= innerWidth && p.y >= 0 && p.y <= innerHeight;
+            beyond = Math.max(beyond, free.top - p.y, free.left - p.x, p.x - free.right, p.y - free.bottom);
+          }
+          return { canvas, beyond: Math.ceil(beyond) };
+        },
+        { engage: ENGAGE_Z, launch: LAUNCH_Z, bank: 17.5 },
+      );
+      check(`river ${size} the engage line (ENGAGE_Z ${ENGAGE_Z}, LAUNCH_Z ${LAUNCH_Z}) projects inside the canvas`, line.canvas);
+      const limit = LINE_SIGNOFF[size] ?? 0;
+      check(
+        `river ${size} the engage line projects ${line.beyond > 0 ? `${line.beyond} px outside the free rect (target 0, at most ${limit} px under H1's panels until the owner decides)` : "inside the free rect"}`,
+        line.beyond <= limit,
+      );
+      if (LAUNCH_SIGNOFF[size] !== undefined) {
+        const launches = await page.evaluate(
+          ([src]) => {
+            const { game: g, ui, view } = window.__TIDELOCK__;
+            const play = eval(src);
+            ui.setDifficulty("normal");
+            const out = { all: 0, outside: 0, convoy: true, where: "" };
+            const at = { x: 0, y: 0, visible: false };
+            g.spawnShot = function (origin, aim, missile, hostile, ...rest) {
+              if (hostile && this.chapter === 1) {
+                out.all++;
+                ui.updateHUD(true);
+                view.camera.updateMatrixWorld();
+                const f = ui.freeRect;
+                view.projectInto(at, origin);
+                if (at.x < f.left || at.x > f.right || at.y < f.top || at.y > f.bottom) out.outside++;
+              }
+              return Object.getPrototypeOf(this).spawnShot.call(this, origin, aim, missile, hostile, ...rest);
+            };
+            // The barges' and Marlin's screen rects, from their meshes' boxes, against the canvas and
+            // every HUD panel: every half second of the approach on 2.1 and of the hold on 2.6.
+            const V3 = g.player.position.constructor;
+            const corner = new V3(),
+              p = { x: 0, y: 0, visible: false };
+            const rectOf = (object) => {
+              const r = { left: Infinity, top: Infinity, right: -Infinity, bottom: -Infinity };
+              object.updateMatrixWorld(true);
+              object.traverse((child) => {
+                if (!child.isMesh || !child.visible) return;
+                child.geometry.boundingBox || child.geometry.computeBoundingBox();
+                const { min, max } = child.geometry.boundingBox;
+                for (let i = 0; i < 8; i++) {
+                  corner.set(i & 1 ? max.x : min.x, i & 2 ? max.y : min.y, i & 4 ? max.z : min.z).applyMatrix4(child.matrixWorld);
+                  view.projectInto(p, corner);
+                  r.left = Math.min(r.left, p.x);
+                  r.right = Math.max(r.right, p.x);
+                  r.top = Math.min(r.top, p.y);
+                  r.bottom = Math.max(r.bottom, p.y);
+                }
+              });
+              return r;
+            };
+            const clear = (when) => {
+              ui.updateHUD(true);
+              view.camera.updateMatrixWorld();
+              const panels = ui.badgeOverlays.map((n) => n.getBoundingClientRect()).filter((q) => q.width > 0 && q.height > 0);
+              const boats = [["Marlin", g.player], ...g.op.barges.filter((b) => b.alive).map((b) => [`barge ${b.index + 1}`, b.mesh])];
+              for (const [name, object] of boats) {
+                const r = rectOf(object);
+                const inside = r.left >= 0 && r.top >= 0 && r.right <= innerWidth && r.bottom <= innerHeight;
+                const under = panels.some((q) => r.left < q.right && r.right > q.left && r.top < q.bottom && r.bottom > q.top);
+                if (!inside || under) {
+                  out.convoy = false;
+                  out.where ||= `${when}: ${name} ${inside ? "under a panel" : "off the canvas"} (${Math.round(r.left)},${Math.round(r.top)},${Math.round(r.right)},${Math.round(r.bottom)})`;
+                }
+              }
+            };
+            let steps = 0;
+            g.update = function (dt) {
+              Object.getPrototypeOf(this).update.call(this, dt);
+              if (++steps % 60) return;
+              if (this.index === 9 && this.time < 30) clear(`2.1 at ${this.time.toFixed(1)} s`);
+              if (this.index === 14 && this.op.holding) clear(`2.6 hold at ${this.time.toFixed(1)} s`);
+            };
+            try {
+              for (const index of [9, 10, 11, 12, 13, 14]) {
+                g.attemptsBy.clear();
+                steps = 0;
+                play(index);
+              }
+            } finally {
+              delete g.spawnShot;
+              delete g.update;
+              g.paused = true;
+            }
+            return out;
+          },
+          [`(${skipper})`],
+        );
+        const share = launches.outside / launches.all;
+        const ceiling = LAUNCH_SIGNOFF[size];
+        check(
+          `river ${size} the skipper on 2.1-2.6 Normal launches ${launches.outside} of ${launches.all} hostile shots and missiles from outside the free rect (${(share * 100).toFixed(1)}%; target ${LAUNCH_TARGET * 100}%${ceiling > LAUNCH_TARGET ? `, at most ${Math.round(ceiling * 100)}% until the owner decides` : ""})`,
+          share <= Math.max(LAUNCH_TARGET, ceiling),
+        );
+        check(`river ${size} the barges and Marlin stay inside the canvas and clear of every HUD panel on the 2.1 approach and the 2.6 hold${launches.where ? `: ${launches.where}` : ""}`, launches.convoy);
+      }
+    }
+    check(`river ${size} page errors${errors.length ? `: ${errors[0].slice(0, 80)}` : ""}`, errors.length === 0);
+    await page.close();
+  }
 }

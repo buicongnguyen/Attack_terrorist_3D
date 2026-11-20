@@ -7,7 +7,7 @@ import { checkAmbient } from "./ambient-browser.mjs";
 import { checkFx } from "./fx-browser.mjs";
 import { checkProgress } from "./progress-browser.mjs";
 import { checkStrike } from "./strike-browser.mjs";
-import { checkRiver } from "./river-browser.mjs";
+import { checkRiver, checkCanalFrame } from "./river-browser.mjs";
 import { checkHarbour } from "./harbour-browser.mjs";
 import { checkPerf } from "./perf-browser.mjs";
 import { checkHud } from "./hud-browser.mjs";
@@ -351,6 +351,7 @@ try {
   await checkProgress(browser, url, check);
   await checkPerf(browser, url, check, { gpu });
   await checkHud(browser, url, check);
+  await checkCanalFrame(browser, url, check);
   await checkFeel(browser, url, check);
   const flow = await page.evaluate(() => {
     const { game: g, ui } = __TIDELOCK__,

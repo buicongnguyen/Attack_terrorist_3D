@@ -162,9 +162,11 @@ test("the recorded file holds 50 rows keyed mission/pilot/mode with the full fro
   for (const r of recorded.rows) {
     assert.match(r.key, /^\d+\/[a-z]+\/(easy|normal|hard|crazy)$/);
     assert.deepEqual(Object.keys(r), FIELDS, r.key);
-    // C1 fills standDown and resupply on the harbour rows (missions 6-8); the rest stay null.
-    const harbour = [6, 7, 8].includes(Number(r.key.split("/")[0]));
-    for (const f of RESERVED) if (!(harbour && ["standDown", "resupply"].includes(f))) assert.equal(r[f], null, `${r.key} ${f}`);
+    // C1 fills standDown and resupply on the harbour rows (missions 6-8), K1 launches on the canal
+    // rows (9-14); the rest stay null.
+    const mission = Number(r.key.split("/")[0]);
+    const owned = (f) => ([6, 7, 8].includes(mission) && ["standDown", "resupply"].includes(f)) || (mission >= 9 && mission <= 14 && f === "launches");
+    for (const f of RESERVED) if (!owned(f)) assert.equal(r[f], null, `${r.key} ${f}`);
   }
   const expected = [];
   for (const mode of ["normal", "easy"])
@@ -275,4 +277,23 @@ test("the harbour endgame in the rows: the pilot wins 1.7-1.9 on Normal, every b
     }
   // Doing nothing never meets the quota.
   assert.equal(byKey.get(rowKey(6, "idle", "normal")).standDown, null);
+});
+
+// ---------------------------------------------------------------- 5.1 K1
+
+test("5.1 K1: every canal row counts its launches, and doing nothing loses 2.1 at the boom", () => {
+  for (const r of recorded.rows) {
+    if (missionOfKey(r.key) < 9 || missionOfKey(r.key) > 14) continue;
+    const { shots, missiles, outside } = r.launches;
+    assert.ok([shots, missiles, outside].every(Number.isInteger), r.key);
+    assert.ok(outside <= shots + missiles, r.key);
+  }
+  const idle = byKey.get(rowKey(9, "idle", "normal"));
+  assert.equal(idle.status, "failed");
+  assert.ok(idle.radio.some((e) => e[3] === "boom"), "Okafor names the boom");
+  for (const mode of ["normal", "easy"]) {
+    const r = byKey.get(rowKey(9, "skipper", mode));
+    assert.equal(r.status, "success", r.key);
+    assert.equal(r.radio.filter((e) => e[3] === "boom").length, 1, r.key);
+  }
 });

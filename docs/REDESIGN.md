@@ -803,6 +803,18 @@ Gameplay did not move: the 50 golden rows are identical apart from their new rad
 
 **Measured** (8 seeds, `npm run balance`): the harbour pilot now wins 1.7, 1.8 and 1.9 on Normal in 8/8 each (0/8, 0/8 and 8/8 before), with 10-11 bombs instead of running dry at 16-17. Only the six harbour pilot rows of the goldens moved; the record is in [VERIFICATION.md](VERIFICATION.md).
 
+### Canal fairness (K1)
+
+| Part | Change |
+| --- | --- |
+| The Boom (2.1) | A float-and-chain boom (primitives only, 14 hp: 7 deck-gun rounds, one rocket salvo or 1.6 s of laser) comes down the canal at d 186 under two crewed gun nests. Okafor warns at d 176 ("Chain boom across the mouth, Marlin. Break it or the barges sit under those guns."), the banner reads THE BOOM, and the coach lane says "Shoot the boom to let the barges through" while it stands in sight. If it is still standing, the convoy brakes steadily to a hold with the boom at z -6 (8 m ahead of Marlin's hold station), Marlin cannot sail through it, and the hold lasts until it breaks; then the convoy is back at speed at once. 2.1 is 270 m long now (was 210) so the convoy sails past the boom. |
+| Engage line | `ENGAGE_Z` -32 (bank guns start aiming, and fire 0.9 s later) and `LAUNCH_Z` -30 (launchers and the Lock Gate's towers) in river-data.js, the same on every screen. 5.0 aimed from -44 and launched from -46, above the frame. |
+| Camera | The target never moves. Landscape screens zoom out by 10% (`CANAL_CAMERA.landscape`, the cap), so a 16:9 frame shows the water from z -37.6 to +27.6 (was -34.6 to +24.6). Portrait is unchanged. |
+| Edge chevrons | A canal gun aiming, or a launcher, gets an H1 chevron when it is out of sight: past the free play rect's top or bottom, off the screen, or under a HUD panel. One in plain view beside the free rect gets none. |
+| Hint | Centred at the bottom on desktop; above the weapons, sticks and radio ticker on portrait phones; top left beside the ticker on landscape phones. |
+
+**Measured** (8 seeds, `npm run balance`): doing nothing now loses 2.1 on every mode (Easy 8/8 wins and Normal 5/8 wins before); the skipper still wins 2.1-2.6 on every mode in 8/8. Firing later made the skipper's 2.5 cleaner (3 stars on Easy and Normal, 2 before). The HUD's own panels still keep the line out of the free play rect at 1280x720 (25 px) and 844x390 (82 px): see [VERIFICATION.md](VERIFICATION.md).
+
 ## 23. Controls
 
 | Action | Desktop | Touch |

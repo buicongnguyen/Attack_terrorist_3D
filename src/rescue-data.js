@@ -367,6 +367,7 @@ const HOSTILE_TYPES = new Set([
   "drone-pad",
   "barracks",
   "gunship",
+  "boom",
 ]);
 
 export const isHostileEntity = (e) =>

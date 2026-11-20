@@ -544,6 +544,25 @@ kbd {
     transform: none;
   }
 }
+/* The canal's one coach hint (5.1 K1, the boom). Desktop keeps it centred under the convoy. Portrait
+   phones lift it over the weapons, the sticks and the radio ticker; landscape phones put it at the
+   top left, beside the centred ticker, clear of the barges at the bottom. */
+@media (max-width: 700px) and (orientation: portrait) {
+  body[data-chapter="1"] #coach {
+    bottom: calc(max(var(--weapon-clear, 0px), var(--stick-clear, 0px), var(--comms-clear, 0px)) + 8px);
+  }
+}
+@media (orientation: landscape) and (max-height: 520px) {
+  body[data-chapter="1"] #coach {
+    top: calc(var(--top-h) + 6px);
+    bottom: auto;
+    left: var(--edge, 8px);
+    right: auto;
+    max-width: calc(var(--comms-left, 50vw) - 2 * var(--edge, 8px));
+    transform: none;
+    white-space: normal;
+  }
+}
 /* The canal's steady hit-chance banner: amber, no throb (some gun is nearly always aiming). */
 #flak-warning.calm {
   animation: none;

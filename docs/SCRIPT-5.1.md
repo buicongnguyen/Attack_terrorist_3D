@@ -122,6 +122,15 @@ The jammer set piece (C1) gives 1.1 Echo's line from the plan. It replaces the m
 |---|---|---|---|---|---|
 | 1.1 Wake-Up Call | Echo | mission won | `success` | Jammer's down. Network's back. I can see you, Kestrel. | Mast is down. I can hear you now, Kestrel. Loud and clear. |
 
+### The Boom (K1)
+
+Added in K1, from the plan. `boom` is a tactical line (priority 1), said once at d 176 with the checkpoint banner THE BOOM; the coach hint is UI text, shown in the hint lane while the boom stands in sight.
+
+| Mission | Speaker | Trigger | Key | Line |
+|---|---|---|---|---|
+| 2.1 Mangrove Mile | Okafor | d 176, before the boom comes into sight | `boom` | Chain boom across the mouth, Marlin. Break it or the barges sit under those guns. |
+| 2.1 Mangrove Mile | (coach hint) | the boom standing in sight | (hint) | Shoot the boom to let the barges through |
+
 ## 5. Survivor voices
 
 One line for each of the nine Echo crew, said as that soldier is aboard (key `aboard`, tactical). When Reyes is the last aboard, her line gives way to the mission's pickup line, so the moment carries one story line. The seven without a cast entry get one (name, role 'Echo team', an Echo green), so the portrait dot and name show.
