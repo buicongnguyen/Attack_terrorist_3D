@@ -228,7 +228,11 @@ async function checkDebrief(browser, url, check) {
     return true;
   });
   const first = await win(0);
-  await page.waitForTimeout(1300);
+  // Wait for the reveal rather than a fixed time: CI's SwiftShader page runs its timers late.
+  await page
+    .waitForFunction((n) => document.querySelectorAll("#result-stars .earned").length >= n, first.stars, { timeout: 10000 })
+    .catch(() => {});
+  await page.waitForTimeout(700);
   const debrief = await page.evaluate(() => {
     const { ui } = __TIDELOCK__;
     const t = window.__starTimes;
