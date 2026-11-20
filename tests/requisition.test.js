@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { UPGRADES, earned, sanitize, spent, available, nextCost, canBuy, buy, bonuses } from "../src/requisition.js";
+import { UPGRADES, earned, sanitize, spent, available, nextCost, canBuy, buy, bonuses, affordable } from "../src/requisition.js";
 import { surgeWindow, STRIKE_MISSIONS } from "../src/strike-data.js";
 import { DIFFICULTIES, DIFFICULTY } from "../src/difficulty.js";
 import { MISSIONS } from "../src/data.js";
@@ -67,4 +67,17 @@ test("every strike mission has a surge window that the modes stretch or shrink",
   }
   assert.equal(surgeWindow({ par: 1 }, { surge: 1 }), 270);
   assert.equal(surgeWindow({ par: 8, harbour: {} }, { surge: 1 }), 600);
+});
+
+test("points are affordable exactly when they cover the cheapest upgrade not yet maxed (5.1)", () => {
+  const cheapest = Math.min(...UPGRADES.map((u) => u.costs[0]));
+  const stars = (n) => ({ 0: { stars: Math.min(3, n) }, 1: { stars: Math.max(0, n - 3) } });
+  assert.equal(affordable(stars(cheapest - 1), {}), false);
+  assert.equal(affordable(stars(cheapest), {}), true);
+  // With every cheap upgrade maxed, the next cheapest decides.
+  const maxed = Object.fromEntries(UPGRADES.filter((u) => u.costs[0] === cheapest).map((u) => [u.id, u.costs.length]));
+  const records = Object.fromEntries(Array.from({ length: 19 }, (_, i) => [i, { stars: 3 }]));
+  const left = available(records, maxed);
+  const next = Math.min(...UPGRADES.map((u) => nextCost(u.id, maxed)).filter((c) => c !== null));
+  assert.equal(affordable(records, maxed), left >= next);
 });

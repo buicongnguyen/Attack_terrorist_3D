@@ -1362,3 +1362,7 @@ export function strikeStars({ success, used, par, damaged }) {
 export function surgeWindow(layout, mode) {
   return ((layout.harbour ? 360 : 240) + 30 * layout.par) * (mode?.surge ?? 1);
 }
+
+// The events this chapter cues for the radio (5.1): an intercept in story.js waits for one of them.
+// "start" with a time is that many seconds into the mission.
+export const RADIO_EVENTS = ["start", "gatheringStruck"];

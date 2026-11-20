@@ -395,11 +395,6 @@ kbd {
 .radio-line.live {
   animation: slide-in 0.3s ease-out;
 }
-.radio-line.fading {
-  opacity: 0;
-  transform: translateX(-12px);
-  transition: 0.6s;
-}
 .radio-line.intercept {
   border-color: rgba(255, 75, 43, 0.7);
   background: rgba(60, 12, 16, 0.86);
@@ -3522,5 +3517,165 @@ dialog [data-mobile-display][data-mobile-display] {
   #combo.checkpoint #combo-count {
     font-size: 20px;
     padding: 8px 18px;
+  }
+}
+
+/* ------------------------------------------------------------------ 5.1 N1: radio and debrief */
+/* Lines the director has taken off the air stay only in an opened phone ticker. */
+#comms:not(.open) .radio-line.past {
+  display: none;
+}
+.radio-line.past {
+  opacity: 0.72;
+}
+/* Marrow breaks in: a red INTERCEPT frame, the Ashen Front emblem and a rolling static. */
+.radio-line.intercept {
+  position: relative;
+  overflow: hidden;
+}
+.radio-line.intercept::after {
+  content: "";
+  position: absolute;
+  inset: -40% 0;
+  pointer-events: none;
+  background: repeating-linear-gradient(0deg, rgba(255, 190, 170, 0.08) 0 1px, transparent 1px 4px);
+  animation: intercept-static 1.2s linear infinite;
+}
+@keyframes intercept-static {
+  to {
+    transform: translateY(20%);
+  }
+}
+.intercept-tag {
+  margin-left: 6px;
+  padding: 1px 6px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: #fff;
+  background: #c8241b;
+}
+.portrait .ashen {
+  width: 70%;
+  height: 70%;
+}
+/* The closing line sits on the result card, so the feed under it hides. */
+body:has(#result-dialog[open]) #comms {
+  visibility: hidden;
+}
+#result-quote {
+  margin: 0 0 12px;
+  text-align: left;
+  outline: none;
+}
+/* The result's hold: the way on waits until the closing line has been read. */
+#result-dialog.holding .result-actions,
+#result-dialog.holding #finale-choice {
+  visibility: hidden;
+}
+#result-stars .earned {
+  animation: star-punch 0.3s ease-out;
+}
+@keyframes star-punch {
+  50% {
+    transform: scale(1.25);
+  }
+}
+#result-criteria li {
+  animation: criterion-tick 0.25s ease-out both;
+  animation-delay: calc(0.3s + var(--i) * 0.3s);
+}
+@keyframes criterion-tick {
+  from {
+    opacity: 0;
+    transform: translateX(-8px);
+  }
+}
+#result-points {
+  margin: -6px 0 14px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--gold);
+}
+#finale-files {
+  margin: 12px auto 0;
+  max-width: 420px;
+  text-align: left;
+  font-size: 13px;
+}
+#finale-files ol {
+  margin: 6px 0;
+  padding-left: 22px;
+  color: #9fb3d8;
+}
+#finale-files li.found {
+  color: #fff;
+}
+#finale-files p {
+  margin: 0;
+  color: var(--gold);
+  font-weight: 700;
+}
+/* Points that buy an upgrade: a dot on the pause button. */
+#pause.points {
+  position: relative;
+}
+#pause.points::after {
+  content: "";
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--gold);
+  box-shadow: 0 0 0 2px var(--ink);
+}
+/* Phones: the radio is a ticker: the speaker's dot, name and line, at most two lines of text (a
+   story line in full) and never under a 44 px tap target. A tap lists the last three lines in full. */
+@media (max-width: 700px), (orientation: landscape) and (max-height: 520px) {
+  #comms {
+    cursor: pointer;
+  }
+  #comms:not(.open) .radio-line {
+    align-items: center;
+    min-height: 44px;
+  }
+  #comms:not(.open) .portrait {
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    box-shadow: none;
+  }
+  #comms:not(.open) .portrait .initials {
+    display: none;
+  }
+  #comms:not(.open) .radio-line > div {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    font-size: 12px;
+    line-height: 16px;
+  }
+  /* A story line is read in full, never clipped. */
+  #comms:not(.open) .radio-line.story > div {
+    display: block;
+    overflow: visible;
+  }
+  #comms:not(.open) .radio-line small {
+    display: none;
+  }
+  #comms:not(.open) .radio-line b::after {
+    content: " ";
+  }
+  #comms:not(.open) .radio-line p {
+    display: inline;
+    margin: 0;
+  }
+  #comms.open .radio-line:nth-child(-n + 3) {
+    display: flex;
   }
 }

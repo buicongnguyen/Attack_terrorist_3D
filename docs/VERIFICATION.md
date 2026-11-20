@@ -1,5 +1,38 @@
 # Release Verification
 
+## Tidelock 5.1, N1: a story you can follow and a debrief that lands
+
+[PLAN-5.1.md](PLAN-5.1.md) N1 was verified on 2026-11-21 against the production build (`vite preview`), Chrome 155 on the GPU. Radio and UI only: **every gameplay field of the 50 golden rows is byte-identical**; the one re-baseline filled each row's `radio` log and nothing else (below). The script, every new or changed line with its speaker, trigger and radio key, is [SCRIPT-5.1.md](SCRIPT-5.1.md), written before story.js changed.
+
+**What changed.** One timeline (landfall tonight at 19:10; `landfallLabel` on each chapter's first briefing; 3.3 has forty minutes; Chapter 1 reads HIGH TIDE in the chip, toasts, Iona's 60 s line and both failure texts). The radio director `src/radio-queue.js` (priority by key, minimum 1 s + words / 3.5 s capped at 7.8 s, 20 s dedupe, story lines never dropped or displaced before their minimum, chatter then stale tactical lines dropped past 4 waiting; 3 lines on desktop, a one-line ticker on phones that a tap opens to the last three), ticked after every fixed step by `src/loop.js` and by the golden harness. Every `game.radio` call passes its key (`downed` and `bargeLost` are new). The closing line on the result card (`#result-quote`) with the hold (at most 6 s from when it was said; tap, click or Enter skips; `?qa` skips unless `&hold=1`), the feed hidden under the result. The reveal ladder (file 4 blacks out the name, file 5 names A. Okafor, file 6 and Reyes's 3.3 line hold the hinge; every file has a `from`). Six Marrow intercepts in a red INTERCEPT frame with the inline Ashen Front emblem and CSS static (off under reduced motion). Harbour beats q25/q50/q75 and, added to keep the harbour under a minute of silence, three working tips after 45 s without a line. A line for each of the nine Echo soldiers. The debrief: stars 300 ms apart with a C5-E5-G5 'star' cue, the score counting up over 0.6 s, criteria ticking in turn (all at once under reduced motion), '+N requisition points · M to spend', a Requisition button and a dot on Pause when the points buy an upgrade, a loss with a warning icon, Mission control instead of a second Retry and 'Try it on Easy' after two, the canal's third star 'Barges above 80% and Marlin takes at most 2 damage', the finale's 'What the files say'.
+
+**The golden re-baseline.** `UPDATE_GOLDEN=1 npm run golden` reported 50 changes, every one of them `<key> radio: [] -> [...]`; the isolation, four interleave and two randomCalls checks passed. A field-by-field comparison of the file before and after (golden-diff.js `diffRows`): changes by field `{"radio": 50}`, every other field of all 50 rows byte-identical with the rows with `radio` removed compared as one string, the frozen field order kept, schema 1, browser Chrome 155.0.8059.85 on both; only the header sha moved. 376 radio entries in all (374 after the review round below). A verify run afterwards: all 50 rows match. The rows hold the desktop feed (3 slots) whatever a check's viewport.
+
+**The radio log** (`[said, shown, who, key, held]`, gated by tests/golden.test.js):
+
+| Check | Result |
+|---|---|
+| Intercepts, Normal pilots | 1.3 at 12.00 s, 1.6 at 42.27 s (the meeting struck; 1.6 has one gathering), 1.9 at 15.00 s, 2.2 at 9.53 s (a broken pincer, before the 20 s fallback), 2.5 said at 9.99 s and shown at 10.48 s, 3.3 at 28.77 s (Reyes aboard last: one step after her pickup line); the same on Easy |
+| 3.1 survivors | Kofi at 6.76 s, Lin Tao at 17.38 s (Normal and Easy) |
+| Story lines over the Easy and Normal pilot rows | 63; 0 dropped, 0 shown for less than their minimum (5.0: 10 of 135 lines pushed out unread) |
+| Normal harbour, longest gap between lines shown | 1.7 45.0 s, 1.8 45.0 s, 1.9 45.0 s (5.0: 126-161 s); q25, q50 and q75 in all three |
+
+**HUD coverage at 390x844 with the ticker** (perf-browser `coverage()`, after 1 s of play; target 36%):
+
+| Mission | After H1 | After N1 | Target |
+|---|---|---|---|
+| 1.1 Wake-Up Call | 36.2% | 35.1% | met |
+| 1.7 Harbour Mouth | 43.2% | 41.0% | **missed, owner sign-off pending (as after H1)** |
+| 2.1 Mangrove Mile | 30.0% | 30.0% | met |
+| 3.1 Hidden Signals | 31.3% | 30.2% | met |
+| 3.4 Eye of the Storm | 31.3% | 31.3% | met |
+
+The phone ticker is the speaker's dot, name and line (at most two lines, at least 44 px tall, text unchanged at 12 px), which took 1.1 and 1.7 down by about a point; no text or target was shrunk.
+
+**Review round.** A code and story review asked for: Story from Mission control over a result now returns to the result (it un-paused a finished game); the result's points line and Requisition button are refreshed when Mission control hands back, and the line hides when a win brings no points; a failure line never said on the radio is held its whole minimum (the 1.4 s credit is only for lines said); the 1.7 and 1.9 three-quarter beats go to Ines and Iona (Reyes is in the valley), Haddad's culvert is eight hours; when Reyes is last aboard her own line gives way to the pickup line and Marrow's intercept comes one step later, and `Game.radio` logs an error if two story lines arrive in one step (no golden or browser run logged one); the 1.6 intercept fires only when a fighter falls while the gathering is live; the 1.3 and 2.5 intercepts, the 3.4 stall line and Kofi's pickup were trimmed, story lines are never clamped in the phone ticker (a check renders all 33 at 390x844); Iona's new 'jam' line keeps the order to bring Marrow down; the 3.3 debrief says last light, not surge. A second radio-only re-baseline moved 8 rows (5/naive/normal, 6/harbour/easy and normal, 8/harbour/easy and normal, 17/rescue/easy and normal, 18/siege/easy), changes by field `{"radio": 8}`, every other field byte-identical; a verify run matches all 50 rows.
+
+**Tests.** 162 Node tests (20 new: tests/radio-queue.test.js with the minimum, dedupe, 3/2/1 slots, story lines with 10 queued, the drop order, the recorded 2.3 Floodplain timeline and a scan that every `game.radio` call passes a key; the timeline, HIGH TIDE, reveal, intercept, one-story-line-per-event, crew, Kestrel One and file-panel checks in story.test.js; the radio-log checks in golden.test.js; canal criteria on every mode; `affordable`; the loop ticking the director per step). **696 browser checks** with GPU=1 and zero errors (679 before, plus 17 debrief, ticker and story-line checks in menus-browser); progress-browser reads 'HIGH TIDE 4:30'. `npm run perf` 29 of 29. `npm run golden` all 50 rows match. Not run: the SwiftShader (CI) variants.
+
 ## Tidelock 5.1, H1: a HUD that reads on a phone
 
 [PLAN-5.1.md](PLAN-5.1.md) H1 was verified on 2026-11-21 against the production build (`vite preview`), Chrome 155 on the GPU. Layout and HUD only: **all 50 golden rows are byte-identical** (`npm run golden`).

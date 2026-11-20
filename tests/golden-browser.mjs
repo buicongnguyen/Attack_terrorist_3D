@@ -80,24 +80,28 @@ export function playRow(play, spec) {
   if (spec.attempt) g.setAttempt(spec.index, spec.attempt);
   else g.attemptsBy.clear();
   ui.setDifficulty(spec.mode);
+  // The rows hold the desktop feed (3 lines at once), whatever the viewport of a check.
+  ui.director.setSlots(3);
   const gl = spec.interleave ? view.renderer.getContext() : null;
   const draws = ["drawArrays", "drawElements", "drawArraysInstanced", "drawElementsInstanced"];
-  if (gl) {
-    // The frame loop's HUD and render between every second step (past the HUD's 80 ms throttle,
-    // so it redraws each time): code on the render side must never feed back into the
-    // simulation. Nothing reads the frames back, so the WebGL draw calls do nothing here. All the
-    // game's render code and three.js up to each draw (culling, sorting, uniforms, uploads) still
-    // run; only the draws are skipped, which took 85% of the 1.8 check's time under SwiftShader.
-    let steps = 0;
-    for (const name of draws) gl[name] = () => {};
-    g.update = function (dt) {
-      Object.getPrototypeOf(this).update.call(this, dt);
-      if (++steps % 2) return;
-      ui.lastHUD = -Infinity;
-      ui.updateHUD();
-      view.render(this.time, this.reducedMotion ? 0 : this.shake);
-    };
-  }
+  // The radio director is ticked after every step, as the frame loop ticks it (5.1 N1), so the
+  // row's radio log is time-true.
+  let steps = 0;
+  if (gl) for (const name of draws) gl[name] = () => {};
+  g.update = function (dt) {
+    Object.getPrototypeOf(this).update.call(this, dt);
+    ui.director.tick(dt);
+    // Interleave: the frame loop's HUD and render between every second step (past the HUD's
+    // 80 ms throttle, so it redraws each time): code on the render side must never feed back into
+    // the simulation. Nothing reads the frames back, so the WebGL draw calls do nothing here. All
+    // the game's render code and three.js up to each draw (culling, sorting, uniforms, uploads)
+    // still run; only the draws are skipped, which took 85% of the 1.8 check's time under
+    // SwiftShader.
+    if (!gl || ++steps % 2) return;
+    ui.lastHUD = -Infinity;
+    ui.updateHUD();
+    view.render(this.time, this.reducedMotion ? 0 : this.shake);
+  };
   if (spec.fixture === "cosmetic-draw") {
     // Test only: the first wake ring, a cosmetic effect, also draws once from the mission's source.
     let drawn = false;
@@ -145,8 +149,8 @@ export function playRow(play, spec) {
     launches: null,
     runsBroken: null,
     phase: null,
-    // Filled from N1's radio director (ticked at 1/120 per step); empty until then.
-    radio: [],
+    // The radio director's log (5.1 N1, ticked at 1/120 per step): [said, shown, who, key, held].
+    radio: ui.director.record(),
   };
 }
 

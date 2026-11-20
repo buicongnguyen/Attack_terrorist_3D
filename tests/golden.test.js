@@ -17,6 +17,8 @@ import {
   serialize,
   sortRows,
 } from "./golden-diff.js";
+import { CAST, INTERCEPTS, MISSION_STORY, interceptFor } from "../src/story.js";
+import { STORY, minimumFor, priorityOf } from "../src/radio-queue.js";
 
 // A schema-1 row with every field; `extra` overrides some.
 const row = (key, extra = {}) => ({
@@ -160,7 +162,6 @@ test("the recorded file holds 50 rows keyed mission/pilot/mode with the full fro
     assert.match(r.key, /^\d+\/[a-z]+\/(easy|normal|hard|crazy)$/);
     assert.deepEqual(Object.keys(r), FIELDS, r.key);
     for (const f of RESERVED) assert.equal(r[f], null, `${r.key} ${f}`);
-    assert.deepEqual(r.radio, [], `${r.key}: the radio log waits for N1`);
   }
   const expected = [];
   for (const mode of ["normal", "easy"])
@@ -190,4 +191,66 @@ test("the scripted pilots still win what the 5.0 suite asserted they win", () =>
   const finale = byKey.get("18/siege/normal");
   assert.equal(finale.status, "success");
   assert.equal(finale.gate, 100);
+});
+
+// ---------------------------------------------------------------- 5.1 N1: the radio log
+
+// The text a logged line was said with, for the story keys (the log keeps the key, not the text).
+function storyText(index, key, who) {
+  if (key === "intercept") return interceptFor(index).line.text;
+  if (key === "bargeLost") return who === "okafor" ? "Harbor Mercy is going down! Get the crew across!" : "";
+  return MISSION_STORY[index].radio[key].text;
+}
+const pilotRows = recorded.rows.filter((r) => !/\/(idle|naive)\//.test(r.key));
+const missionOfKey = (key) => Number(key.split("/")[0]);
+
+test("every row's radio log is the director's: [said, shown, who, key, held]", () => {
+  for (const r of recorded.rows) {
+    assert.ok(Array.isArray(r.radio) && r.radio.length > 0, `${r.key}: an empty radio log`);
+    let last = 0;
+    for (const [said, shown, who, key, held] of r.radio) {
+      assert.ok(said >= last && (shown === null || shown >= said), `${r.key}: ${said} ${shown}`);
+      assert.ok(CAST[who], `${r.key}: ${who}`);
+      assert.equal(typeof key, "string");
+      assert.ok(typeof held === "number" || ["open", "waiting", "dropped", "dupe"].includes(held), `${r.key}: ${held}`);
+      last = said;
+    }
+  }
+});
+
+test("each intercept fires from its event in its pilot runs, and the 3.1 survivors speak", () => {
+  for (const intercept of INTERCEPTS)
+    for (const r of pilotRows.filter((r) => missionOfKey(r.key) === intercept.mission)) {
+      const said = r.radio.filter((e) => e[3] === "intercept");
+      assert.equal(said.length, 1, `${r.key}: ${said.length} intercepts`);
+      assert.equal(said[0][2], "marrow");
+      assert.ok(said[0][1] !== null, `${r.key}: the intercept was never shown`);
+      // A timed intercept comes at its time (the log keeps hundredths); 2.2 may come sooner, from
+      // a broken pincer.
+      if (intercept.event === "start") assert.ok(Math.abs(said[0][0] - intercept.after) < 0.02, `${r.key}: ${said[0][0]}`);
+      else if (intercept.after !== undefined) assert.ok(said[0][0] <= intercept.after + 0.02, `${r.key}: ${said[0][0]}`);
+    }
+  for (const mode of ["normal", "easy"]) {
+    const voices = byKey.get(`15/rescue/${mode}`).radio.filter((e) => e[3] === "aboard").map((e) => e[2]);
+    assert.ok(voices.includes("kofi") && voices.includes("lin"), `${mode}: ${voices}`);
+  }
+});
+
+test("no story line is dropped or cut short, and the harbour never goes a minute without a line", () => {
+  let stories = 0;
+  for (const r of pilotRows)
+    for (const [, , who, key, held] of r.radio) {
+      if (priorityOf(key) !== STORY) continue;
+      stories++;
+      assert.ok(held !== "dropped" && held !== "waiting" && held !== "dupe", `${r.key} ${key}: ${held}`);
+      if (typeof held === "number") assert.ok(held >= minimumFor(storyText(missionOfKey(r.key), key, who)) - 0.01, `${r.key} ${key}: ${held} s`);
+    }
+  assert.ok(stories >= 50, `${stories} story lines`);
+  for (const index of [6, 7, 8]) {
+    const r = byKey.get(`${index}/harbour/normal`);
+    for (const key of ["q25", "q50", "q75"]) assert.ok(r.radio.some((e) => e[3] === key), `${r.key}: no ${key}`);
+    const times = [0, ...r.radio.filter((e) => e[1] !== null).map((e) => e[1]), r.endTime].sort((a, b) => a - b);
+    const gap = Math.max(...times.slice(1).map((t, i) => t - times[i]));
+    assert.ok(gap <= 60, `${r.key}: ${gap.toFixed(1)} s without a line`);
+  }
 });

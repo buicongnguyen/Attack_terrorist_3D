@@ -375,3 +375,7 @@ export const isHostileEntity = (e) =>
   !e.shielded &&
   HOSTILE_TYPES.has(e.type) &&
   (e.type !== "cave" || !["hidden", "opening", "disabled"].includes(e.phase));
+
+// The events this chapter cues for the radio (5.1): an intercept in story.js waits for one of them.
+// "start" with a time is that many seconds into the mission.
+export const RADIO_EVENTS = ["start", "reyesAboard"];

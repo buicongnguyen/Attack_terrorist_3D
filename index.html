@@ -60,8 +60,8 @@
           <i data-lucide="scan"></i><strong id="objective-line-count">03</strong><span id="objective-line-unit">TARGETS LEFT</span>
         </button>
         <div class="top-actions">
-          <div id="tide-chip" class="tide-chip" role="timer" aria-label="Surge window" hidden>
-            <i data-lucide="waves"></i><span id="tide-text">SURGE 0:00</span>
+          <div id="tide-chip" class="tide-chip" role="timer" aria-label="High tide" hidden>
+            <i data-lucide="waves"></i><span id="tide-text">HIGH TIDE 0:00</span>
           </div>
           <div class="score"><span>SCORE</span><strong id="score">00000</strong></div>
           <button id="sound" class="icon-button" aria-label="Mute sound" title="Mute sound">
@@ -332,6 +332,7 @@
     </dialog>
 
     <dialog id="result-dialog" aria-labelledby="result-title" aria-describedby="result-story">
+      <figure id="result-quote" class="radio-line" tabindex="-1"></figure>
       <div class="result-emblem"><img id="result-emblem-img" alt="" width="88" height="88" hidden /><i id="result-icon" data-lucide="badge-check"></i></div>
       <p class="eyebrow" id="result-eyebrow">MISSION COMPLETE</p>
       <h2 id="result-title">Jammer down</h2>
@@ -346,6 +347,11 @@
           <button id="finale-broadcast" class="primary-button" data-ending="broadcast"><i data-lucide="radio-tower"></i><span></span></button
           ><button id="finale-seal" class="secondary-button" data-ending="seal"><i data-lucide="lock"></i><span></span></button>
         </div>
+        <div id="finale-files">
+          <strong>What the files say</strong>
+          <ol id="finale-files-list"></ol>
+          <p id="finale-files-count"></p>
+        </div>
       </div>
       <div id="result-stars" role="img" aria-label="Mission rating"></div>
       <ul id="result-criteria"></ul>
@@ -354,9 +360,13 @@
         <div><span>TARGETS</span><strong id="result-targets">0</strong></div>
         <div><span>BEST</span><strong id="result-best">0</strong></div>
       </div>
+      <p id="result-points" hidden></p>
       <div class="result-actions">
         <button id="result-next" class="primary-button">Next mission<i data-lucide="arrow-right"></i></button
-        ><button id="result-retry" class="secondary-button"><i data-lucide="rotate-ccw"></i>Retry</button>
+        ><button id="result-retry" class="secondary-button"><i data-lucide="rotate-ccw"></i>Retry</button
+        ><button id="result-menu" class="secondary-button" hidden><i data-lucide="sliders-horizontal"></i>Mission control</button
+        ><button id="result-easy" class="secondary-button" hidden><i data-lucide="shield"></i>Try it on Easy</button
+        ><button id="result-req" class="secondary-button" hidden><i data-lucide="sparkles"></i>Requisition</button>
       </div>
     </dialog>
     <script type="module" src="/src/main.js"></script>

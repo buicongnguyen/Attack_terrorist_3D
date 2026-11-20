@@ -1,6 +1,9 @@
 // Menu layout checks (2.8): the briefing, Mission Control and the result screens on phones,
 // tablets and desktop. Every tap target is at least 44 px (43 with rounding), text is 11 px or
 // more, nothing scrolls sideways, and no button sticks out of its dialog.
+import { FAILURE_RADIO, INTERCEPTS, MISSION_STORY } from "../src/story.js";
+import { STORY, minimumFor, priorityOf } from "../src/radio-queue.js";
+
 export async function checkMenus(browser, url, check) {
   const sizes = [
     [390, 844],
@@ -157,4 +160,258 @@ export async function checkMenus(browser, url, check) {
     check(`menus page errors ${width}x${height}${errors.length ? ": " + errors[0].slice(0, 60) : ""}`, errors.length === 0);
     await page.close();
   }
+  await checkDebrief(browser, url, check);
+}
+
+// 5.1 N1: the closing-line card, its hold, the debrief and the radio ticker, in fresh pages
+// (an empty save, so the requisition numbers are known).
+const CINDER = MISSION_STORY[8].radio.success.text;
+
+async function checkDebrief(browser, url, check) {
+  // ---- the hold, on a desktop with ?qa&hold=1
+  const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
+  const errors = [];
+  page.on("pageerror", (e) => errors.push(e.message));
+  await page.goto(`${url}?qa=1&hold=1`);
+  await page.waitForFunction(() => document.documentElement.dataset.ready === "true", null, { timeout: 60000 });
+  // A win of 1.9: the closing line is said, the mission ends, the result opens 1.4 s later.
+  const win = (index) =>
+    page.evaluate((index) => {
+      const { game: g, ui } = __TIDELOCK__;
+      ui.start(index);
+      g.paused = false;
+      g.op.say("success");
+      g.finish(true);
+      for (let i = 0; i < 240 && !document.getElementById("result-dialog").open; i++) g.update(1 / 120);
+      window.__opened = performance.now();
+      return { open: document.getElementById("result-dialog").open, stars: g.result().stars };
+    }, index);
+  const actionsShown = () => getComputedStyle(document.querySelector("#result-dialog .result-actions")).visibility === "visible";
+  await win(8);
+  const during = await page.evaluate((shown) => {
+    const { game: g, ui } = __TIDELOCK__;
+    ui.menu();
+    return {
+      shown: eval(`(${shown})`)(),
+      menu: document.getElementById("menu-dialog").open,
+      paused: g.paused,
+      quote: document.querySelector("#result-quote p").textContent,
+      name: document.querySelector("#result-quote b").textContent,
+      hold: ui.holdFor,
+    };
+  }, actionsShown.toString());
+  await page.waitForFunction(`(${actionsShown})()`, null, { timeout: 10000 });
+  const waited = await page.evaluate(() => (performance.now() - window.__opened) / 1000);
+  check(
+    `debrief: after a 1.9 win the actions wait for the closing line (${waited.toFixed(2)} s of ${during.hold.toFixed(2)} s), the quote is Ines's success line, and a menu asked for meanwhile leaves the game paused`,
+    !during.shown && waited >= during.hold - 0.05 && during.hold > 4 && during.name === "Ines Duarte" && during.quote === CINDER && !during.menu && during.paused,
+  );
+  // Enter skips the wait; a held, repeating Enter does not.
+  await win(8);
+  const repeat = await page.evaluate((shown) => {
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", repeat: true, cancelable: true }));
+    return eval(`(${shown})`)();
+  }, actionsShown.toString());
+  await page.keyboard.press("Enter");
+  const skipped = await page.evaluate((shown) => ({ shown: eval(`(${shown})`)(), after: (performance.now() - window.__opened) / 1000, focus: document.activeElement?.id }), actionsShown.toString());
+  check(`debrief: Enter skips the hold (${skipped.after.toFixed(2)} s) and a repeating Enter does not`, !repeat && skipped.shown && skipped.after < 3 && skipped.focus === "result-next");
+
+  // ---- stars, points and Requisition on a first win (an empty save: 0 points before)
+  const stars = await page.evaluate(() => {
+    const times = [];
+    const observer = new MutationObserver(() => {
+      const n = document.querySelectorAll("#result-stars .earned").length;
+      if (n > times.length) times.push(performance.now());
+    });
+    observer.observe(document.getElementById("result-stars"), { subtree: true, attributes: true, childList: true });
+    window.__starTimes = times;
+    return true;
+  });
+  const first = await win(0);
+  await page.waitForTimeout(1300);
+  const debrief = await page.evaluate(() => {
+    const { ui } = __TIDELOCK__;
+    const t = window.__starTimes;
+    return {
+      gaps: t.slice(1).map((x, i) => x - t[i]),
+      earned: document.querySelectorAll("#result-stars .earned").length,
+      points: document.getElementById("result-points").textContent,
+      spend: Object.values(ui.save.records).reduce((s, r) => s + r.stars, 0),
+      req: !document.getElementById("result-req").hidden,
+      score: document.getElementById("result-score").textContent,
+      dot: document.getElementById("pause").classList.contains("points"),
+    };
+  });
+  check(
+    `debrief: ${debrief.earned} stars revealed one at a time (gaps ${debrief.gaps.map((g) => g.toFixed(0)).join(", ")} ms), and the score counted up to ${debrief.score}`,
+    stars && debrief.earned === first.stars && debrief.gaps.length === first.stars - 1 && debrief.gaps.every((g) => g >= 295) && debrief.score !== "0",
+  );
+  check(
+    `debrief: '${debrief.points}' is the change in requisition points, and Requisition shows when they buy an upgrade`,
+    debrief.points === `+${first.stars} requisition point${first.stars === 1 ? "" : "s"} · ${debrief.spend} to spend` && debrief.req === first.stars >= 2 && debrief.dot === debrief.req,
+  );
+  await page.evaluate(() => document.getElementById("result-req").click());
+  const opened = await page.evaluate(() => ({ menu: document.getElementById("menu-dialog").open, req: document.getElementById("req-details").open, result: document.getElementById("result-dialog").open }));
+  await page.evaluate(() => document.getElementById("resume").click());
+  const back = await page.evaluate(() => ({ result: document.getElementById("result-dialog").open, paused: __TIDELOCK__.game.paused }));
+  check(`debrief: Requisition opens the panel and closing it comes back to the result (${JSON.stringify({ opened, back })})`, opened.menu && opened.req && !opened.result && back.result && back.paused);
+
+  // A purchase made from the result is reflected when Mission control hands back (5.1 review).
+  const bought = await page.evaluate(() => {
+    const { ui } = __TIDELOCK__;
+    const before = document.getElementById("result-points").textContent;
+    ui.menuFromResult(true);
+    const button = document.querySelector("#req-list button:not([disabled])");
+    const cost = Number(button.textContent.replace(/\D/g, ""));
+    button.click();
+    document.getElementById("resume").click();
+    return { before, after: document.getElementById("result-points").textContent, cost, req: !document.getElementById("result-req").hidden, open: document.getElementById("result-dialog").open };
+  });
+  const spendOf = (text) => Number(/· (\d+) to spend/.exec(text)[1]);
+  const affordableNow = await page.evaluate(() => document.getElementById("pause").classList.contains("points"));
+  check(
+    `debrief: after a purchase the result's points and Requisition button are current (${JSON.stringify(bought)})`,
+    bought.open && spendOf(bought.after) === spendOf(bought.before) - bought.cost && bought.req === affordableNow,
+  );
+  // Mission control > Story > Back to the mission over a result comes back to the result.
+  const story = await page.evaluate(() => {
+    const { ui, game: g } = __TIDELOCK__;
+    ui.menuFromResult();
+    document.getElementById("story").click();
+    const prologue = document.getElementById("prologue-dialog").open;
+    document.getElementById("prologue-start").click();
+    return { prologue, result: document.getElementById("result-dialog").open, paused: g.paused, status: g.status };
+  });
+  check(`debrief: Story from Mission control over a result goes back to the result, still paused (${JSON.stringify(story)})`, story.prologue && story.result && story.paused && story.status === "success");
+  // A win that brings no new points shows no points line.
+  await win(0);
+  const repeatWin = await page.evaluate(() => document.getElementById("result-points").hidden);
+  check("debrief: a win that brings no new points shows no points line", repeatWin);
+
+  // ---- reduced motion: every star at once
+  const still = await page.evaluate(() => {
+    const { game: g, ui } = __TIDELOCK__;
+    g.reducedMotion = true;
+    ui.start(1);
+    g.paused = false;
+    g.op.say("success");
+    g.finish(true);
+    for (let i = 0; i < 240 && !document.getElementById("result-dialog").open; i++) g.update(1 / 120);
+    const n = document.querySelectorAll("#result-stars .earned").length;
+    g.reducedMotion = false;
+    return { n, stars: g.result().stars, score: document.getElementById("result-score").textContent };
+  });
+  check(`debrief: under reduced motion all ${still.stars} stars and the score show at once`, still.n === still.stars && still.score !== "0");
+
+  // ---- a loss: a warning, no second Retry, and Easy after two
+  const lose = () =>
+    page.evaluate(() => {
+      const { game: g, ui } = __TIDELOCK__;
+      ui.setDifficulty("normal");
+      ui.start(3);
+      g.paused = false;
+      g.finish(false, "flight");
+      for (let i = 0; i < 240 && !document.getElementById("result-dialog").open; i++) g.update(1 / 120);
+      const hold = ui.holdFor;
+      ui.revealResult();
+      const visible = (id) => !document.getElementById(id).hidden;
+      return {
+        hold,
+        badge: Boolean(document.querySelector("#result-dialog .lucide-badge-check")),
+        warning: Boolean(document.querySelector("#result-dialog .lucide-triangle-alert")),
+        retry: visible("result-retry"),
+        menu: visible("result-menu"),
+        easy: visible("result-easy"),
+        quote: document.querySelector("#result-quote p").textContent,
+      };
+    });
+  const once = await lose();
+  const twice = await lose();
+  check(
+    `debrief: a loss shows a warning, Mission control instead of a second Retry, and 'Try it on Easy' after two (${JSON.stringify({ once, twice })})`,
+    !once.badge && once.warning && !once.retry && once.menu && !once.easy && twice.easy && once.quote === FAILURE_RADIO.flight.text,
+  );
+  // A failure line never said on the radio is held for its whole minimum, from when the result opens.
+  check(`debrief: an unsaid failure line holds its full minimum (${once.hold.toFixed(2)} s)`, Math.abs(once.hold - minimumFor(FAILURE_RADIO.flight.text)) < 1e-6);
+  const easy = await page.evaluate(() => {
+    document.getElementById("result-easy").click();
+    const { game: g } = __TIDELOCK__;
+    return { mode: g.difficulty, index: g.index, open: document.getElementById("result-dialog").open };
+  });
+  check(`debrief: 'Try it on Easy' sets Easy and starts the mission again (${JSON.stringify(easy)})`, easy.mode === "easy" && easy.index === 3 && !easy.open);
+
+  // ---- the finale's file panel counts the files in the save
+  const finale = await page.evaluate(() => {
+    const { ui } = __TIDELOCK__;
+    ui.start(18);
+    ui.showResult({ success: true, score: 9000, stars: 2, index: 18, kills: 40, reason: null, accuracy: 60 });
+    const found = [5, 8, 10, 14, 16, 17].filter((i) => ui.save.records[i]).length;
+    return {
+      text: document.getElementById("finale-files-count").textContent,
+      found,
+      rows: document.querySelectorAll("#finale-files-list li").length,
+      missing: [...document.querySelectorAll("#finale-files-list li")].filter((li) => li.textContent === "Not recovered").length,
+    };
+  });
+  check(`debrief: the finale's choice card reads '${finale.text}'`, finale.text === `You have read ${finale.found} of 6 files` && finale.rows === 6 && finale.missing === 6 - finale.found);
+  check(`debrief page errors${errors.length ? ": " + errors[0].slice(0, 80) : ""}`, errors.length === 0);
+  await page.close();
+
+  // ---- the phones' ticker and Marrow's intercept frame
+  const phone = await browser.newPage({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+  await phone.goto(`${url}?qa=1`);
+  await phone.waitForFunction(() => document.documentElement.dataset.ready === "true", null, { timeout: 60000 });
+  const ticker = await phone.evaluate(() => {
+    const { game: g, ui } = __TIDELOCK__;
+    ui.start(2);
+    g.paused = false;
+    for (let i = 0; i < 120 * 12.5; i++) {
+      g.update(1 / 120);
+      ui.director.tick(1 / 120);
+    }
+    ui.updateHUD(true);
+    const shown = () => [...document.querySelectorAll("#comms .radio-line")].filter((el) => getComputedStyle(el).display !== "none");
+    const closed = shown().length;
+    const intercept = document.querySelector("#comms .radio-line.intercept");
+    const frame = intercept && {
+      tag: intercept.querySelector(".intercept-tag")?.textContent,
+      emblem: Boolean(intercept.querySelector(".portrait svg.ashen")),
+      lines: Math.round(intercept.querySelector("div").getBoundingClientRect().height / parseFloat(getComputedStyle(intercept.querySelector("div")).lineHeight)),
+    };
+    document.getElementById("comms").click();
+    ui.updateHUD(true);
+    const open = shown().length;
+    return { slots: ui.director.slots, closed, open, said: ui.director.log.length, frame };
+  });
+  check(
+    `debrief: the phone ticker shows one line (at most two lines of text) and a tap lists the last three; Marrow's 1.3 intercept is framed (${JSON.stringify(ticker)})`,
+    ticker.slots === 1 && ticker.closed === 1 && ticker.open === Math.min(3, ticker.said) && ticker.open > 1 && ticker.frame?.tag === "INTERCEPT" && ticker.frame.emblem && ticker.frame.lines <= 2,
+  );
+  // 1.6: the meeting is the mission's only gathering, so 'gatheringStruck' is the meeting struck.
+  const meeting = await phone.evaluate(() => {
+    const { ui, game: g } = __TIDELOCK__;
+    ui.start(5);
+    return g.op.events.length;
+  });
+  check(`debrief: 1.6's only gathering is the lieutenants' meeting (${meeting})`, meeting === 1);
+  // Every story-priority line reads in full in the phone ticker, without a tap (5.1 review).
+  const stories = [
+    ...MISSION_STORY.flatMap((story) => Object.entries(story.radio).filter(([key]) => priorityOf(key) === STORY)),
+    ...INTERCEPTS.map((i) => ["intercept", i.line]),
+  ];
+  const clipped = await phone.evaluate((stories) => {
+    const { ui } = __TIDELOCK__;
+    const out = [];
+    for (const [key, line] of stories) {
+      ui.director.clear();
+      ui.director.say(line, key);
+      ui.updateHUD(true);
+      const el = document.querySelector("#comms .radio-line");
+      const text = el?.querySelector("div");
+      if (!el || getComputedStyle(el).display === "none" || text.scrollHeight > text.clientHeight + 1) out.push(line.text.slice(0, 40));
+    }
+    return out;
+  }, stories);
+  check(`debrief: none of the ${stories.length} story lines is clipped in the phone ticker at 390x844${clipped.length ? ": " + clipped.join(" | ") : ""}`, clipped.length === 0);
+  await phone.close();
 }

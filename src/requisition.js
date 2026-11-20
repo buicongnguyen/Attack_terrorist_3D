@@ -40,6 +40,10 @@ export function canBuy(id, records, levels) {
   return cost !== null && cost <= available(records, levels);
 }
 
+// Whether the points cover the cheapest upgrade not yet maxed (5.1: the debrief's Requisition
+// button and the dot on the pause button).
+export const affordable = (records, levels) => UPGRADES.some((u) => canBuy(u.id, records, levels));
+
 // The levels after buying one level of `id`, or null when it cannot be bought.
 export function buy(id, records, levels) {
   if (!canBuy(id, records, levels)) return null;

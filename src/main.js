@@ -45,7 +45,7 @@ async function boot() {
   document.getElementById("app").hidden = false;
   view.resize();
   const clock = new FixedClock();
-  const loop = createLoop({ clock, governor, game, ui, view, now: performance.now(), hidden: () => document.hidden });
+  const loop = createLoop({ clock, governor, game, ui, view, radio: ui.director, now: performance.now(), hidden: () => document.hidden });
   const animate = (now) => {
     loop.frame(now);
     requestAnimationFrame(animate);

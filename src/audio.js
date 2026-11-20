@@ -1,4 +1,8 @@
 // Synthesized effects: layered tones and filtered noise, no audio files to download.
+
+// The debrief's star cue (5.1): C5, E5 and G5.
+export const STAR_NOTES = [523.25, 659.25, 783.99];
+
 export class AudioBus {
   constructor(muted = false) {
     this.muted = muted;
@@ -71,7 +75,7 @@ export class AudioBus {
     };
   }
 
-  play(kind) {
+  play(kind, step = 0) {
     if (this.muted || !this.context || this.context.state !== "running") return;
     // Rate-limit identical sounds so salvos and chain reactions stay pleasant.
     const now = this.context.currentTime;
@@ -121,6 +125,11 @@ export class AudioBus {
       case "radio":
         this.tone("square", 1400, 1400, 0.04, 0.015);
         this.tone("square", 1850, 1850, 0.05, 0.015, 0.06);
+        break;
+      case "star":
+        // The debrief's stars (5.1): C5, E5, G5, one note a star, with a soft sparkle above.
+        this.tone("triangle", STAR_NOTES[step], STAR_NOTES[step], 0.28, 0.07);
+        this.tone("sine", STAR_NOTES[step] * 2, STAR_NOTES[step] * 2, 0.18, 0.02, 0.03);
         break;
       case "win":
         [523, 659, 784, 1046].forEach((f, i) => this.tone("triangle", f, f, 0.22, 0.06, i * 0.12));

@@ -6,7 +6,7 @@ import { STEP } from "../src/data.js";
 import { GRACE } from "../src/quality.js";
 
 // A game, HUD, view and governor that only record what the loop asks of them.
-function rig({ change = () => null, hidden = () => false } = {}) {
+function rig({ change = () => null, hidden = () => false, radio = null } = {}) {
   const log = { steps: [], renders: 0, huds: 0, inputs: 0, samples: [], applied: 0, graphics: 0 };
   const game = {
     paused: false,
@@ -42,7 +42,7 @@ function rig({ change = () => null, hidden = () => false } = {}) {
   };
   const clock = new FixedClock();
   let now = 1000;
-  const loop = createLoop({ clock, governor, game, ui, view, now, hidden });
+  const loop = createLoop({ clock, governor, game, ui, view, radio, now, hidden });
   // Frames `ms` apart (one number per frame).
   const frames = (...gaps) => {
     for (const ms of gaps) {
@@ -148,4 +148,14 @@ test("a hidden page never counts as slow play", () => {
     log.samples.map((s) => s.active),
     [false, true],
   );
+});
+
+test("the radio director is ticked once per step with the step's dt, never while paused (5.1)", () => {
+  const ticks = [];
+  const { log, game, frames } = rig({ radio: { tick: (dt) => ticks.push(dt) } });
+  frames(...repeat(16, 30));
+  assert.deepEqual(ticks, log.steps);
+  game.paused = true;
+  frames(...repeat(16, 10));
+  assert.equal(ticks.length, log.steps.length);
 });

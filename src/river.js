@@ -134,7 +134,7 @@ export class RiverOperation {
     const line = this.story?.radio?.[key] || RIVER_RADIO[key];
     if (!line) return;
     this.said.add(key);
-    this.game.radio(line);
+    this.game.radio(line, key);
   }
 
   createBarge(z, i) {
@@ -623,7 +623,7 @@ export class RiverOperation {
     if (barge.hp <= 0) {
       barge.alive = false;
       g.blast(barge.mesh.position.clone().add(V(0, 1, 0)), 3.5, 0xff8a2b);
-      g.radio({ who: "okafor", text: barge.index === 0 ? "Harbor Mercy is going down! Get the crew across!" : "We lost the second barge! Keep going!" });
+      g.radio({ who: "okafor", text: barge.index === 0 ? "Harbor Mercy is going down! Get the crew across!" : "We lost the second barge! Keep going!" }, "bargeLost");
     }
   }
 
@@ -797,6 +797,8 @@ export class RiverOperation {
     this.orders = this.orders.filter((o) => {
       const alive = g.entities.some((e) => e.type === "skiff" && !e.dead && e.order === o);
       if (!alive && o.ring) g.view.disposeObject(o.ring);
+      // 5.1: a pincer with no skiff left is broken (Marrow's 2.2 cue).
+      if (!alive && o.pattern === "pincer") g.cue("pincerDown");
       return alive;
     });
   }
@@ -1449,15 +1451,19 @@ export class RiverOperation {
     };
   }
 
-  stars(success) {
+  // What the stars and the debrief's criteria are judged on.
+  starInput(success) {
     const alive = this.barges.filter((b) => b.alive);
-    const health = alive.reduce((s, b) => s + b.hp / b.max, 0) / this.barges.length;
-    return riverStars({
+    return {
       success,
       bargesLost: this.barges.length - alive.length,
-      bargeHealth: health,
+      bargeHealth: alive.reduce((s, b) => s + b.hp / b.max, 0) / this.barges.length,
       damage: this.game.damageTaken,
-    });
+    };
+  }
+
+  stars(success) {
+    return riverStars(this.starInput(success));
   }
 
   finishBonus() {

@@ -8,6 +8,7 @@ import {
   AIR_STRIKE,
   skiffPath,
   riverStars,
+  riverCriteria,
   strikeLine,
   laserHeat,
   DECK_GUN_RANGE,
@@ -16,6 +17,7 @@ import {
   BARRACKS,
 } from "../src/river-data.js";
 import { PICKUPS } from "../src/pickups.js";
+import { DIFFICULTIES, difficulty } from "../src/difficulty.js";
 
 test("six river legs with ordered scripts that end at the destination", () => {
   assert.equal(RIVER_MISSIONS.length, 6);
@@ -166,4 +168,24 @@ test("barracks stand on the banks in every canal mission and take a burst to kno
   assert.ok(BARRACKS.every * BARRACKS.crew > 6);
   // It stands on the bank, clear of the guns at the water's edge.
   assert.ok(BARRACKS.offset > 3.4 + 1.9);
+});
+
+test("every canal criterion's text matches its check on every mode (5.1)", () => {
+  // Marlin's damage is what her shields lost: a hit costs the mode's enemy damage.
+  for (const mode of DIFFICULTIES) {
+    const perHit = difficulty(mode).enemyDamage;
+    for (const success of [false, true])
+      for (const bargesLost of [0, 1])
+        for (const bargeHealth of [0.5, 0.79, 0.8, 1])
+          for (let hits = 0; hits <= 4; hits++) {
+            const input = { success, bargesLost, bargeHealth, damage: hits * perHit };
+            const [deliver, both, clean] = riverCriteria(input);
+            assert.equal(deliver[0], success);
+            assert.equal(both[0], success && bargesLost === 0);
+            assert.equal(clean[0], success && bargeHealth >= 0.8 && input.damage <= 2);
+            assert.equal(clean[1], "Barges above 80% and Marlin takes at most 2 damage");
+            // The stars are the criteria met.
+            assert.equal(riverStars(input), success ? [deliver, both, clean].filter(([ok]) => ok).length : 0, mode);
+          }
+  }
 });

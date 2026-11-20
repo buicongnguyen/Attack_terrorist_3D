@@ -31,7 +31,7 @@ export async function checkProgress(browser, url, check) {
     ui.updateHUD(true);
     const chip = $("tide-chip").getBoundingClientRect();
     r.hudShowsTheClock =
-      getComputedStyle($("tide-chip")).display !== "none" && chip.width > 0 && chip.bottom <= innerHeight && $("tide-text").textContent === "SURGE 4:30" && parseFloat(getComputedStyle($("tide-text")).fontSize) >= 13;
+      getComputedStyle($("tide-chip")).display !== "none" && chip.width > 0 && chip.bottom <= innerHeight && $("tide-text").textContent === "HIGH TIDE 4:30" && parseFloat(getComputedStyle($("tide-text")).fontSize) >= 13;
     r.tideStartsGold = !$("tide-chip").classList.contains("warn") && !$("tide-chip").classList.contains("urgent");
     g.difficulty = "easy";
     op = enter(0);

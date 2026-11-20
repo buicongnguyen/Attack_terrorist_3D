@@ -53,6 +53,10 @@ import { patternPoints, patternDiagram, predictHits, ROTATION_STEP, SHAPES } fro
 import { Fleet, dampAngle } from "./harbour.js";
 import { CityView } from "./city.js";
 import { MISSION_STORY, STRIKE_RADIO } from "./story.js";
+
+// The harbour's quiet spells (5.1): seconds without a radio line before a tip, and the tips.
+const QUIET = 45;
+const QUIET_KEYS = ["quiet1", "quiet2", "quiet3"];
 import { clamp } from "./physics.js";
 import { scalePayload } from "./difficulty.js";
 import { bonuses } from "./requisition.js";
@@ -631,7 +635,7 @@ export class StrikeOperation {
     const line = this.story?.radio?.[key] || STRIKE_RADIO[key];
     if (!line) return;
     this.said.set(key, this.game.time);
-    this.game.radio(line);
+    this.game.radio(line, key);
   }
 
   // ------------------------------------------------------------------ player actions
@@ -1453,7 +1457,7 @@ export class StrikeOperation {
       a.arc.visible = false;
       a.pipper.visible = false;
       a.cells.visible = false;
-      g.radio({ who: a.crew === "iona" ? "iona" : a.crew, text: `${a.callsign} is hit! Breaking off.` });
+      g.radio({ who: a.crew === "iona" ? "iona" : a.crew, text: `${a.callsign} is hit! Breaking off.` }, "downed");
       this.autoSelect();
     } else g.notify("toast", `${a.callsign.toUpperCase()} HIT`);
   }
@@ -1760,6 +1764,12 @@ export class StrikeOperation {
           Math.hypot(e.position.x - event.centre.x, e.position.y - event.centre.y, e.position.z - event.centre.z) < 2.2,
       ).length;
       event.status = status;
+      // 5.1: a fighter falling while the gathering is live is the gathering struck (Marrow's 1.6
+      // cue); one killed on the way there is not.
+      if (!event.struck && status.active && alive < event.alive) {
+        event.struck = true;
+        g.cue("gatheringStruck");
+      }
       event.alive = alive;
       event.ring.visible = alive > 0;
       const pulse = status.active ? 0.6 + Math.sin(g.time * 10) * 0.3 : status.next < 8 ? 0.45 : 0.18;
@@ -1947,12 +1957,13 @@ export class StrikeOperation {
     const surgeLeft = this.surge - g.time;
     if (surgeLeft <= 60 && this.surgeWarned < 1) {
       this.surgeWarned = 1;
-      g.notify("toast", "SURGE WINDOW / 60 SECONDS");
+      g.notify("toast", "HIGH TIDE / 60 SECONDS");
       this.say("surge");
     } else if (surgeLeft <= 20 && this.surgeWarned < 2) {
       this.surgeWarned = 2;
-      g.notify("toast", "SURGE WINDOW / 20 SECONDS");
+      g.notify("toast", "HIGH TIDE / 20 SECONDS");
     }
+    if (this.fleet) this.harbourBeats();
     if (surgeLeft <= 0) {
       g.blast(V(0, 0.3, 0), 6, 0x7fd8ff, { quiet: true });
       g.finish(false, "surge");
@@ -1986,6 +1997,18 @@ export class StrikeOperation {
       0,
     );
     return 300 + Math.round((left * 150) / this.game.mode.bombs) + this.aircraft.filter((a) => a.alive).length * 100;
+  }
+
+  // The harbour's beats (5.1): a line at a quarter, half and three quarters of the quota sunk,
+  // and after QUIET seconds without a word on the radio, the next of three working tips.
+  harbourBeats() {
+    const share = this.fleet.sunk / this.fleet.needed();
+    if (share >= 0.25) this.say("q25");
+    if (share >= 0.5) this.say("q50");
+    if (share >= 0.75) this.say("q75");
+    if (this.game.time - this.game.lastRadio < QUIET) return;
+    const tip = QUIET_KEYS.find((key) => !this.said.has(key));
+    if (tip) this.say(tip);
   }
 
   stars(success) {

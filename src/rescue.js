@@ -18,7 +18,7 @@ import {
 } from "./rescue-data.js";
 import { LAND, terrainHeight } from "./rescue-world.js";
 import { clamp } from "./physics.js";
-import { MISSION_STORY } from "./story.js";
+import { CAST, CREW_RADIO, MISSION_STORY } from "./story.js";
 import { bonuses } from "./requisition.js";
 import { chapterStart } from "./data.js";
 import { ROUNDS } from "./armoury.js";
@@ -303,6 +303,7 @@ export class RescueOperation {
     else {
       // Marrow holds the gates: every few seconds more sappers come.
       this.say("stall");
+      this.say("jam");
       s.held += dt;
       if (s.held >= cfg.stallWave) {
         s.held = 0;
@@ -947,7 +948,13 @@ export class RescueOperation {
         this.rescued++;
         g.score += 350;
         g.notify("toast", this.rescued === this.soldiers.length ? `ALL ABOARD / LAND AT ${this.layout.landing.name}` : `${(s.person || s.name).toUpperCase()} ABOARD`);
-        if (this.rescued === this.soldiers.length) this.say("pickup");
+        // 5.1: every soldier speaks as they come aboard (the sergeant, last aboard, leaves it to
+        // the mission's pickup line); Marrow waits for the sergeant.
+        const last = this.rescued === this.soldiers.length,
+          sergeant = s.person === CAST.echo.name;
+        if (CREW_RADIO[s.person] && !(last && sergeant)) g.radio(CREW_RADIO[s.person], "aboard");
+        if (last) this.say("pickup");
+        if (sergeant) g.cue("reyesAboard");
         this.objective();
       }
     }
@@ -1056,7 +1063,7 @@ export class RescueOperation {
     const line = this.story?.radio?.[key];
     if (!line) return;
     this.said.add(key);
-    this.game.radio(line);
+    this.game.radio(line, key);
   }
 
   updateCaves(dt) {

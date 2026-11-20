@@ -12,6 +12,8 @@ import { DEFAULT_DIFFICULTY, difficulty, hitChance, seededRandom } from "./diffi
 import { ROUNDS, ROUND_ORDER, emptyRounds, bestRound, spendRound, addRounds, roundEffect } from "./armoury.js";
 import { dampAngle } from "./harbour.js";
 import { Ambient, waterAt } from "./ambient.js";
+import { interceptFor } from "./story.js";
+import { STORY, priorityOf } from "./radio-queue.js";
 
 const V = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
 const forward = V(0, 0, -1);
@@ -156,6 +158,12 @@ export class Game {
     this.playerTurret = null;
     this.boatParts = {};
     this.shieldRing = null;
+    // 5.1: Marrow's intercept for this mission, said once from its event (story.js INTERCEPTS).
+    this.intercept = interceptFor(index);
+    this.intercepted = false;
+    this.interceptDue = false;
+    this.lastRadio = 0;
+    this.storyAt = -1;
     this.op =
       this.chapter === 0
         ? new StrikeOperation(this)
@@ -177,9 +185,34 @@ export class Game {
     this.ambient = new Ambient(this, { budget: this.ambientBudget ?? 1, quiet: this.reducedMotion });
   }
 
-  radio(line) {
-    this.notify("radio", line);
+  // A radio line, with its key: the radio director sets the line's priority from the key.
+  radio(line, key) {
+    if (!key) throw new Error(`A radio line needs its key: "${line.text}"`);
+    // One event carries at most one story line (5.1): two in the same step is a script error.
+    if (priorityOf(key) === STORY) {
+      if (this.storyAt === this.time) console.error(`Two story lines in one event: "${line.text}"`);
+      this.storyAt = this.time;
+    }
+    this.notify("radio", { line, key });
+    this.lastRadio = this.time;
     this.audio.play("radio");
+  }
+
+  // An event an intercept can wait for (the chapter's RADIO_EVENTS). Radio only: nothing here
+  // touches the simulation.
+  cue(event) {
+    if (this.intercept?.event === event) this.sayIntercept();
+  }
+
+  // An intercept whose moment already carried a story line waits for the next step.
+  sayIntercept() {
+    if (this.intercepted || this.status !== "playing") return;
+    if (this.storyAt === this.time) {
+      this.interceptDue = true;
+      return;
+    }
+    this.intercepted = true;
+    this.radio(this.intercept.line, "intercept");
   }
 
   entity(type, model, position, options = {}) {
@@ -251,6 +284,8 @@ export class Game {
       if (this.debrisActive) this.physics.world.step(dt);
     }
     this.updatePeople(dt);
+    // A timed intercept, the fallback time of one that waits for an event, or one held a step.
+    if (!this.intercepted && (this.interceptDue || (this.intercept?.after !== undefined && this.time >= this.intercept.after))) this.sayIntercept();
   }
 
   updateVehicle(dt) {

@@ -32,6 +32,8 @@ export class Fleet {
     this.course = {};
     this.groups = (op.layout.fleet || []).map((data) => ({ data, plan: fleetPlan(data), ships: [] }));
     this.ships = [];
+    // Hostile hulls sunk so far (5.1: the harbour beats).
+    this.sunk = 0;
     for (const group of this.groups)
       group.data.ships.forEach((cls, i) => {
         const ship = this.createShip(group, cls, i);
@@ -261,6 +263,7 @@ export class Fleet {
 
   sinkShip(ship) {
     const g = this.game;
+    this.sunk++;
     ship.dead = true;
     ship.hp = 0;
     ship.sink = 0;

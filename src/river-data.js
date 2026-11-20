@@ -425,6 +425,16 @@ export function riverStars({ success, bargesLost, bargeHealth, damage }) {
   return 1 + (bargesLost === 0 ? 1 : 0) + (bargeHealth >= 0.8 && damage <= 2 ? 1 : 0);
 }
 
+// The debrief's three canal criteria, [met, text], each the check it names (5.1). Damage is what
+// Marlin's shields lost, so 'at most 2 damage' holds on every mode (a Crazy hit costs 2).
+export function riverCriteria({ success, bargesLost, bargeHealth, damage }) {
+  return [
+    [success, "Deliver the convoy"],
+    [success && bargesLost === 0, "Both barges survive"],
+    [success && bargeHealth >= 0.8 && damage <= 2, "Barges above 80% and Marlin takes at most 2 damage"],
+  ];
+}
+
 // Where an air strike's line of bombs falls: across the whole canal at `z`, clamped ahead of
 // the convoy so the barges are never under it.
 export function strikeLine(z, bombs = AIR_STRIKE.bombs) {
@@ -443,3 +453,7 @@ export function laserHeat(state, firing, dt, spec = WEAPONS.laser) {
   if (locked && heat <= spec.restart) locked = false;
   return { heat, locked, beam: firing && !locked };
 }
+
+// The events this chapter cues for the radio (5.1): an intercept in story.js waits for one of them.
+// "start" with a time is that many seconds into the mission.
+export const RADIO_EVENTS = ["start", "pincerDown"];

@@ -54,13 +54,29 @@ import {
 import { CHAPTERS, MISSIONS, missionNumber, chapterSize, saveResult, migrateSave } from "./data.js";
 import { BOMBS, BOMB_ORDER, FLIGHT, STRIKE_MISSIONS, isPattern } from "./strike-data.js";
 import { patternDiagram, ROTATION_STEP } from "./harbour-data.js";
-import { CAST, PROLOGUE, CHAPTER_STORY, MISSION_STORY, FINALE, INQUIRY_FILES, finaleRecord, speaker } from "./story.js";
+import {
+  CAST,
+  PROLOGUE,
+  CHAPTER_STORY,
+  MISSION_STORY,
+  FINALE,
+  INQUIRY_FILES,
+  FAILURE_RADIO,
+  FAILURE_TEXT,
+  failureKey,
+  filesRead,
+  finaleRecord,
+  landfallLabel,
+  speaker,
+} from "./story.js";
+import { RadioDirector, STORY, minimumFor } from "./radio-queue.js";
+import { riverCriteria } from "./river-data.js";
 import { activeBonuses } from "./pickups.js";
 import { DIFFICULTIES, DIFFICULTY, DEFAULT_DIFFICULTY, difficulty, percent } from "./difficulty.js";
 import { RescueHUD } from "./rescue-hud.js";
 import { isHostileEntity } from "./rescue-data.js";
 import { saveGovernor } from "./quality.js";
-import { UPGRADES, available, buy, level, nextCost, sanitize } from "./requisition.js";
+import { UPGRADES, available, buy, level, nextCost, sanitize, affordable } from "./requisition.js";
 import { EdgeMarkers, freeRectOf, outside } from "./edge-markers.js";
 
 const iconSet = {
@@ -263,14 +279,19 @@ function showEmblem(img, key, onMissing) {
   img.src = emblemUrl(key);
 }
 
+// The Ashen Front's emblem (5.1): a flame over a broken wall. Original artwork, drawn inline.
+const ASHEN_EMBLEM =
+  '<svg class="ashen" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.5c1.7 2.5 4.2 4.2 4.2 7.3a4.2 4.2 0 0 1-8.4 0c0-1.7.8-2.8 1.7-3.8.2 1.5 1 2.3 2 2.5-.5-2.2-.2-4.1.5-6z" fill="currentColor"/><path d="M3 15.5h7.2l1.4-1.6 1.6 1.6H21M3 19h18M7.5 15.5V19M16.5 15.5V19M12 19v3" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+
 function portrait(who) {
   const cast = speaker(who);
-  return `<span class="portrait ${cast.hostile ? "hostile" : ""}" style="--tone:${cast.color}">${cast.initials}</span>`;
+  return `<span class="portrait ${cast.hostile ? "hostile" : ""}" style="--tone:${cast.color}">${cast.hostile ? ASHEN_EMBLEM : `<span class="initials">${cast.initials}</span>`}</span>`;
 }
 
 function lineMarkup(line) {
   const cast = speaker(line.who);
-  return `${portrait(line.who)}<div><b>${escape(cast.name)}</b><small>${escape(cast.role)}</small><p>${escape(line.text)}</p></div>`;
+  const tag = cast.hostile ? '<em class="intercept-tag">INTERCEPT</em>' : "";
+  return `${portrait(line.who)}<div><b>${escape(cast.name)}</b><small>${escape(cast.role)}</small>${tag}<p>${escape(line.text)}</p></div>`;
 }
 
 // The callout lanes (5.1 H1): the banner lane across the middle (multi-kills, checkpoints, later
@@ -363,6 +384,18 @@ export class UI {
     this.freeRect = null;
     // Phone layouts collapse the city map and the intel strip to buttons (5.1 H1).
     this.phoneLayout = matchMedia("(max-width: 700px), (orientation: landscape) and (max-height: 520px)");
+    // The radio director (5.1): 3 lines at once on wider screens, a one-line ticker on phones.
+    this.director = new RadioDirector(this.phoneLayout.matches ? 1 : 3);
+    this.radioVersion = -1;
+    this.radioEls = new Map();
+    this.phoneLayout.addEventListener("change", () => {
+      this.director.setSlots(this.phoneLayout.matches ? 1 : 3);
+      this.openTicker(false);
+    });
+    // Losses per mission in this session: two in a row offer Easy (5.1).
+    this.failures = new Map();
+    this.debriefTimers = [];
+    this.pointsGained = 0;
     this.dialog = $("menu-dialog");
     this.brief = $("brief-dialog");
     this.game.difficulty = save.difficulty || DEFAULT_DIFFICULTY;
@@ -374,6 +407,7 @@ export class UI {
     $("audio-enabled").checked = !save.muted;
     this.updateSound();
     this.bind();
+    this.updatePointsDot();
     this.bindStick("move-stick", false);
     this.bindStick("fire-stick", true);
     this.rescueHUD = new RescueHUD(game);
@@ -531,6 +565,18 @@ window.addEventListener('mobile-game-interruption', () => this.touches.clear());
       this.resume();
     });
     $("retry").onclick = $("result-retry").onclick = () => this.start(this.game.index);
+    // The result's other ways out (5.1): Mission control, Requisition (both come back to the
+    // result), and Easy after two losses.
+    $("result-menu").onclick = () => this.menuFromResult();
+    $("result-req").onclick = () => this.menuFromResult(true);
+    $("result-easy").onclick = () => {
+      this.setDifficulty("easy");
+      this.start(this.game.index);
+    };
+    // A tap or click on the result during its hold shows the actions at once.
+    $("result-dialog").addEventListener("pointerdown", () => this.revealResult());
+    // Phones: a tap on the radio ticker lists the last three lines.
+    $("comms").addEventListener("click", () => this.phoneLayout.matches && this.openTicker(!this.tickerOpen));
     $("skip").onclick = () => this.start((this.game.index + 1) % MISSIONS.length);
     $("story").onclick = () => {
       this.dialog.close();
@@ -927,6 +973,11 @@ window.addEventListener('mobile-game-interruption', () => {
     if (this.anyDialog()) {
       // A Space or Enter still held from the last release must not click through the next dialog.
       if (confirm && e.repeat) e.preventDefault();
+      if (this.holding && e.key === "Enter") {
+        e.preventDefault();
+        if (!e.repeat) this.revealResult();
+        return;
+      }
       if (this.brief.open && confirm && !e.repeat) {
         e.preventDefault();
         this.launch();
@@ -1114,7 +1165,8 @@ window.addEventListener('mobile-game-interruption', () => {
     this.save.seenPrologue = true;
     this.persist();
     this.game.audio.unlock();
-    if (this.pendingBrief && this.game.status === "playing") this.showBrief();
+    if (this.backToResult) this.resume();
+    else if (this.pendingBrief && this.game.status === "playing") this.showBrief();
     else if (!this.anyDialog()) this.game.paused = false;
   }
 
@@ -1125,7 +1177,7 @@ window.addEventListener('mobile-game-interruption', () => {
       chapter = CHAPTER_STORY[g.chapter];
     const first = MISSIONS.findIndex((m) => m.chapter === g.chapter) === g.index;
     showEmblem($("brief-emblem"), g.chapter);
-    $("brief-eyebrow").textContent = `CHAPTER 0${g.chapter + 1} / ${chapter.title.toUpperCase()} / MISSION ${missionNumber(g.index)}`;
+    $("brief-eyebrow").textContent = `CHAPTER 0${g.chapter + 1} / ${chapter.title.toUpperCase()} / ${first ? landfallLabel(story.clock) : `MISSION ${missionNumber(g.index)}`}`;
     $("brief-clock").textContent = `${story.place} / ${story.clock}`;
     $("brief-title").textContent = g.mission.name;
     $("brief-chapter").textContent = first ? chapter.intro : "";
@@ -1258,6 +1310,7 @@ window.addEventListener('mobile-game-interruption', () => {
         this.game.upgrades = next;
         this.persist();
         this.fillRequisition();
+        this.updatePointsDot();
       };
   }
 
@@ -1279,10 +1332,36 @@ window.addEventListener('mobile-game-interruption', () => {
   resume() {
     this.dialog.close();
     this.clearInput();
+    if (this.backToResult) {
+      this.backToResult = false;
+      this.updatePointsDot();
+      this.fillPoints();
+      $("result-dialog").showModal();
+      $("result-next").focus();
+      return;
+    }
     this.game.paused = false;
   }
 
+  // Mission control over a finished mission: closing it comes back to the result.
+  menuFromResult(requisition = false) {
+    $("result-dialog").close();
+    this.backToResult = true;
+    this.menu();
+    if (!requisition) return;
+    $("req-details").open = true;
+    $("req-details").scrollIntoView({ block: "nearest" });
+    $("req-list").querySelector("button:not([disabled])")?.focus();
+  }
+
+  // The pause button carries a dot while the points buy an upgrade.
+  updatePointsDot() {
+    setClass($("pause"), "points", affordable(this.save.records, this.save.upgrades));
+  }
+
   start(index) {
+    this.backToResult = false;
+    this.endDebrief();
     this.dialog.close();
     $("leave-dialog").close();
     $("result-dialog").close();
@@ -1322,7 +1401,7 @@ window.addEventListener('mobile-game-interruption', () => {
   onEvent(type, data) {
     if (type === "start") this.onStart(data);
     else if (type === "toast") this.callouts.toast(data);
-    else if (type === "radio") this.radio(data);
+    else if (type === "radio") this.director.say(data.line, data.key);
     else if (type === "combo") this.callouts.banner(`MULTI-KILL x${data.count}`, `+${data.bonus}`, "combo", 1.6);
     else if (type === "checkpoint") this.callouts.banner(data, "", "checkpoint", 2.6);
     else if (type === "record") this.record(data);
@@ -1384,7 +1463,9 @@ window.addEventListener('mobile-game-interruption', () => {
     // The shield panel names the chance that enemy fire reaching you does harm.
     const chance = this.game.hitChance > 0 ? `${percent(this.game.hitChance)} HIT` : "SAFE";
     $("shield-title").textContent = `${c === 1 ? "MARLIN" : "LANTERN"} SHIELDS / ${chance}`;
-    $("comms").innerHTML = "";
+    this.director.clear();
+    this.openTicker(false);
+    this.pointsGained = 0;
     for (const tag of this.labels.values()) tag.el.remove();
     this.labels.clear();
     this.lastLabels = [];
@@ -1406,16 +1487,41 @@ window.addEventListener('mobile-game-interruption', () => {
     else this.pendingBrief = true;
   }
 
-  radio(line) {
-    const feed = $("comms");
-    const cast = speaker(line.who);
-    const item = document.createElement("div");
-    item.className = `radio-line live ${cast.hostile ? "intercept" : ""}`;
-    item.innerHTML = lineMarkup(line);
-    feed.prepend(item);
-    while (feed.children.length > 2) feed.lastChild.remove();
-    setTimeout(() => item.classList.add("fading"), 7000);
-    setTimeout(() => item.remove(), 7800);
+  // The radio feed (5.1): the director's lines on screen, newest first, one element per line
+  // kept while it shows. Rebuilt only when the director changes (called before the HUD lays out
+  // its world tags). An opened phone ticker also lists the last three lines said.
+  renderRadio() {
+    const d = this.director,
+      feed = $("comms");
+    this.radioVersion = d.version;
+    const lines = [...d.shown].sort((a, b) => b.shownAt - a.shownAt);
+    if (this.tickerOpen) for (const entry of d.recent(3)) if (!lines.includes(entry)) lines.push(entry);
+    for (const [entry, el] of this.radioEls)
+      if (!lines.includes(entry)) {
+        el.remove();
+        this.radioEls.delete(entry);
+      }
+    lines.forEach((entry, i) => {
+      let el = this.radioEls.get(entry);
+      if (!el) {
+        el = document.createElement("div");
+        el.className = `radio-line live ${speaker(entry.line.who).hostile ? "intercept" : ""} ${entry.priority === STORY ? "story" : ""}`;
+        el.innerHTML = lineMarkup(entry.line);
+        this.radioEls.set(entry, el);
+      }
+      setClass(el, "past", !d.shown.includes(entry));
+      if (feed.children[i] !== el) feed.insertBefore(el, feed.children[i] || null);
+    });
+    // The feed changed size: world tags must keep clear of it from this frame on, not only once
+    // the resize observer reports.
+    this.updateBadgeBounds();
+  }
+
+  openTicker(on) {
+    this.tickerOpen = on;
+    setClass($("comms"), "open", on);
+    $("comms").setAttribute("aria-expanded", String(on));
+    this.radioVersion = -1;
   }
 
   buildFlightCards() {
@@ -1441,8 +1547,11 @@ window.addEventListener('mobile-game-interruption', () => {
   // Save a win (the best score and stars per mission are kept).
   record(result) {
     if (!result.success) return;
+    const before = available(this.save.records, this.save.upgrades);
     this.save.records = saveResult(this.save.records, result.index, result.score, result.stars);
+    this.pointsGained += available(this.save.records, this.save.upgrades) - before;
     this.persist();
+    this.updatePointsDot();
   }
 
   showResult(result) {
@@ -1455,6 +1564,11 @@ window.addEventListener('mobile-game-interruption', () => {
     const finale = result.success && result.index === MISSIONS.length - 1;
     // A win shows its chapter's medallion; a failure keeps the plain icon.
     const emblem = $("result-emblem-img");
+    // A loss shows a warning, never the win's badge.
+    const icon = document.createElement("i");
+    icon.id = "result-icon";
+    icon.dataset.lucide = result.success ? "badge-check" : "triangle-alert";
+    $("result-icon").replaceWith(icon);
     $("result-icon").style.display = result.success ? "none" : "";
     if (result.success) showEmblem(emblem, finale ? "tidelock" : this.game.chapter, () => ($("result-icon").style.display = ""));
     else emblem.hidden = true;
@@ -1468,15 +1582,29 @@ window.addEventListener('mobile-game-interruption', () => {
         : "MISSION FAILED";
     $("result-title").textContent = finale ? FINALE.title : result.success ? this.game.mission.name : `Regroup, ${["Kestrel", "Marlin", "Lantern"][this.game.chapter]}.`;
     $("result-story").textContent = finale ? `${story.success} ${FINALE.text}` : result.success ? story.success : this.failureText(result, story);
-    $("result-stars").innerHTML = Array.from(
-      { length: 3 },
-      (_, i) => `<i data-lucide="star" class="${i < result.stars ? "earned" : ""}"></i>`,
-    ).join("");
+    // 5.1: the closing line, kept on the card (the radio feed hides while the result is open).
+    const quote = result.success ? story.radio.success : FAILURE_RADIO[failureKey(result.reason, this.game.chapter, this.harbour())] || story.radio.start;
+    $("result-quote").innerHTML = lineMarkup(quote);
+    $("result-stars").innerHTML = Array.from({ length: 3 }, () => '<i data-lucide="star"></i>').join("");
     $("result-stars").setAttribute("aria-label", `${result.stars} of 3 stars`);
     $("result-criteria").innerHTML = this.criteria(result)
-      .map(([ok, text]) => `<li class="${ok ? "met" : ""}"><i data-lucide="${ok ? "check" : "circle"}"></i>${escape(text)}</li>`)
+      .map(([ok, text], i) => `<li class="${ok ? "met" : ""}" style="--i:${i}"><i data-lucide="${ok ? "check" : "circle"}"></i>${escape(text)}</li>`)
       .join("");
     $("result-score").textContent = result.score.toLocaleString();
+    this.resultWon = result.success;
+    this.fillPoints();
+    // A loss: Mission control instead of a second Retry, and Easy after two in a row.
+    const losses = result.success ? 0 : (this.failures.get(result.index) || 0) + 1;
+    this.failures.set(result.index, losses);
+    setHidden($("result-retry"), !result.success);
+    setHidden($("result-menu"), result.success);
+    setHidden($("result-easy"), losses < 2 || this.game.difficulty === "easy");
+    // The finale's file panel.
+    const files = filesRead(this.save.records);
+    $("finale-files-list").innerHTML = files.rows
+      .map((row) => `<li class="${row.found ? "found" : ""}">${escape(row.found ? row.title : "Not recovered")}</li>`)
+      .join("");
+    $("finale-files-count").textContent = files.text;
     $("result-targets").textContent = result.kills;
     $("result-best").textContent = (this.save.records[result.index]?.score || 0).toLocaleString();
     $("result-next").innerHTML = `${finale ? "Play again" : result.success ? "Next mission" : "Try again"}<i data-lucide="arrow-right"></i>`;
@@ -1492,20 +1620,84 @@ window.addEventListener('mobile-game-interruption', () => {
     document.querySelector("#result-dialog .result-actions").hidden = finale;
     refreshIcons();
     $("result-dialog").showModal();
+    // The hold: the actions wait until the closing line has been read, counted from when it was
+    // said on the radio (the dialog opens 1.4 s later); a failure line never said counts from now.
+    // ?qa skips it unless &hold=1.
+    const said = this.director.log.some((entry) => entry.line === quote);
+    const hold = Math.min(6, minimumFor(quote.text)) - (said ? 1.4 : 0);
+    this.holdFor = this.qa && !this.params.has("hold") ? 0 : Math.max(0, hold);
+    this.holding = this.holdFor > 0;
+    setClass($("result-dialog"), "holding", this.holding);
+    if (this.holding) {
+      $("result-quote").focus();
+      this.later(() => this.revealResult(), this.holdFor * 1000);
+    } else (finale ? $("finale-broadcast") : $("result-next")).focus();
+    this.debrief(result);
+  }
+
+  // Stars one at a time, 300 ms apart with a punch and a rising note; the score counts up over
+  // 0.6 s; the criteria tick in turn (CSS). All at once under reduced motion.
+  debrief(result) {
+    const stars = [...$("result-stars").children],
+      score = $("result-score");
+    const earn = (i) => {
+      stars[i].classList.add("earned");
+      this.game.audio.play("star", i);
+    };
+    if (this.game.reducedMotion) {
+      for (let i = 0; i < result.stars; i++) stars[i].classList.add("earned");
+      return;
+    }
+    // Each star schedules the next, so they are never closer than 300 ms.
+    const reveal = (i) => i < result.stars && this.later(() => (earn(i), reveal(i + 1)), 300);
+    reveal(0);
+    const begin = performance.now();
+    const count = (now) => {
+      const u = Math.min(1, (now - begin) / 600);
+      score.textContent = Math.round(result.score * u).toLocaleString();
+      if (u < 1 && $("result-dialog").open) this.countFrame = requestAnimationFrame(count);
+    };
+    score.textContent = "0";
+    this.countFrame = requestAnimationFrame(count);
+  }
+
+  later(work, ms) {
+    this.debriefTimers.push(setTimeout(work, ms));
+  }
+
+  endDebrief() {
+    for (const timer of this.debriefTimers) clearTimeout(timer);
+    this.debriefTimers.length = 0;
+    cancelAnimationFrame(this.countFrame);
+    this.holding = false;
+    setClass($("result-dialog"), "holding", false);
+  }
+
+  // The result's actions appear: at the end of the hold, or at once on a tap, click or Enter.
+  revealResult() {
+    if (!this.holding) return;
+    this.holding = false;
+    setClass($("result-dialog"), "holding", false);
+    const finale = !$("finale-choice").hidden;
     (finale ? $("finale-broadcast") : $("result-next")).focus();
   }
 
+  // Requisition on the result: the points a win brought (none, no line), and a way to spend them
+  // when they buy something. Written again when Mission control hands back to the result.
+  fillPoints() {
+    const points = available(this.save.records, this.save.upgrades);
+    setHidden($("result-points"), !this.resultWon || this.pointsGained === 0);
+    $("result-points").textContent = `+${this.pointsGained} requisition point${this.pointsGained === 1 ? "" : "s"} · ${points} to spend`;
+    setHidden($("result-req"), !affordable(this.save.records, this.save.upgrades));
+  }
+
+  harbour() {
+    return this.game.chapter === 0 && Boolean(STRIKE_MISSIONS[this.game.index]?.harbour);
+  }
+
   failureText(result, story) {
-    return (
-      {
-        shelter: "A bomb struck the civilian shelter and the strike was aborted. Keep every pipper off the blue roof.",
-        ferry: `A bomb struck the ${this.game.op?.abortedBy || "Island Belle"} and the strike was aborted. When the pattern turns blue, a civilian boat is inside it: hold your release.`,
-        surge: "The surge window closed and the water reached the streets. Strike the key targets first, and use Reverse and the map marks to waste no passes.",
-        flight: "Kestrel Flight was shot down. Silence the flak first and change lane when a red lock line appears.",
-        barges: "Both barges sank before reaching the lock. Shield them with Marlin and steer them clear of mines.",
-        station: "The control room was destroyed and the gates stopped. Shoot the sappers with the gold rings before they reach the motors, and bring Marrow down quickly once he arrives.",
-      }[result.reason] || story.failure
-    );
+    const text = FAILURE_TEXT[failureKey(result.reason, this.game.chapter, this.harbour())];
+    return text ? text.replace("{boat}", this.game.op?.abortedBy || "Island Belle") : story.failure;
   }
 
   criteria(result) {
@@ -1517,14 +1709,7 @@ window.addEventListener('mobile-game-interruption', () => {
         [result.success && op.used <= op.layout.par, `Use ${op.layout.par} bomb${op.layout.par === 1 ? "" : "s"} or fewer (used ${op.used})`],
         [result.success && !op.damaged, "Bring the whole flight home unscathed"],
       ];
-    if (g.chapter === 1) {
-      const lost = op.barges.filter((b) => !b.alive).length;
-      return [
-        [result.success, "Deliver the convoy"],
-        [result.success && lost === 0, "Both barges survive"],
-        [result.stars >= 3, "Barges above 80% and Marlin hit at most twice"],
-      ];
-    }
+    if (g.chapter === 1) return riverCriteria(op.starInput(result.success));
     if (g.op?.siege)
       return [
         [result.success, "The Tidelock is closed"],
@@ -1545,6 +1730,7 @@ window.addEventListener('mobile-game-interruption', () => {
     // Every frame: callout timers, a paused HUD holds its animations, the map's ping dot and the
     // edge markers.
     this.callouts.update();
+    if (this.director.version !== this.radioVersion) this.renderRadio();
     setClass($("app"), "paused", this.game.paused);
     if (this.game.chapter === 0) this.updatePing();
     this.updateEdges();
@@ -1599,7 +1785,7 @@ window.addEventListener('mobile-game-interruption', () => {
     setText($("objective-line-unit"), unit);
   }
 
-  // The tide chip (5.1 H1): the surge window left, in the top bar at every width. Gold, orange
+  // The tide chip (5.1 H1): the surge window left, read as HIGH TIDE, in the top bar at every width. Gold, orange
   // from 120 s, red and pulsing from 60 s; the bar under the top bar fills as the window runs out
   // and is written only when its whole percentage changes. Generic, so later clocks can use it.
   updateTide(left) {
@@ -1608,7 +1794,7 @@ window.addEventListener('mobile-game-interruption', () => {
     setHidden(chip, !on);
     if (!on) return;
     const seconds = Math.ceil(left);
-    setText($("tide-text"), `SURGE ${clock(seconds)}`);
+    setText($("tide-text"), `HIGH TIDE ${clock(seconds)}`);
     setClass(chip, "urgent", seconds <= 60);
     setClass(chip, "warn", seconds > 60 && seconds <= 120);
     const elapsed = Math.floor((1 - left / this.game.op.surge) * 100);

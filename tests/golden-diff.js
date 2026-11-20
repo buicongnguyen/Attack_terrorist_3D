@@ -9,7 +9,7 @@ export const SCHEMA = 1;
 // Schema 1, frozen: every row carries every field, in this order. A field that does not apply to
 // a mission's chapter is null. The reserved fields stay null until the item that owns them fills
 // them in for its own keys: standDown and resupply (C1, the harbour), launches (K1, the canal),
-// runsBroken and phase (5.3, the finale). The radio log stays empty until N1's director.
+// runsBroken and phase (5.3, the finale). radio is the radio director's log (N1).
 export const FIELDS = [
   "key",
   "status",

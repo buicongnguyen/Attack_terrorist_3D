@@ -6,6 +6,9 @@
 // show that Marrow was blamed for a wall the Harbour Authority cheapened, that Okafor signed
 // for it, and that the Tidelock's east hinge has the same flaw: which is why the gates must be
 // walked shut in the finale. The player decides what happens to the files.
+// 5.1: one timeline (landfall tonight at 19:10), a reveal that holds the hinge until 3.3, Marrow
+// on the radio, the harbour's beats and a voice for every rescued soldier. docs/SCRIPT-5.1.md
+// lists every line 5.1 added or changed, with its trigger and radio key.
 
 export const CAST = Object.freeze({
   iona: {
@@ -63,16 +66,42 @@ export const CAST = Object.freeze({
     color: "#ff4b2b",
     hostile: true,
   },
+  // 5.1: the rest of Echo team, who speak as they come aboard.
+  lin: { name: "Medic Lin Tao", role: "Echo medic", initials: "LT", color: "#5fe0b4" },
+  hart: { name: "Pvt. Sam Hart", role: "Echo team", initials: "SH", color: "#5fe0b4" },
+  okoro: { name: "Spc. Ada Okoro", role: "Echo team", initials: "AK", color: "#5fe0b4" },
+  haddad: { name: "Pvt. Noor Haddad", role: "Echo team", initials: "NH", color: "#5fe0b4" },
+  brandt: { name: "Pvt. Teo Brandt", role: "Echo team", initials: "TB", color: "#5fe0b4" },
+  park: { name: "Spc. Juno Park", role: "Echo team", initials: "JP", color: "#5fe0b4" },
+  ashby: { name: "Pvt. Pell Ashby", role: "Echo team", initials: "PA", color: "#5fe0b4" },
 });
 
+// Landfall (5.1): tonight at last light. Every mission clock runs from 06:40 up to it.
+export const LANDFALL = "19:10";
+
+const minutesOf = (clock) => {
+  const [h, m] = clock.split(":").map(Number);
+  return h * 60 + m;
+};
+
+// 'LANDFALL 19:10 · 12 H 30 MIN' from a mission clock: the time left always carries its units.
+export function landfallLabel(clock) {
+  const left = minutesOf(LANDFALL) - minutesOf(clock),
+    hours = Math.floor(left / 60),
+    minutes = left % 60;
+  const span = [hours && `${hours} H`, minutes && `${minutes} MIN`].filter(Boolean).join(" ") || "NOW";
+  return `LANDFALL ${LANDFALL} · ${span}`;
+}
+
 export const PROLOGUE = {
-  eyebrow: "MERIDIA ARCHIPELAGO / T-36 HOURS",
+  eyebrow: "MERIDIA ARCHIPELAGO / LANDFALL TONIGHT",
   title: "The city that lives below the sea",
   paragraphs: [
     "Solace Harbor sits three metres below the tide. Only the Tidelock, a storm barrier across the mouth of the Verde River, keeps it dry.",
     "Twelve years ago the old sea wall failed and the Lower Quays drowned. The inquiry blamed the wall's designer, Dr. Elias Marrow. He has said ever since that it was not his wall that failed.",
     "Now he calls himself only Marrow. His Ashen Front has seized the Glass District, jammed every radio, and marched on Highwater Station, where the Tidelock is controlled.",
-    "Typhoon Ilse makes landfall tomorrow at last light. Marrow will hold the gates open when the surge peaks unless someone stops him. You fly for the Kestrel Response Unit: strike aircraft, a river gunboat, and a rescue helicopter.",
+    "Typhoon Ilse makes landfall tonight at last light. Her outer bands push a storm tide up the estuary, and with every radio jammed the pump stations are blind: each high tide pours into the low streets.",
+    "Marrow holds Highwater's controls and says the city will learn tonight what its walls are made of. You fly for the Kestrel Response Unit: strike aircraft, a river gunboat, and a rescue helicopter.",
   ],
   action: "Begin Operation Breakwater",
 };
@@ -82,7 +111,6 @@ export const CHAPTER_STORY = [
     title: "Breakwater",
     subtitle: "Glass District and harbour strikes",
     place: "GLASS DISTRICT / SOLACE HARBOR",
-    clock: "T-36H / 06:40",
     intro:
       "The Front's jammers blind the whole harbour and its flotilla holds the water. Echo recon is hidden inside the district and can read their patrol schedules. Lead Kestrel Flight over the towers, then the quays, and strike when they gather.",
   },
@@ -90,7 +118,6 @@ export const CHAPTER_STORY = [
     title: "Relief Run",
     subtitle: "Verde River convoy",
     place: "VERDE RIVER / SOUTH DELTA",
-    clock: "T-20H / 14:10",
     intro:
       "With the jammers down and the flotilla sunk, Dr. Okafor's engineers can sail for Highwater Station. Their barges carry the pumps and the crew who can close the Tidelock. The Front will try to sink them before they reach the lock.",
   },
@@ -98,7 +125,6 @@ export const CHAPTER_STORY = [
     title: "Last Light",
     subtitle: "Cinder Valley rescue",
     place: "CINDER VALLEY / NORTH OF HIGHWATER",
-    clock: "T-6H / 16:45",
     intro:
       "Highwater is ours, but the gates will not move without the master override key. Echo team took it from the Glass Tower and was scattered across the valley. Bring them home before last light.",
   },
@@ -131,7 +157,7 @@ export const MISSION_STORY = [
       ),
     ],
     radio: {
-      start: line("iona", "Kestrel One, you're cleared in hot. Pipper on the mast."),
+      start: line("iona", "Cleared in hot, Kestrel. Tap or click the mast to mark it."),
       success: line("echo", "Mast is down. I can hear you now, Kestrel. Loud and clear."),
     },
     success:
@@ -299,6 +325,7 @@ export const MISSION_STORY = [
       "The Front's command in the district is gone. Echo team took the Tidelock's master override key from Marrow's strongroom, and the files he kept beside it, then fled north under fire. Marrow's fighters now hold Highwater Station, and his flotilla still holds the harbour.",
     file: {
       title: "Inquiry file 1 / The verdict",
+      from: "Carried out of Marrow's strongroom by Echo team",
       text: "Harbour Authority inquiry into the sea wall collapse. Finding: the wall failed through errors in its design. Responsible: Dr. Elias Marrow, chief engineer. Dead in the Lower Quays: 212.",
     },
     failure:
@@ -332,6 +359,9 @@ export const MISSION_STORY = [
     ],
     radio: {
       start: line("iona", "We fly slow over the water. Turn back whenever you want another look."),
+      q25: line("ines", "A quarter of them gone. The mouth's starting to breathe."),
+      q50: line("bram", "Half the column. Keep the Stick for the big hulls."),
+      q75: line("ines", "They're panicking on the quays. Finish it."),
       multi: line("piper", "The whole column in one line!"),
       success: line("ines", "The channel is clear. What's left of them is running for the open sea."),
     },
@@ -368,6 +398,9 @@ export const MISSION_STORY = [
     ],
     radio: {
       start: line("ines", "Island Belle is crossing. She's the one with the blue ring."),
+      q25: line("ines", "A quarter of the dock is on the bottom. Keep going."),
+      q50: line("piper", "Half of them gone. The shapes are doing the work."),
+      q75: line("ines", "The slipways are emptying. A few more, Kestrel."),
       flak: line("piper", "Flak from the frigate! Break when it says break."),
       ferry: line("iona", "Civilians in your pattern. Hold your release."),
       multi: line("piper", "That shape fit like a glove."),
@@ -410,7 +443,10 @@ export const MISSION_STORY = [
     ],
     radio: {
       start: line("ines", "Escorts circling the Belle. Your pattern counts what it will hit."),
-      freed: line("ines", "The escorts are gone! Island Belle is steaming clear to the west roads."),
+      q25: line("bram", "A quarter down. Their rings are coming apart."),
+      q50: line("ines", "Half the flotilla. They're losing their nerve."),
+      q75: line("iona", "The quays are cheering, Kestrel. Finish it."),
+      freed: line("ines", "My father brought ferries through that mouth for thirty years. The Belle doesn't sink on my watch."),
       flak: line("bram", "Flak from Cinder and the frigate. Watch the red lines."),
       ferry: line("ines", "The ferry is inside your pattern. Don't release!"),
       multi: line("bram", "Scratch one ring."),
@@ -420,6 +456,7 @@ export const MISSION_STORY = [
       "The flotilla is gone and the Island Belle rides safe in the west roads. The mouth of the Verde River is open for Okafor's convoy.",
     file: {
       title: "Inquiry file 2 / A letter never answered",
+      from: "Pulled by Ines from the harbour archive",
       text: "Marrow to the Harbour Authority, eleven weeks before the collapse: \"The concrete delivered to bay nine is not the mix I specified. If it is poured, I will not sign the wall.\" Stamped RECEIVED. No reply on file.",
     },
     failure:
@@ -440,7 +477,7 @@ export const MISSION_STORY = [
       ),
       line(
         "iona",
-        "The barges follow your wake, Kestrel One. Steer them around mines, and put Marlin between the barges and any gun that's aiming at them.",
+        "The barges follow your wake, Marlin. Steer them around mines, and put yourself between the barges and any gun that's aiming at them.",
       ),
       line(
         "iona",
@@ -478,7 +515,7 @@ export const MISSION_STORY = [
       ),
       line(
         "marrow",
-        "Anselm. Still carrying other men's papers? Tell your pilot what you signed. Then turn back, and you'll live.",
+        "Someone signed for that concrete, Kestrel. It wasn't me. Ask who stood beside me that winter.",
       ),
     ],
     radio: {
@@ -488,9 +525,10 @@ export const MISSION_STORY = [
       success: line("okafor", "We're through! Wide water ahead, and it's flooded."),
     },
     success:
-      "The pincer broke on its own fuel. Okafor does not answer Marrow, and does not speak of it afterwards. Beyond the Narrows the river spills over the floodplain, and the Front is waiting in the water.",
+      "The pincer broke on its own fuel. Okafor heard every word on the open channel, and does not speak of it. Beyond the Narrows the river spills over the floodplain, and the Front is waiting in the water.",
     file: {
       title: "Inquiry file 3 / The substitution order",
+      from: "Uplinked by Echo over the network you un-jammed",
       text: "Purchase order 7781: marine-grade concrete replaced with \"equivalent grade B\" to meet the opening date. Saving: eleven per cent. Authorised for the Authority. The engineering countersignature is torn away.",
     },
     failure:
@@ -583,7 +621,7 @@ export const MISSION_STORY = [
       ),
       line(
         "marrow",
-        "You'll never see Highwater, Anselm. You signed for one grave already. The Cut is another, and this one has walls.",
+        "The Authority had a deputy who signed what it put in front of him. He is closer to you than you think.",
       ),
     ],
     radio: {
@@ -630,7 +668,8 @@ export const MISSION_STORY = [
       "Highwater Station is retaken, but the Tidelock won't answer without its master override key, and Echo team is scattered across Cinder Valley.",
     file: {
       title: "Inquiry file 4 / Testimony",
-      text: "Inquiry transcript, day six. Q: Did Dr. Marrow approve the grade B mix? A: \"He was chief engineer. Everything was his to approve.\" The witness was his deputy. The name on the page is A. Okafor.",
+      from: "Printed in the Highwater control room by Okafor's crew",
+      text: "Inquiry transcript, day six. Q: Did Dr. Marrow approve the grade B mix? A: \"He was chief engineer. Everything was his to approve.\" The witness was his deputy. The name on the page has been blacked out.",
     },
     failure:
       "The convoy couldn't break the lock. Destroy the towers first, then the generator, and intercept the heavy shells.",
@@ -658,7 +697,7 @@ export const MISSION_STORY = [
       start: line("kofi", "Green smoke's out. You'll see our signals."),
       siteSilent: line("iona", "Launch crew down. That site won't fire now."),
       drones: line("iona", "Drones in the air! Rockets or guided, Kestrel."),
-      pickup: line("kofi", "Aboard! The sergeant went north with the key and Marrow's files. She says read them before you trust anyone. The aid station is upriver."),
+      pickup: line("kofi", "Both aboard. Reyes has Marrow's files: read them before you trust anyone."),
       success: line("iona", "Two safe at the aid station. Refuel and go back for the rest."),
     },
     success:
@@ -695,6 +734,7 @@ export const MISSION_STORY = [
       "The rear guard is aboard. The typhoon's outer bands are hitting the coast. Only North Ridge remains.",
     file: {
       title: "Inquiry file 5 / The missing corner",
+      from: "Found by Reyes inside Marrow's own copy of the order",
       text: "Reyes found the torn corner of order 7781 pinned inside Marrow's own copy. The countersignature reads: A. Okafor, Deputy Engineer.",
     },
     failure:
@@ -711,11 +751,11 @@ export const MISSION_STORY = [
     brief: [
       line(
         "echo",
-        "North Ridge. I have the key and three wounded. Drones everywhere. Last light is in twenty minutes.",
+        "North Ridge. I have the key and three wounded. Drones everywhere. Last light is in forty minutes.",
       ),
       line(
         "marrow",
-        "Twenty minutes, Kestrel. Read what your sergeant carries. Then tell me who drowned the Quays.",
+        "Forty minutes, Kestrel. Read what your sergeant carries. Then tell me who drowned the Quays.",
       ),
       line(
         "okafor",
@@ -727,13 +767,14 @@ export const MISSION_STORY = [
       siteSilent: line("iona", "Launch crew down. One less missile."),
       drones: line("echo", "Drones lifting off the ridge! Hit the stations before the rest go up."),
       pickup: line("echo", "Key's aboard, and the files. Take us to Highwater."),
-      success: line("echo", "Key's home. Kestrel... Okafor's name is on these papers. You need to hear this before he touches that gate."),
+      success: line("echo", "Marrow knew about that hinge for four years, Commander, and kept quiet."),
     },
     success:
-      "Reyes and the key are at Highwater. So are the inquiry files, and Dr. Okafor's signature is on the page that matters. The surge is forty minutes out, and Marrow has not finished.",
+      "Reyes and the key are at Highwater. So are the inquiry files, and Dr. Okafor's signature is on the page that matters. Last light is less than forty minutes away, and Marrow has not finished.",
     file: {
       title: "Inquiry file 6 / The east hinge",
-      text: "Tidelock construction log: the east gate hinge block was poured from remaining stock, grade B. A note in Marrow's hand: \"Close her fast against a full surge and she shears. They built my proof into their own gate.\"",
+      from: "Handed over by Reyes at Highwater",
+      text: "Tidelock construction log, four years ago: the east gate hinge block was poured from leftover stock, grade B. Marrow's own note, dated that week: \"Close her fast against a full surge and she shears. Let them find it the way they found mine.\" He reported nothing.",
     },
     failure:
       "Lantern went down on the ridge. Hit drone stations before their drones lift, flare the locks, and fly through the crates.",
@@ -775,7 +816,8 @@ export const MISSION_STORY = [
       charge: line("okafor", "That was a motor housing! We can't take many of those."),
       half: line("okafor", "Halfway. The hinge is holding. Keep going."),
       boss: line("sol", "Kestrel, that's Hornet Two, my wingman's bird. He took her at Highwater. That's Marrow flying."),
-      stall: line("okafor", "He's jamming the motors from that gunship. I'm stuck at ninety per cent. Bring him down!"),
+      stall: line("marrow", "Ninety per cent, Anselm. Slam them now and the city watches the hinge go."),
+      jam: line("iona", "He's jamming the motors from that gunship. Bring him down, Lantern!"),
       rage: line("marrow", "I gave this city a wall that would have stood! You are defending the men who cheated it!"),
       bossDown: line("marrow", "...Close them, then. Slowly, Anselm. Slowly. You know why."),
       success: line("okafor", "Gates are meeting... sealed. The hinge held. It held."),
@@ -801,8 +843,71 @@ export const STRIKE_RADIO = {
   ferry: line("iona", "A civilian boat is in your pattern. Hold your release."),
   ferryHit: line("iona", "The ferry is hit! Abort the strike, Kestrel."),
   freed: line("ines", "The ferry is free!"),
-  surge: line("iona", "Surge window closing, Kestrel. One minute, then the water is in the streets."),
+  surge: line("iona", "High tide in one minute, Kestrel. Then the water is in the low streets."),
+  // The harbour's quiet spells (5.1): a working tip after 45 s without a word.
+  quiet1: line("piper", "Tap or click a group on the map, Kestrel, and we'll fly straight there."),
+  quiet2: line("ines", "Look for boats moored in rows. One pattern laid along a row sinks the lot."),
+  quiet3: line("bram", "Watch the count on the pattern before you let go. Wait for a full line."),
 };
+
+// Marrow on the radio (5.1): six intercepts, each said once from an event in its mission. The
+// event comes from the chapter's RADIO_EVENTS; 'start' with `after` fires that many seconds into
+// the mission, and `after` on any other event is a fallback time if the event has not come.
+export const INTERCEPTS = [
+  { mission: 2, event: "start", after: 12, line: line("marrow", "Now you can hear me. Ask the Authority what it buried under the Quays.") },
+  { mission: 5, event: "gatheringStruck", line: line("marrow", "Six of mine in a glass room. The Authority will call that my arithmetic too.") },
+  { mission: 8, event: "start", after: 15, line: line("marrow", "Keep your ferry, Duarte. Your father never got one.") },
+  { mission: 10, event: "pincerDown", after: 20, line: line("marrow", "You read water well, Kestrel. Read the inquiry better.") },
+  { mission: 13, event: "start", after: 10, line: line("marrow", "Leave the gates open, the city drowns. Close them wrong, it sees the truth.") },
+  { mission: 17, event: "reyesAboard", line: line("marrow", "She's read it all. Ask her what I knew about the hinge, then decide who you're defending.") },
+];
+
+export const interceptFor = (index) => INTERCEPTS.find((i) => i.mission === index) || null;
+
+// Survivor voices (5.1): each of Echo team speaks as they come aboard (radio key 'aboard').
+export const CREW_RADIO = {
+  "Cpl. Kofi Mensah": line("kofi", "Mensah aboard. Reyes split us at the river and took the key north."),
+  "Medic Lin Tao": line("lin", "Three wounded in my head and none in this aircraft. Fly. I'll manage."),
+  "Pvt. Sam Hart": line("hart", "Hart aboard. I'd stopped counting the trucks. Thanks, Lantern."),
+  "Spc. Ada Okoro": line("okoro", "Okoro aboard. I kept the sergeant's radio dry the whole way."),
+  "Pvt. Noor Haddad": line("haddad", "Haddad. Eight hours in a culvert. I never want to see water again."),
+  "Pvt. Teo Brandt": line("brandt", "Brandt aboard. The drones followed us all the way up the ridge."),
+  "Spc. Juno Park": line("park", "Park aboard, with the wounded. Easy on the turns, Lantern."),
+  "Pvt. Pell Ashby": line("ashby", "Ashby. I thought the storm would get here before you did."),
+  "Sgt. Mara Reyes": line("echo", "Reyes aboard. I read every file on the ridge, Lantern. Every one."),
+};
+
+// A loss (5.1): the line on the result card for each reason, and the debrief's advice. `{boat}`
+// is the civilian boat that was hit. The city and the harbour lose to the tide differently.
+export const FAILURE_RADIO = {
+  shelter: STRIKE_RADIO.abort,
+  ferry: STRIKE_RADIO.ferryHit,
+  surge: line("iona", "High tide's in the low streets. Pull back, Kestrel. We go again."),
+  harbourSurge: line("ines", "They've ridden the tide over the bar. They're gone."),
+  flight: line("iona", "Kestrel Flight is down. Regroup, and we go again."),
+  ordnance: line("iona", "Racks are empty, Kestrel. Come home and rearm."),
+  barges: line("okafor", "Both barges are gone. Get us another convoy, Kestrel."),
+  hull: line("iona", "Marlin's going down! Everyone off the boat!"),
+  heliHull: line("iona", "Lantern is down. Echo, hold on. We're coming back."),
+  station: line("okafor", "The station's gone. The gates have stopped."),
+};
+
+export const FAILURE_TEXT = {
+  shelter: "A bomb struck the civilian shelter and the strike was aborted. Keep every pipper off the blue roof.",
+  ferry: "A bomb struck the {boat} and the strike was aborted. When the pattern turns blue, a civilian boat is inside it: hold your release.",
+  surge: "High tide reached the low streets before the pumps came back. Strike the key targets first, and use Reverse and the map marks to waste no passes.",
+  harbourSurge: "High tide: the flotilla rode it over the bar and out to sea.",
+  flight: "Kestrel Flight was shot down. Silence the flak first and change lane when a red lock line appears.",
+  barges: "Both barges sank before reaching the lock. Shield them with Marlin and steer them clear of mines.",
+  station: "The control room was destroyed and the gates stopped. Shoot the sappers with the gold rings before they reach the motors, and bring Marrow down quickly once he arrives.",
+};
+
+// The key a loss reads under: the harbour's tide and the helicopter's hull have their own lines.
+export function failureKey(reason, chapter, harbour) {
+  if (reason === "surge" && harbour) return "harbourSurge";
+  if (reason === "hull" && chapter === 2) return "heliHull";
+  return reason;
+}
 
 // Canal lines that can come in any Chapter 2 mission: the help that joins from crates, and
 // weapon advice.
@@ -838,6 +943,14 @@ export const FINALE = {
     },
   },
 };
+
+// The finale's 'What the files say' panel (5.1): every file's title, or 'Not recovered' for one
+// whose mission has no win in the save, and how many were read.
+export function filesRead(records) {
+  const rows = INQUIRY_FILES.map((file) => ({ title: file.title, found: Boolean(records?.[file.index]) }));
+  const read = rows.filter((row) => row.found).length;
+  return { rows, read, text: `You have read ${read} of ${INQUIRY_FILES.length} files` };
+}
 
 // How the city remembers Kestrel, from the campaign's stars (of `max`).
 export function finaleRecord(stars, max) {

@@ -770,7 +770,29 @@ A player who does nothing, by mode (seconds survived before the surge):
 
 On Normal and Hard every strike mission is lost by waiting (on Hard 1.9 falls to flak first, at 215 s).
 
-## 22. Controls
+## 22. Tidelock 5.1: the story stays on screen
+
+The plan is [PLAN-5.1.md](PLAN-5.1.md) (item N1), and every new or changed line, with its speaker, trigger and radio key, is in [SCRIPT-5.1.md](SCRIPT-5.1.md).
+
+### What was wrong
+
+The feed held two lines and dropped the oldest, so 10 of 135 lines went unread, while the harbour could go two and a half minutes in silence. The closing line, where 1.9's "My father was a pilot on the Lower Quays" lives, was covered by the result 1.41 s after it was said. The prologue said landfall was tomorrow while the missions ran to 19:10 the same day, the twist was spelled out at 2.2, and Marrow spoke live only in the finale.
+
+### What changed
+
+| Part | Change |
+| --- | --- |
+| One timeline | Landfall is tonight at 19:10. The first briefing of each chapter reads 'LANDFALL 19:10 · 12 H 30 MIN' (then 5 H, then 2 H 25 MIN); the prologue explains the storm tide; 3.3 has forty minutes to last light. Chapter 1 reads HIGH TIDE, never surge. |
+| Radio director | `src/radio-queue.js`: a line's priority comes from its key (story, tactical, chatter); each line stays at least 1 s + words / 3.5 s; story lines are never dropped or cut short; chatter goes first when the queue is long. Desktop shows three lines, phones a one-line ticker (dot, name, line) that a tap opens to the last three. |
+| Closing line | The result opens with the closing line on the card, and its buttons wait until it has been read (at most 6 s from when it was said); a tap, click or Enter skips the wait. |
+| Reveal | 2.2 and 2.5 hint, file 4 blacks out the name, file 5 gives it, file 6 (3.3) shows Marrow knew about the hinge for four years. Every file says where it came from. |
+| Marrow | Six intercepts in a red frame with the Ashen Front emblem, each from an event in its mission. |
+| Voices | The harbour calls a quarter, half and three quarters of the quota, and a working tip after 45 s of silence; every rescued soldier speaks. |
+| Debrief | Stars one at a time with a rising C-E-G, the score counting up, the requisition points the win brought and a Requisition button when they buy something; a loss shows a warning, Mission control and, after two, Try it on Easy; the finale's choice lists what the files say. |
+
+Gameplay did not move: the 50 golden rows are identical apart from their new radio log.
+
+## 23. Controls
 
 | Action | Desktop | Touch |
 | --- | --- | --- |

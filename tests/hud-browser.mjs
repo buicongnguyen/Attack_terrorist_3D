@@ -121,7 +121,7 @@ export async function checkHud(browser, url, check) {
     for (let index = 0; index <= 8; index++) {
       await page.evaluate(([src, index]) => eval(src)(index, 0), [`(${enter})`, index]);
       const a = await page.evaluate(audit, { touch: false, tide: true });
-      if (!a.tide.shown || !a.tide.inside || a.tide.size < 13 || !/^SURGE \d+:\d\d$/.test(a.tide.text)) tide.push(`${code(index)} ${JSON.stringify(a.tide)}`);
+      if (!a.tide.shown || !a.tide.inside || a.tide.size < 13 || !/^HIGH TIDE \d+:\d\d$/.test(a.tide.text)) tide.push(`${code(index)} ${JSON.stringify(a.tide)}`);
     }
     check(`hud ${size} the tide chip is shown, on screen and 13 px or more on 1.1-1.9${tide.length ? `: ${tide[0]}` : ""}`, tide.length === 0);
 
