@@ -489,7 +489,7 @@ export const CITY_GROWTH = Object.freeze({ cols: 3, rows: 4, extraRows: 1 });
 // Tunnel entrances in the yards next to each mission's own blocks, and the fighters already
 // hiding in each (none in the first mission).
 const TUNNELS = [0, 1, 1, 1, 2, 2];
-export const GARRISON = 2;
+const GARRISON = 2;
 // One-storey barracks with a crowd of fighters inside (2.6), beside each mission's blocks.
 const BARRACKS = [0, 1, 1, 1, 2, 2];
 export const BARRACKS_CREW = 5;
@@ -782,7 +782,7 @@ export function buildBlocks(buildings) {
 }
 
 // Segment/AABB slab test. Returns the entry fraction in [0, 1] or null.
-export function segmentBox(a, b, min, max, pad = 0) {
+function segmentBox(a, b, min, max, pad = 0) {
   let t0 = 0,
     t1 = 1;
   for (let axis = 0; axis < 3; axis++) {
@@ -981,7 +981,7 @@ function shift(keys, dt) {
 }
 
 // Each member leaves home in time to arrive exactly when the rally starts.
-export function rallyRoute(layout, buildings, home, spot, rally) {
+function rallyRoute(layout, buildings, home, spot, rally) {
   const go = timeline(pathBetween(layout, buildings, home, spot));
   const back = timeline(pathBetween(layout, buildings, spot, home));
   const walk = duration(go),
@@ -1020,7 +1020,7 @@ export function samplePath(keys, time) {
   };
 }
 
-export function patrolRoute(layout, buildings, points, wait, phase = 0) {
+function patrolRoute(layout, buildings, points, wait, phase = 0) {
   const loop = [...points, points[0]];
   let keys = [];
   let t = 0;
@@ -1040,7 +1040,7 @@ export function convoyRoute(points, speed, phase = 0) {
   return { keys, period, offset: phase };
 }
 
-export function postRoute(place) {
+function postRoute(place) {
   return { keys: [{ t: 0, ...place }, { t: 1, ...place }], period: 1, offset: 0 };
 }
 
@@ -1066,7 +1066,7 @@ export function sampleRoute(route, time) {
 }
 
 // Offsets so a gathering reads as a knot of people, not a single stacked figure.
-export function rallySpot(centre, index, count) {
+function rallySpot(centre, index, count) {
   if (count <= 1) return { ...centre };
   const angle = (index / count) * Math.PI * 2 + 0.4;
   const r = count > 4 ? 1.35 : 1;
@@ -1162,10 +1162,15 @@ export const armQuorum = (alive) => Math.max(1, Math.ceil(alive / 2));
 // Release now: `now` members expected as the bombs land, `later` if they landed ARM.settle s later.
 export const armReleases = (now, later, alive) => now >= armQuorum(alive) && later <= now;
 
+// m:ss, rounded up, never below 0:00: the armed drop, the intel chip and the tide chip.
+export const clock = (seconds) => {
+  const s = Math.max(0, Math.ceil(seconds));
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+};
+
 // 'ARMED · DROPS IN 0:04 · 4 OF 6 EXPECTED', on the release button and the gathering's tag.
 export function armText(drops, expected, alive) {
-  const s = Math.max(0, Math.ceil(drops));
-  return `ARMED · DROPS IN ${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")} · ${expected} OF ${alive} EXPECTED`;
+  return `ARMED · DROPS IN ${clock(drops)} · ${expected} OF ${alive} EXPECTED`;
 }
 
 // ------------------------------------------------------------------ flight + ballistics
@@ -1194,7 +1199,7 @@ export function groundAt(land, x, z) {
 }
 
 // Seconds a bomblet thrown from a burst at height h (vertical speed vy) takes to land.
-export function bombletFall(vy, h) {
+function bombletFall(vy, h) {
   return Math.max(0.25, (vy + Math.sqrt(vy * vy + 2 * -GRAVITY * Math.max(0.3, h))) / -GRAVITY);
 }
 

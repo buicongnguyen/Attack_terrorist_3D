@@ -1,5 +1,134 @@
 # Release Verification
 
+## Tidelock 5.1 "High Tide": the release (X1)
+
+[PLAN-5.1.md](PLAN-5.1.md) X1 was verified on 2026-11-21 against the production build (`vite preview`), Chrome 155 on the GPU (i7-14700KF, shared with other sessions). This section gathers the release's numbers; each item's own section below holds its detail.
+
+**X1 itself (behaviour unchanged).** Clean-up over the files 5.1 touched: 20 exports nothing imported lost their `export` (ui.js `setHidden`, `setClass`, `refreshIcons`, `Callouts`, `Pops`, `POPS`; strike-data.js `GARRISON`, `segmentBox`, `rallyRoute`, `patrolRoute`, `postRoute`, `rallySpot`, `bombletFall`; radio-queue.js `RADIO_PRIORITY`, `MAX_WAITING`, `STALE`; audio.js `STAR_NOTES`; rescue-data.js `rescueMap`; ripples.js `STAND_DOWN_GREY`; swarm.js `fishGeometry`); a dead local in `StrikeOperation.hint`; one m:ss formatter (`clock` in strike-data.js) instead of two copies (ui.js and `armText`); stale comments (a 'generic' tide chip, 'later medals', the 5.0 'surge clock' CSS header, with its keyframes moved beside the tide chip); the browser suites' copied `ready`, `enter` and `code` helpers now come from perf-browser.mjs. No unused CSS selector or leftover debug path was found (the scan checked every class and id in style.css against src and index.html). New: tests/hygiene.test.js fails on an export nothing imports (the shared mobile-game-support helper is allow-listed, kept identical to the other games' copies) or a 'TODO 5.1' marker, and checks the release is 5.1 in package.json (5.1.0) and in Mission control ('Tidelock 5.1 · High Tide'). `?qa&fps=1` shows 'p50 · p95 ms · frames / 30 s' at the right edge (11 px, click-through, outside #app; `FrameStats` in loop.js, a 30 s ring of timestamps). The N1 gap is closed: each inquiry file now shows its `from` line (where it came from, 12 px italic) under its title in Mission control's files list and on the result card that recovers it. The finale's 'What the files say' lists titles only, so it is unchanged.
+
+**The full local run** (in this order, no src edits while it ran, preview of the fresh `dist/` on a private port, GPU=1):
+- `npm test`: **205 Node tests, all passing** (199 after K1, plus 5 in hygiene.test.js and 1 FrameStats test in loop.test.js).
+- `npm run build`: built.
+- `npm run golden`: **all 50 rows match** with no re-baseline, 11 of 11 checks (isolation, four interleave plain and `&feel=1`, two randomCalls), 0.4 min.
+- `npm run test:browser`: **776 checks passed, 0 failed**, no page errors (771 after K1, plus 3 for the readout: none without `&fps=1`, p50 and p95 shown, small and out of the way at 390x844; and 2 for the inquiry files' source line: the result card and Mission control show the recovered file's `from` text at 11 px or more).
+- `npm run perf`: **29 of 29**.
+
+### Golden re-baselines in 5.1
+
+| Item | Re-baseline | Rows moved | What moved |
+|---|---|---|---|
+| G1 | the file is made | 50 new rows | Schema 1. Every 5.0 reference line is reproduced by its seed. |
+| P1, H1, J1, X1 | none | 0 | All 50 rows byte-identical. |
+| N1 | radio only (twice) | 50, then 8 | Only the `radio` field (`{"radio": 50}`, then `{"radio": 8}` after the review round); every other field byte-identical. |
+| C1 | `--allow '6/*/*,7/*/*,8/*/*,5/naive/normal'` | 6 (47 fields) | The harbour pilot rows: 1.7 and 1.8 Normal failed (ordnance) -> success; 1.7-1.9 end 81-149 s sooner on 9-11 bombs (was 15-20); `standDown` filled. |
+| K1 | `--allow '9/*/*,...,14/*/*'` | 14 (80 fields) | Every canal row gained `launches`; 9/idle/normal success -> failed (hull); 2.5 skipper 2 -> 3 stars; 2.1 rows 61.77 -> 79.42 s (longer mission). |
+
+### Balance: G1 -> 5.1 (8 seeds per cell)
+
+`GPU=1 npm run balance -- --jobs 12` on the X1 tree before its clean-up (a4c3980; the clean-up is proven behaviour-neutral by the 50 golden rows): **all 132 cells x 8 seeds (1,056 runs) measured in 7.6 min, none failed, none left out** (one page was slow to load and was opened again, as the harness allows). G1's sweep took 25.6 min; the harbour pilot's runs are shorter now. Entries are wins and mean stars; a changed rate or star mean is bold, with how the losses ended; end-time changes are in brackets.
+
+| Mission | Player | Easy: G1 -> 5.1 | Normal: G1 -> 5.1 | Hard: G1 -> 5.1 |
+|---|---|---|---|---|
+| 1.1 | autopilot | 8/8 ★3.00 | 8/8 ★3.00 | 8/8 ★3.00 |
+| 1.1 | naive | 8/8 ★3.00 | 8/8 ★3.00 | 8/8 ★2.00 |
+| 1.1 | idle | 0/8 ★0.00 | 0/8 ★0.00 | 0/8 ★0.00 |
+| 1.2 | autopilot | 8/8 ★3.00 | 8/8 ★3.00 | 8/8 ★3.00 |
+| 1.2 | naive | 8/8 ★3.00 | 8/8 ★3.00 | 8/8 ★3.00 |
+| 1.2 | idle | 0/8 ★0.00 | 0/8 ★0.00 | 0/8 ★0.00 |
+| 1.3 | autopilot | 8/8 ★3.00 | 8/8 ★3.00 | 8/8 ★3.00 |
+| 1.3 | naive | 8/8 ★2.00 | 0/8 ★0.00 | 0/8 ★0.00 |
+| 1.3 | idle | 0/8 ★0.00 | 0/8 ★0.00 | 0/8 ★0.00 |
+| 1.4 | autopilot | 8/8 ★2.00 | 8/8 ★3.00 | 8/8 ★2.00 |
+| 1.4 | naive | 8/8 ★2.00 | 8/8 ★1.38 | 8/8 ★1.13 |
+| 1.4 | idle | 0/8 ★0.00 | 0/8 ★0.00 | 0/8 ★0.00 |
+| 1.5 | autopilot | 8/8 ★3.00 | 8/8 ★3.00 | 0/8 ★0.00 |
+| 1.5 | naive | 8/8 ★2.00 | 0/8 ★0.00 | 0/8 ★0.00 |
+| 1.5 | idle | 0/8 ★0.00 | 0/8 ★0.00 | 0/8 ★0.00 |
+| 1.6 | autopilot | 8/8 ★2.00 | 8/8 ★2.00 | 8/8 ★2.00 |
+| 1.6 | naive | 8/8 ★1.38 | 0/8 ★0.00 | 0/8 ★0.00 |
+| 1.6 | idle | 0/8 ★0.00 | 0/8 ★0.00 | 0/8 ★0.00 |
+| 1.7 | harbour | 8/8 ★2.00 (266.4 s -> 145.9 s) | **0/8 ★0.00 -> 8/8 ★2.00** | **0/8 ★0.00 -> 8/8 ★2.00** |
+| 1.7 | idle | 0/8 ★0.00 | 0/8 ★0.00 | 0/8 ★0.00 |
+| 1.8 | harbour | 8/8 ★2.00 (189.5 s -> 124.6 s) | **0/8 ★0.00 -> 8/8 ★2.00** | **0/8 ★0.00 -> 8/8 ★2.00** |
+| 1.8 | idle | 0/8 ★0.00 | 0/8 ★0.00 | 0/8 ★0.00 |
+| 1.9 | harbour | 8/8 ★2.00 (323.1 s -> 185.0 s) | 8/8 ★2.00 (326.6 s -> 177.9 s) | **0/8 ★0.00 -> 8/8 ★2.00** |
+| 1.9 | idle | 0/8 ★0.00 | 0/8 ★0.00 | 0/8 ★0.00 |
+| 2.1 | skipper | 8/8 ★3.00 (61.8 s -> 79.4 s) | 8/8 ★3.00 (61.8 s -> 79.4 s) | 8/8 ★3.00 (61.8 s -> 79.4 s) |
+| 2.1 | idle | **8/8 ★2.00 -> 0/8 ★0.00** (hull 7, barges 1) | **5/8 ★0.88 -> 0/8 ★0.00** (hull 7, barges 1) | 0/8 ★0.00 (41.6 s -> 45.6 s) |
+| 2.2 | skipper | 8/8 ★3.00 | 8/8 ★3.00 | 8/8 ★3.00 |
+| 2.2 | idle | **7/8 ★1.75 -> 8/8 ★2.00** | 0/8 ★0.00 (49.9 s -> 51.1 s) | 0/8 ★0.00 (27.1 s -> 31.9 s) |
+| 2.3 | skipper | 8/8 ★3.00 | **8/8 ★2.75 -> 8/8 ★2.88** | **8/8 ★2.00 -> 8/8 ★2.25** |
+| 2.3 | idle | **6/8 ★1.13 -> 5/8 ★1.25** (hull 3) | 0/8 ★0.00 (30.3 s -> 29.2 s) | 0/8 ★0.00 (19.0 s -> 19.1 s) |
+| 2.4 | skipper | 8/8 ★3.00 | 8/8 ★3.00 | 8/8 ★3.00 |
+| 2.4 | idle | **1/8 ★0.25 -> 2/8 ★0.50** (hull 6) | 0/8 ★0.00 (27.8 s -> 29.8 s) | 0/8 ★0.00 (18.9 s -> 19.2 s) |
+| 2.5 | skipper | **8/8 ★2.00 -> 8/8 ★3.00** | **8/8 ★2.00 -> 8/8 ★3.00** | **6/8 ★1.50 -> 8/8 ★2.00** |
+| 2.5 | idle | 0/8 ★0.00 (48.3 s -> 53.2 s) | 0/8 ★0.00 (21.8 s -> 23.4 s) | 0/8 ★0.00 (15.8 s -> 16.1 s) |
+| 2.6 | skipper | 8/8 ★3.00 | 8/8 ★3.00 (59.4 s -> 59.3 s) | 8/8 ★3.00 (59.5 s -> 59.3 s) |
+| 2.6 | idle | 0/8 ★0.00 (59.4 s -> 68.8 s) | 0/8 ★0.00 (27.6 s -> 29.6 s) | 0/8 ★0.00 (16.5 s -> 17.2 s) |
+| 3.1 | rescue | 8/8 ★3.00 | 8/8 ★3.00 | 8/8 ★3.00 |
+| 3.1 | idle | 0/8 ★0.00 | 0/8 ★0.00 | 0/8 ★0.00 |
+| 3.2 | rescue | 8/8 ★3.00 | 8/8 ★3.00 | 8/8 ★3.00 |
+| 3.2 | idle | 0/8 ★0.00 | 0/8 ★0.00 | 0/8 ★0.00 |
+| 3.3 | rescue | 8/8 ★2.75 | 8/8 ★2.38 | 8/8 ★1.50 |
+| 3.3 | idle | 0/8 ★0.00 | 0/8 ★0.00 | 0/8 ★0.00 |
+| 3.4 | siege | 8/8 ★1.00 | 8/8 ★1.00 | 0/8 ★0.00 |
+| 3.4 | idle | 0/8 ★0.00 | 0/8 ★0.00 | 0/8 ★0.00 |
+
+15 of 132 cells changed rate or stars, all in C1's harbour and K1's canal and each as those items recorded; the city (54 cells), the valley (18) and the finale (6) are identical in rate, stars and time.
+
+### HUD coverage at 390x844: P1 -> 5.1
+
+Touch layout, the share of a 10 px grid under a painted HUD element after 1 s of play (perf-browser `coverage()`). Targets: 40% after H1 and 36% after N1, on the five missions below that carry one.
+
+| Mission | Before (P1) | After (5.1) | Points | Target |
+|---|---|---|---|---|
+| 1.1 Wake-Up Call | 41.3% | 35.1% | -6.2 | 36%: met |
+| 1.2 Floors Below | 46.8% | 35.1% | -11.7 | none |
+| 1.3 Shift Change | 44.1% | 42.6% | -1.5 | none |
+| 1.4 Flak Alley | 47.2% | 44.6% | -2.6 | none |
+| 1.5 Scatter | 46.8% | 45.2% | -1.6 | none |
+| 1.6 The Glass Tower | 45.6% | 43.2% | -2.4 | none |
+| 1.7 Harbour Mouth | 53.9% | 41.0% | -12.9 | 36%: **missed (owner)** |
+| 1.8 Dry Dock | 53.0% | 42.4% | -10.6 | none |
+| 1.9 The Ring | 50.9% | 41.5% | -9.4 | none |
+| 2.1 Mangrove Mile | 34.9% | 30.0% | -4.9 | 36%: met |
+| 2.2 The Narrows | 28.3% | 20.2% | -8.1 | none |
+| 2.3 Floodplain | 28.0% | 20.2% | -7.8 | none |
+| 2.4 Sawmill Reach | 28.5% | 20.2% | -8.3 | none |
+| 2.5 The Cut | 27.8% | 20.2% | -7.6 | none |
+| 2.6 Lock Gate | 29.0% | 20.2% | -8.8 | none |
+| 3.1 Hidden Signals | 37.9% | 30.2% | -7.7 | 36%: met |
+| 3.2 Broken Crossing | 37.9% | 31.3% | -6.6 | none |
+| 3.3 Last Light | 37.9% | 31.3% | -6.6 | none |
+| 3.4 Eye of the Storm | 36.8% | 31.3% | -5.5 | 36%: met |
+
+Every mission went down (by 1.5 to 12.9 points). 1.7 at 41.0% is the only target missed (see Open for the owner). The multi-aircraft city missions 1.3-1.6 stay highest (42.6-45.2%); they carry no target.
+
+### Frame times at 390x844, CPU throttled 4x, GPU=1
+
+The perf-browser method (open, start the mission, throttle, 2 s to settle, 5 s measured; the real frame loop, no input) on 1.6, 1.8 and 3.4, three runs each, median reported. 'P1 now' is commit 1b2c9a5 rebuilt and measured in the same session on the same port, so both builds saw the same machine and display; 'P1 recorded' is the single run in P1's baseline block below.
+
+| Mission | P1 recorded (1 run) p50 / p95 | P1 now (median of 3) p50 / p95 | 5.1 (median of 3) p50 / p95 | 5.1 p95 runs | p95 vs P1 now | p95 vs P1 recorded |
+|---|---|---|---|---|---|---|
+| 1.6 | 16.7 / 33.3 ms | 17.6 / 18.1 ms | 17.6 / 18.1 ms | 18.1, 18.1, 18.1 | 0.0% | -45.6% |
+| 1.8 | 16.7 / 16.8 ms | 17.6 / 18.1 ms | 17.6 / 18.2 ms | 18.1, 92.0, 18.2 | +0.6% | +8.3% |
+| 3.4 | 16.7 / 16.8 ms | 17.6 / 18.1 ms | 17.6 / 18.4 ms | 18.5, 18.4, 18.1 | +1.7% | +9.5% |
+| Real phone | not measured | not measured | not measured | | | |
+
+- **Verdict: no mission's p95 is more than 10% worse.** Against P1 measured now the worst is +1.7% (3.4); against P1's recorded single run, 1.8 and 3.4 are 8.3% and 9.5% higher, but that is the display: both builds now pace at 17.6 ms a frame (about 57 Hz here today, 60 Hz when P1 ran), so p50 moved by the same 0.9 ms on both. With the CPU slowed 4x every build still holds the display's rate on these three missions, so this gate shows a regression only when a frame misses its vsync.
+- One 5.1 run of 1.8 hit a stall (186 frames, p95 92.0 ms); the other two and all three P1 runs had none. The median keeps it out; the machine was shared with other sessions.
+- **Real phone: not measured.** No phone was used in this session. The owner can read the numbers on a phone with `?qa=1&fps=1` (the readout covers the last 30 s) on 1.6, 1.8 and 3.4.
+
+### Open for the owner
+
+1. **1.7 HUD coverage**: 41.0% at 390x844 against the 36% target (H1 aimed at 40%). Reaching it means smaller text or targets or hiding the radio line; hud-browser holds it at 44% until you decide.
+2. **Hard harbour is now 8/8 (was 0/8)** on 1.7, 1.8 and 1.9 after the stand-down. The plan set no Hard ceiling; a Hard-only quota or payload lever is the place if you want it harder.
+3. **2.5 The Cut is easier**: the skipper's stars rose from 2.00 to 3.00 on Easy and Normal (Hard 6/8 ★1.50 -> 8/8 ★2.00), because guns now fire from the engage line. Accept, or tune 2.5 another way in 5.2.
+4. **The canal engage line sits under the HUD's top band** at 1280x720 (25 px above the free rect) and 844x390 (82 px; 67% of skipper launches there come from outside the free rect). The levers are a radio ticker that does not bound the free rect, or a shorter top band on landscape phones.
+5. **Read [SCRIPT-5.1.md](SCRIPT-5.1.md)**: every new or changed line, its speaker and trigger. Lines are data, so changes reopen no logic.
+6. **Listen at `?qa=1&listen=1`**: Mission control's Sound test plays all 27 cues (the 15 new ones first). The cue set is data; the vehicle loops, haptics and volume slider wait for this pass (5.2).
+7. **City tuning for 5.2**: the naive clicker wins 1.1, 1.2 and 1.4 on Normal (24 of 48 city runs; 32 of 48 in portrait). 5.1 accepted the city as it is; the options (Normal-only flak uptime, a payload trim, rooftop teams, score-only skill rewards) need your OK and must hold in both orientations.
+
 ## Tidelock 5.1, K1: canal fairness
 
 [PLAN-5.1.md](PLAN-5.1.md) K1 was verified on 2026-11-21 against the production build (`vite preview`), Chrome 155 on the GPU. One golden re-baseline with `--allow '9/*/*,10/*/*,11/*/*,12/*/*,13/*/*,14/*/*'`; every other row is byte-identical.

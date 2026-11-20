@@ -283,7 +283,7 @@ export const RESCUE_MAPS = [
 ];
 
 // The map for a rescue mission, by its index in the chapter (0-3).
-export const rescueMap = (index = 0) => RESCUE_MAPS[Math.max(0, Math.min(RESCUE_MAPS.length - 1, index))];
+const rescueMap = (index = 0) => RESCUE_MAPS[Math.max(0, Math.min(RESCUE_MAPS.length - 1, index))];
 
 // The river's centre and width at `z`, from the map's control points (flat beyond the ends).
 export function riverAt(map, z) {

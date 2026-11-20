@@ -1,3 +1,4 @@
+import { INQUIRY_FILES } from "../src/story.js";
 // Chapter 3 browser checks (2.7): Lantern picks people up by flying over them, lands at another
 // base, fires along a direction, and meets launch crews, missile trucks, drone stations and
 // barracks on three different maps.
@@ -475,7 +476,7 @@ export async function checkRescue(page, browser, url, check, errors) {
   for (const [name, value] of Object.entries(siege)) check(`finale ${name}`, value === true);
 
   // The ending: the question first, then the epilogue of the choice, saved for Mission Control.
-  const ending = await page.evaluate(() => {
+  const ending = await page.evaluate((fileFrom) => {
     const { game: g, ui } = __TIDELOCK__;
     const $ = (id) => document.getElementById(id);
     const out = {};
@@ -491,12 +492,19 @@ export async function checkRescue(page, browser, url, check, errors) {
     document.querySelectorAll("dialog[open]").forEach((d) => d.close());
     ui.showResult({ success: true, score: 100, stars: 3, index: 5, kills: 3, reason: null, accuracy: 50 });
     out.resultShowsTheRecoveredFile = !$("result-file").hidden && $("result-file-title").textContent.includes("Inquiry file 1") && $("finale-choice").hidden;
+    // Where the file came from (5.1 N1), a line of 11 px or more under its title.
+    const big = (el) => el && el.offsetParent !== null && parseFloat(getComputedStyle(el).fontSize) >= 11;
+    out.resultShowsWhereTheFileCameFrom = $("result-file-from").textContent === fileFrom && big($("result-file-from"));
     $("result-dialog").close();
     ui.menu();
     out.missionControlKeepsTheFiles = /^[1-6] \/ 6$/.test($("files-count").textContent) && $("files-list").querySelectorAll("article").length >= 1 && $("files-list").textContent.includes("Your ending: A quiet repair");
+    $("files-details").open = true;
+    const from = $("files-list").querySelector("article .file-from");
+    out.missionControlShowsWhereTheFileCameFrom = from?.textContent === fileFrom && big(from);
+    $("files-details").open = false;
     ui.resume();
     return out;
-  });
+  }, INQUIRY_FILES.find((f) => f.index === 5).from);
   for (const [name, value] of Object.entries(ending)) check(`ending ${name}`, value === true);
 
   await page.evaluate(() => {

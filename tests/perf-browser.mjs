@@ -27,9 +27,9 @@ export const DRAW_CEILINGS = { 5: 565, 7: 374, 16: 343 };
 export const PHONE = { width: 390, height: 844 };
 const ALLOC_BUDGET_KB = 60;
 // "1.6" for mission index 5.
-const code = (index) => `${MISSIONS[index].chapter + 1}.${index - chapterStart(MISSIONS[index].chapter) + 1}`;
+export const code = (index) => `${MISSIONS[index].chapter + 1}.${index - chapterStart(MISSIONS[index].chapter) + 1}`;
 
-const ready = (page) => page.waitForFunction(() => document.documentElement.dataset.ready === "true", null, { timeout: 120000 });
+export const ready = (page) => page.waitForFunction(() => document.documentElement.dataset.ready === "true", null, { timeout: 120000 });
 async function open(browser, url, query = "?qa=1", viewport = PHONE) {
   const page = await browser.newPage({ viewport });
   page.errors = [];
@@ -40,7 +40,7 @@ async function open(browser, url, query = "?qa=1", viewport = PHONE) {
 }
 
 // In the page: start a mission with no dialog in the way, unpaused, then `steps` fixed steps.
-function enter(index, steps = 0) {
+export function enter(index, steps = 0) {
   const { game: g, ui } = window.__TIDELOCK__;
   document.querySelectorAll("dialog[open]").forEach((d) => d.close());
   ui.start(index);

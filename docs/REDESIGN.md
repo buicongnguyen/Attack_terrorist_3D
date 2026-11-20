@@ -815,6 +815,14 @@ Gameplay did not move: the 50 golden rows are identical apart from their new rad
 
 **Measured** (8 seeds, `npm run balance`): doing nothing now loses 2.1 on every mode (Easy 8/8 wins and Normal 5/8 wins before); the skipper still wins 2.1-2.6 on every mode in 8/8. Firing later made the skipper's 2.5 cleaner (3 stars on Easy and Normal, 2 before). The HUD's own panels still keep the line out of the free play rect at 1280x720 (25 px) and 844x390 (82 px): see [VERIFICATION.md](VERIFICATION.md).
 
+### 5.1 wrap-up (X1)
+
+5.1 "High Tide" shipped eight items: G1 (golden scripted runs and the 8-seed balance sweep, so every later change is measured), P1 (headroom: fewer draws, no program look-ups, a pure frame loop), H1 (a phone HUD with 11 px text and 44 px targets), N1 (the radio director, one timeline, the debrief), J1 (hit-stops, shake, pops, blowouts and 27 synthesized cues, with a listen panel first), C1 (the armed meeting strike, the harbour stand-down and LAST RUN), K1 (the Boom and the engage line) and X1 (clean-up, numbers, docs).
+
+What it did to play, measured over 8 seeds against G1: the harbour pilot now wins 1.7-1.9 on every mode (it ran dry on Normal and Hard before), doing nothing no longer wins 2.1 on any mode, the skipper's 2.5 is cleaner (3 stars on Easy and Normal), and the city, the valley and the finale did not move. The city stays as it is by decision; its Normal tuning goes to the owner for 5.2. The gameplay goldens moved only in C1 (six harbour rows) and K1 (fourteen canal rows); N1 filled the radio logs. X1's clean-up left all 50 rows byte-identical.
+
+X1 itself: unused exports and copied test helpers are gone (tests/hygiene.test.js now fails on an export nothing imports or a leftover 'TODO 5.1'), one m:ss formatter serves the armed drop and the chips, `?qa&fps=1` shows the p50 and p95 frame times of the last 30 s for real-phone readings, and Mission control shows the release, 'Tidelock 5.1 · High Tide'. The release numbers, before and after, and the decisions left to the owner are at the top of [VERIFICATION.md](VERIFICATION.md). Deferred to 5.2 and 5.3: the storm on screen (S1), the rest of the canal and valley work (R1, V1), music, gamepad, accessibility options and the city tuning ([PLAN-5.1.md](PLAN-5.1.md), "Deferred").
+
 ## 23. Controls
 
 | Action | Desktop | Touch |

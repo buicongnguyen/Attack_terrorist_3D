@@ -52,7 +52,7 @@ import {
   createElement,
 } from "lucide";
 import { CHAPTERS, MISSIONS, missionNumber, chapterSize, saveResult, migrateSave } from "./data.js";
-import { BOMBS, BOMB_ORDER, FLIGHT, STRIKE_MISSIONS, armRally, isPattern } from "./strike-data.js";
+import { BOMBS, BOMB_ORDER, FLIGHT, STRIKE_MISSIONS, armRally, clock, isPattern } from "./strike-data.js";
 import { patternDiagram, ROTATION_STEP } from "./harbour-data.js";
 import {
   CAST,
@@ -77,6 +77,7 @@ import { DIFFICULTIES, DIFFICULTY, DEFAULT_DIFFICULTY, difficulty, percent } fro
 import { RescueHUD } from "./rescue-hud.js";
 import { isHostileEntity } from "./rescue-data.js";
 import { saveGovernor } from "./quality.js";
+import { FrameStats } from "./loop.js";
 import { UPGRADES, available, buy, level, nextCost, sanitize, affordable } from "./requisition.js";
 import { EdgeMarkers, freeRectOf, outside } from "./edge-markers.js";
 
@@ -150,18 +151,13 @@ const TAG_GLYPH = { key: Star, civilian: Ban };
 const PINNED_TAGS = new Set(["boss", "gates", "station"]);
 // City map marks by shape (5.1 H1): key targets a diamond, civilians a hollow ring, hostiles a dot.
 const KEY_MARKS = new Set(["key", "officer", "mast"]);
-// m:ss for the intel chip and the tide chip.
-const clock = (seconds) => {
-  const s = Math.max(0, Math.ceil(seconds));
-  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
-};
 const SAVE_KEY = "tidelock-v4";
 // Older saves number missions before the harbour (v2) or canal (v3) missions were inserted.
 const LEGACY_KEYS = [
   ["tidelock-v3", 3],
   ["tidelock-v2", 2],
 ];
-export const refreshIcons = () => createIcons({ icons: iconSet, attrs: { "aria-hidden": "true" } });
+const refreshIcons = () => createIcons({ icons: iconSet, attrs: { "aria-hidden": "true" } });
 
 export function readSave() {
   try {
@@ -258,10 +254,10 @@ export function setText(el, value) {
   const text = String(value ?? "");
   if (el.textContent !== text) el.textContent = text;
 }
-export function setHidden(el, hidden) {
+function setHidden(el, hidden) {
   if (el.hidden !== Boolean(hidden)) el.hidden = Boolean(hidden);
 }
-export function setClass(el, name, on) {
+function setClass(el, name, on) {
   if (el.classList.contains(name) !== Boolean(on)) el.classList.toggle(name, Boolean(on));
 }
 
@@ -297,13 +293,13 @@ function lineMarkup(line) {
   return `${portrait(line.who)}<div><b>${escape(cast.name)}</b><small>${escape(cast.role)}</small>${tag}<p>${escape(line.text)}</p></div>`;
 }
 
-// The callout lanes (5.1 H1): the banner lane across the middle (multi-kills, checkpoints, later
-// medals), the toast lane under the top bar and the hint lane above the controls. One message
+// The callout lanes (5.1 H1): the banner lane across the middle (multi-kills, checkpoints and
+// meeting blows), the toast lane under the top bar and the hint lane above the controls. One message
 // per lane: a new one replaces the last and resets the lane's classes. The same toast within 3 s
 // merges into one with a count ('GLANCING HIT x3'). Timers run on game time, so a pause holds
 // every message.
 const MERGE_WINDOW = 3;
-export class Callouts {
+class Callouts {
   constructor(game) {
     this.game = game;
     this.toastLane = { el: $("toast"), text: "", count: 0, at: -Infinity, until: -Infinity };
@@ -365,8 +361,8 @@ export class Callouts {
 // Score pops (5.1 J1): 16 spans made once in #pops (inside #world-labels), each one text node
 // rewritten in place, so the layer never gains or loses a child. A pop rises 28 px over 0.9 s by
 // transform alone, re-projected every frame; a new one takes the oldest span.
-export const POPS = { count: 16, life: 900, rise: 28 };
-export class Pops {
+const POPS = { count: 16, life: 900, rise: 28 };
+class Pops {
   constructor(layer, view) {
     this.view = view;
     this.point = { x: 0, y: 0, visible: false };
@@ -473,6 +469,7 @@ export class UI {
     this.updateSound();
     this.bind();
     if (this.qa && this.params.get("listen") === "1") this.buildListen();
+    if (this.qa && this.params.get("fps") === "1") this.buildFrameReadout();
     this.updatePointsDot();
     this.bindStick("move-stick", false);
     this.bindStick("fire-stick", true);
@@ -1360,6 +1357,27 @@ window.addEventListener('mobile-game-interruption', () => {
     this.dialog.showModal();
   }
 
+  // The frame-time readout (?qa&fps=1, 5.1 X1): p50 and p95 of the gaps between animation frames
+  // over the last 30 s, written twice a second, small and click-through at the screen's right
+  // edge (outside #app, so it is never counted as HUD). For real-phone numbers.
+  buildFrameReadout() {
+    const el = document.createElement("div");
+    el.id = "fps-readout";
+    el.setAttribute("aria-hidden", "true");
+    document.body.append(el);
+    this.frameReadout = { el, stats: new FrameStats(), next: 0 };
+  }
+
+  sampleFrame(now) {
+    const r = this.frameReadout;
+    if (!r) return;
+    r.stats.sample(now);
+    if (now < r.next) return;
+    r.next = now + 500;
+    const t = r.stats.read();
+    if (t) setText(r.el, `p50 ${t.p50.toFixed(1)} · p95 ${t.p95.toFixed(1)} ms · ${t.frames} f / 30 s`);
+  }
+
   // The Sound test (?qa&listen=1, 5.1 J1): a row and a Play button for every cue of the CUES table,
   // the new ones first, and Play all. The owner's listen gate for the cue set.
   buildListen() {
@@ -1392,7 +1410,7 @@ window.addEventListener('mobile-game-interruption', () => {
     const ending = FINALE.choices[this.save.ending];
     $("files-list").innerHTML =
       (found.length
-        ? found.map((file) => `<article><strong>${escape(file.title)}</strong><p>${escape(file.text)}</p></article>`).join("")
+        ? found.map((file) => `<article><strong>${escape(file.title)}</strong><small class="file-from">${escape(file.from)}</small><p>${escape(file.text)}</p></article>`).join("")
         : "<p>No files yet. Echo team is still inside the Glass District.</p>") +
       (ending ? `<p class="files-ending">Your ending: ${escape(ending.title)}.</p>` : "");
   }
@@ -1736,6 +1754,7 @@ window.addEventListener('mobile-game-interruption', () => {
     $("result-file").hidden = !file;
     if (file) {
       $("result-file-title").textContent = `RECOVERED / ${file.title}`;
+      $("result-file-from").textContent = file.from;
       $("result-file-text").textContent = file.text;
     }
     // The finale asks its question first; the usual buttons come back with the epilogue.
@@ -1930,7 +1949,7 @@ window.addEventListener('mobile-game-interruption', () => {
 
   // The tide chip (5.1 H1): the surge window left, read as HIGH TIDE, in the top bar at every width. Gold, orange
   // from 120 s, red and pulsing from 60 s; the bar under the top bar fills as the window runs out
-  // and is written only when its whole percentage changes. Generic, so later clocks can use it.
+  // and is written only when its whole percentage changes.
   updateTide(left) {
     const chip = $("tide-chip"),
       on = left !== undefined;

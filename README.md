@@ -1,16 +1,27 @@
 # Tidelock: Operation Breakwater
 
-A three-chapter 3D story campaign for the browser, built with **Three.js**, **cannon-es** and 49 original **Blender** models.
+A three-chapter 3D story campaign for the browser, built with **Three.js**, **cannon-es** and 60 original **Blender** models. This is release **5.1, High Tide**.
 
 **[Play Tidelock](https://buicongnguyen.github.io/Attack_terrorist_3D/)**
 
 ![Kestrel Flight salvo over the Glass Tower](docs/chapter1.png)
 
-Solace Harbor lies three metres below the tide. Only the Tidelock, a storm barrier at the mouth of the Verde River, keeps it dry. Its designer, now the terrorist leader Marrow, has seized the city's towers and the barrier's control station. He will hold the gates open when Typhoon Ilse peaks at last light tomorrow. You fly for the Kestrel Response Unit.
+Solace Harbor lies three metres below the tide. Only the Tidelock, a storm barrier at the mouth of the Verde River, keeps it dry. Its designer, now the terrorist leader Marrow, has seized the city's towers and the barrier's control station. He will hold the gates open when Typhoon Ilse makes landfall tonight, at 19:10. You fly for the Kestrel Response Unit.
+
+## New in 5.1: High Tide
+
+- **The HIGH TIDE clock** sits in the top bar at every screen size, with a bar under it that fills as the water comes.
+- **The armed meeting strike.** Tap or click a gathering's ring before it convenes and the drop is armed: the flight keeps patrolling, then steers on and releases when at least half the cell is there ('ARMED · DROPS IN 0:11 · 6 OF 6 EXPECTED'). A second tap cancels. On 1.6 the Drill bursts out of the Glass Tower's sixth floor: THE MEETING IS BROKEN.
+- **The harbour endgame and LAST RUN.** Once the quota is met, every boat but the key group stands down (grey tag, guns silent, worth nothing), and the objective names what is left: 'QUOTA MET · SINK THE CHANNEL COLUMN (4 LEFT)'. On Easy and Normal a flight that runs dry there gets a LAST RUN resupply, once.
+- **The Boom** (2.1): a float-and-chain boom under two gun nests holds the barges until Marlin breaks it. Canal guns now open fire from a line you can see on screen, and anything shooting from out of sight gets an edge chevron.
+- **Radio and debrief.** One timeline to landfall, a radio that never cuts a story line short (three lines on desktop, a one-line ticker on phones), six Marrow intercepts, a closing line on every result card, stars and score that count up, and the requisition points each win brings.
+- **Feel and sound.** Short hit-stops on big kills, camera shake, score pops where the kill happened, fire blown out of a tower's walls, a hurt edge that shows where a hit came from, and 27 synthesized cues: incoming fire you can hear, a lock tone that speeds up, stingers for a win or a loss.
+- **A HUD that reads on a phone**: 11 px text and 44 px touch targets at least, the city map and intel folded into buttons, one shield ring, callouts in their own lanes.
+- **For testers:** `?qa=1&listen=1` adds a Sound test to Mission control (every cue with a Play button), and `?qa=1&fps=1` shows the p50 and p95 frame times of the last 30 s at the right edge of the screen.
 
 ## Campaign
 
-The storm does not wait: each city and harbour mission has a surge window, and when it closes the mission is lost. The stars you earn become requisition points to spend on upgrades for the flight, the gunboat and the helicopter between missions.
+The storm does not wait: each city and harbour mission runs against the **HIGH TIDE** clock in the top bar (gold, orange from two minutes, red and pulsing from one), and when it runs out the mission is lost. The stars you earn become requisition points to spend on upgrades for the flight, the gunboat and the helicopter between missions.
 
 Under the missions runs the Wall Inquiry: six files, recovered as you go, about who really let the old sea wall fail. The finale asks you what to do with them, and the ending follows your choice.
 
@@ -24,7 +35,7 @@ Under the missions runs the Wall Inquiry: six files, recovered as you go, about 
 
 ### Chapter 1: city and harbour strikes
 
-- **Click or tap where the bomb should land.** The flight flies there, holds over the mark and releases; a mark on a target follows it. A Drill marked on someone indoors sets its own floor. Or fly by hand: inside the dashed **safe airspace** the stick moves the flight freely, across and along its line, with a gentle creep backwards and a quick pivot to turn round.
+- **Click or tap where the bomb should land.** The flight flies there, holds over the mark and releases; a mark on a target follows it. A mark on a gathering that has not met yet arms the drop for the moment it does. A Drill marked on someone indoors sets its own floor. Or fly by hand: inside the dashed **safe airspace** the stick moves the flight freely, across and along its line, with a gentle creep backwards and a quick pivot to turn round.
 - **Easy, Normal, Hard or Crazy** (Mission Control, Normal by default). Easy means half as many bombs again, bigger blasts, a sturdier hull and enemy fire that rarely lands (never in the first two city missions), but the barges still need escorting; a banner always states the hit chance ("5% IF HELD"), and evading always wins.
 - Every live target ripples on the ground, gold for the key ones, so you can find them from anywhere on screen.
 - Early bombs hit harder and home a little onto a target they nearly hit (a gold ring shows which), so a near miss still counts. They never home onto a target beside the civilian shelter.
@@ -71,7 +82,7 @@ Every mission opens with a briefing and ends with a story debrief and star crite
 | --- | --- | --- |
 | Fly the formation (safe airspace) | W S across, A D along its line | Left stick |
 | Turn the flight round | F | Reverse |
-| Mark the drop point | Click the city or the map, right click cancels | Tap the city |
+| Mark the drop point (on a gathering: arm it; again: cancel) | Click the city or the map, right click cancels | Tap the city |
 | Payload, release now, salvo | 1–9, Space, X | Payload chips, Release, Salvo |
 | Drill floor or pattern angle, formation spacing | E / C, mouse wheel or the angle buttons, Q | Floor ladder, the dial's arrows or the angle buttons, spacing button |
 | Move boat or helicopter | WASD / arrows | Left stick |
@@ -95,21 +106,22 @@ npm run dev
 ```
 
 ```sh
-npm test                                  # 125 Node tests: rules, schedules, ballistics, harbour fits, story, GLB contracts, golden and sweep tools
+npm test                                  # 205 Node tests: rules, schedules, ballistics, harbour fits, story, radio, sound, loop, hygiene, GLB contracts, golden and sweep tools
 npm run build
 npm run preview -- --port 5183
-npm run test:browser                      # Chrome suite: mechanics, layouts, rendering
-npm run golden                            # golden scripted runs: 50 rows (pilots on Normal and Easy, naive, idle)
-npm run balance                           # balance sweep: win rates over 8 seeds (local only, takes a while)
+npm run test:browser                      # 776 Chrome checks: mechanics, layouts, HUD, feel, rendering, perf
+npm run golden                            # golden scripted runs: 50 rows (pilots on Normal and Easy, naive, idle) and 11 checks
+npm run balance                           # balance sweep: 132 cells x 8 seeds (local only; about 8 min with 12 contexts on the GPU)
+npm run perf                              # 29 headroom checks: draw-call ceilings, program look-ups, rings, HUD writes
 ```
 
-`npm run golden` plays each scripted run in a fresh page and compares it with `tests/golden/scripted-runs.json`; `UPDATE_GOLDEN=1` rewrites that file and `--allow 'pattern,...'` limits which rows may move (see the top of `tests/golden-browser.mjs`). `npm run balance` plays the pilots, the naive clicker and the do-nothing player over 8 seeds on Easy, Normal and Hard and writes win rates, mean stars and mean end times to `test-results/balance.json`; `--missions 9-14 --modes normal --seeds 8 --players pilot,idle` narrows it (see the top of `tests/balance-browser.mjs`). Both take mission indexes 0-18 for `--missions` (2.1 is 9), and both stop with an error on a filter that selects nothing. The golden runs gate every push in CI; the balance sweep does not gate and does not run in CI. The browser tests use system Chrome on Windows (`CHROME_PATH` overrides it) and SwiftShader by default. Set `GPU=1` to render on the real GPU, and `GAME_URL` to test another server. Screenshots go to `test-results/`. The QA handle `window.__TIDELOCK__` exists only with `?qa=1`. Add `&brief=1` or `&prologue=1` to keep the story dialogs in QA runs.
+`npm run golden` plays each scripted run in a fresh page and compares it with `tests/golden/scripted-runs.json`; `UPDATE_GOLDEN=1` rewrites that file and `--allow 'pattern,...'` limits which rows may move (see the top of `tests/golden-browser.mjs`). `npm run balance` plays the pilots, the naive clicker and the do-nothing player over 8 seeds on Easy, Normal and Hard and writes win rates, mean stars and mean end times to `test-results/balance.json`; `--missions 9-14 --modes normal --seeds 8 --players pilot,idle` narrows it (see the top of `tests/balance-browser.mjs`). Both take mission indexes 0-18 for `--missions` (2.1 is 9), and both stop with an error on a filter that selects nothing. The golden runs gate every push in CI; the balance sweep does not gate and does not run in CI. The browser tests use system Chrome on Windows (`CHROME_PATH` overrides it) and SwiftShader by default. Set `GPU=1` to render on the real GPU, and `GAME_URL` to test another server. Screenshots go to `test-results/`. The QA handle `window.__TIDELOCK__` exists only with `?qa=1`. Add `&brief=1` or `&prologue=1` to keep the story dialogs in QA runs, `&feel=1` to keep hit-stops, `&hold=1` to keep the closing-line hold, `&det=1` for repeatable renders, `&listen=1` for the Sound test and `&fps=1` for the frame-time readout. `npm run perf -- --baseline` also measures HUD coverage on every mission and, with `GPU=1`, frame times at 390x844 with the CPU slowed 4x.
 
 ## Blender assets
 
 - **Generators:** [`tools/blender/`](tools/blender/): `style.py` (kit and palette), `catalog.py` (asset contracts), and one asset module per family.
 - **Editable library:** [`art/tidelock-assets.blend`](art/tidelock-assets.blend).
-- **Runtime models:** [`public/models/`](public/models/). There are 49 GLBs, about 3.6 MiB in total; [`manifest.json`](public/models/manifest.json) records sizes, triangles and nodes.
+- **Runtime models:** [`public/models/`](public/models/). There are 60 GLBs, 4.27 MiB in total (the budget is 4.5 MiB); [`manifest.json`](public/models/manifest.json) records sizes, triangles and nodes.
 
 ```sh
 blender --background --factory-startup --python tools/blender/build_assets.py -- --output public/models

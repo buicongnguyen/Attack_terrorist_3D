@@ -31,7 +31,7 @@ export const rectWater = ({ minX, maxX, minZ, maxZ }, wet = () => true) => ({
 // A low-poly fish one metre long, nose at +z. Every triangle has its own vertices (a faceted toy
 // look). aBend runs 0 at the nose to 1 at the tail tip, aPaint picks the accent colour (a saddle
 // and the tail fin), aShade bakes a darker back and lighter flanks.
-export function fishGeometry() {
+function fishGeometry() {
   const S = [
     [0, 0, 0],
     [0.14, 0.15, 0.12],

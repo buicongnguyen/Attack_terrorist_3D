@@ -2,7 +2,7 @@
 // download. Every cue is data in CUES (5.1 J1), so a change after a listen is a data change.
 
 // The debrief's star cue (5.1): C5, E5 and G5.
-export const STAR_NOTES = [523.25, 659.25, 783.99];
+const STAR_NOTES = [523.25, 659.25, 783.99];
 
 // Layers. A tone is an oscillator swept from `from` to `to` Hz; noise runs through a filter swept
 // the same way; static is filtered noise through a gain swung by a `hz` oscillator (ring

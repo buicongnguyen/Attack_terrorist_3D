@@ -50,6 +50,7 @@ async function boot() {
   const loop = createLoop({ clock, governor, game, ui, view, radio: ui.director, now: performance.now(), hidden: () => document.hidden, feel });
   const animate = (now) => {
     loop.frame(now);
+    ui.sampleFrame(now);
     requestAnimationFrame(animate);
   };
   requestAnimationFrame(animate);

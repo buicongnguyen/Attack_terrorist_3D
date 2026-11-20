@@ -13,7 +13,7 @@
 export const STORY = 2;
 export const TACTICAL = 1;
 export const CHATTER = 0;
-export const RADIO_PRIORITY = Object.freeze({
+const RADIO_PRIORITY = Object.freeze({
   success: STORY,
   pickup: STORY,
   intercept: STORY,
@@ -35,8 +35,8 @@ export const RADIO_PRIORITY = Object.freeze({
 });
 export const HOLD = 7.8;
 export const DEDUPE = 20;
-export const MAX_WAITING = 4;
-export const STALE = 6;
+const MAX_WAITING = 4;
+const STALE = 6;
 
 export const priorityOf = (key) => RADIO_PRIORITY[key] ?? TACTICAL;
 export const wordCount = (text) => text.trim().split(/\s+/).length;

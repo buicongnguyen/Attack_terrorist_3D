@@ -7,18 +7,7 @@
 // timestamps in tests/loop.test.js, and the cues' nodes in tests/audio.test.js.
 // Runs in the browser suite (tests/browser.mjs).
 import { CUES } from "../src/audio.js";
-
-const ready = (page) => page.waitForFunction(() => document.documentElement.dataset.ready === "true", null, { timeout: 90000 });
-
-// In the page: a mission started with no dialog in the way and `steps` fixed steps run.
-function enter(index, steps) {
-  const { game: g, ui } = window.__TIDELOCK__;
-  document.querySelectorAll("dialog[open]").forEach((d) => d.close());
-  ui.start(index);
-  document.querySelectorAll("dialog[open]").forEach((d) => d.close());
-  g.paused = false;
-  for (let i = 0; i < steps; i++) g.update(1 / 120);
-}
+import { enter, ready } from "./perf-browser.mjs";
 
 export async function checkFeel(browser, url, check) {
   const errors = [];
@@ -235,6 +224,33 @@ export async function checkFeel(browser, url, check) {
   check("?qa without &feel=1 grants no hit-stop", plain.noStop);
   check(`a Drill burst on Glass Tower F6 throws ${plain.blowout} glows 0.2 m or more outside its walls, inside the F6 band`, plain.blowout >= 6);
   check(`Marrow's intercept plays the intercept cue, other lines the chirp, Marlin's rockets their whoosh (${plain.played.join(", ")})`, plain.played[0] === "intercept" && plain.played[1] === "radio" && plain.played.includes("rocketWhoosh"));
+  const noReadout = await qa.evaluate(() => document.getElementById("fps-readout") === null);
+  check("?qa without &fps=1 has no frame-time readout", noReadout);
   await qa.close();
+
+  // ---------------------------------------------------------------- the qa frame-time readout (5.1 X1)
+  const fps = await open("&fps=1", { width: 390, height: 844 });
+  await fps.evaluate(() => enter(0, 0));
+  // Written once two frames have passed and half a second is up; wait on the text, not the clock.
+  await fps.waitForFunction(() => /^p50 \d+\.\d · p95 \d+\.\d ms · \d+ f \/ 30 s$/.test(document.getElementById("fps-readout")?.textContent || ""), null, { polling: "raf", timeout: 300000 });
+  const readout = await fps.evaluate(() => {
+    const el = document.getElementById("fps-readout"),
+      css = getComputedStyle(el),
+      r = el.getBoundingClientRect();
+    const [p50, p95] = el.textContent.match(/\d+\.\d/g).map(Number);
+    return {
+      text: el.textContent,
+      ordered: p50 > 0 && p95 >= p50,
+      outsideApp: !document.getElementById("app").contains(el),
+      clickThrough: css.pointerEvents === "none",
+      size: parseFloat(css.fontSize),
+      inside: r.left >= 0 && r.right <= innerWidth && r.top >= 0 && r.bottom <= innerHeight,
+      share: (r.width * r.height) / (innerWidth * innerHeight),
+      scroll: document.documentElement.scrollWidth > innerWidth,
+    };
+  });
+  check(`?qa&fps=1 shows p50 and p95 over 30 s (${readout.text})`, readout.ordered);
+  check(`frame-time readout is small and out of the way: 11 px or more, click-through, outside #app, ${(readout.share * 100).toFixed(1)}% of a 390x844 screen`, readout.size >= 11 && readout.clickThrough && readout.outsideApp && readout.inside && readout.share < 0.03 && !readout.scroll);
+  await fps.close();
   check(`feel pages raised no errors${errors.length ? `: ${errors.join(" | ")}` : ""}`, errors.length === 0);
 }

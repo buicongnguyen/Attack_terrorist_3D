@@ -105,7 +105,7 @@ export function healthMaterial(hp, max, marked = false, key = false) {
 
 // The harbour endgame (5.1 C1): a boat that no longer counts wears a grey STANDING DOWN tag in
 // place of its health bar. One material, made once.
-export const STAND_DOWN_GREY = 0x8a96a8;
+const STAND_DOWN_GREY = 0x8a96a8;
 let standDown = null;
 export function standDownMaterial() {
   if (standDown) return standDown;

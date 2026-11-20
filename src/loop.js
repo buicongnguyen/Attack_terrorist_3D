@@ -176,3 +176,39 @@ export function createLoop({ clock, governor, game, ui, view, radio = null, now 
     },
   };
 }
+
+// Frame times for the qa readout (5.1 X1, ?qa&fps=1): the gaps between animation frames over the
+// last `window` ms, and their p50 and p95 (nearest rank, as perf-browser reports them). A ring of
+// timestamps, so sampling allocates nothing; 30 s at 240 Hz fits.
+export class FrameStats {
+  constructor(windowMs = 30000, capacity = 7200) {
+    this.window = windowMs;
+    this.times = new Float64Array(capacity);
+    this.gaps = new Float64Array(capacity);
+    this.head = 0;
+    this.count = 0;
+  }
+
+  sample(now) {
+    this.times[this.head] = now;
+    this.head = (this.head + 1) % this.times.length;
+    this.count = Math.min(this.count + 1, this.times.length);
+  }
+
+  // { frames, p50, p95 } in ms over the window ending at the last sample; null with under 2 frames.
+  read() {
+    const n = this.times.length;
+    const last = this.times[(this.head - 1 + n) % n];
+    let k = 0;
+    for (let i = 1; i < this.count; i++) {
+      const at = this.times[(this.head - i + n) % n],
+        before = this.times[(this.head - i - 1 + n) % n];
+      if (last - before > this.window) break;
+      this.gaps[k++] = at - before;
+    }
+    if (k === 0) return null;
+    const sorted = this.gaps.subarray(0, k).sort();
+    const at = (q) => sorted[Math.min(k - 1, Math.floor(q * k))];
+    return { frames: k, p50: at(0.5), p95: at(0.95) };
+  }
+}

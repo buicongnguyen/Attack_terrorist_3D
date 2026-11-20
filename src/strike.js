@@ -2133,7 +2133,6 @@ export class StrikeOperation {
     const g = this.game;
     if (g.status !== "playing") return null;
     const lead = this.aircraft.find((a) => a.alive && a.forecast?.kind === this.selected);
-    const over = lead?.forecast?.building?.id;
     const index = g.index;
     const lesson = this.layout.lesson;
     if (index === 0 && this.used === 0) return this.aim ? "aiming" : "aim";

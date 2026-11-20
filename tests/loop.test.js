@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { createLoop, FEEL, shakeOffset, Present } from "../src/loop.js";
+import { createLoop, FEEL, shakeOffset, Present, FrameStats } from "../src/loop.js";
 import { FixedClock } from "../src/physics.js";
 import { STEP } from "../src/data.js";
 import { GRACE } from "../src/quality.js";
@@ -304,4 +304,22 @@ test("a mission started during a deciding hit's stop and slow motion starts at f
   assert.equal(present.held, false);
   assert.equal(game.impact.fresh, false);
   assert.equal(log.steps.length - before, owed(repeat(16.7, 30)), "no stop or slow steps carried over");
+});
+
+test("the qa frame-time readout reports p50 and p95 over the last 30 s only (5.1 X1)", () => {
+  const stats = new FrameStats();
+  assert.equal(stats.read(), null);
+  let t = 0;
+  // 40 s of frames: the first 10 s at 50 ms, then 30 s of 16.7 ms frames with every 10th at 33.4 ms.
+  for (let i = 0; i < 200; i++) stats.sample((t += 50));
+  for (let i = 1; i * 16.7 <= 30000; i++) stats.sample((t += i % 10 === 0 ? 33.4 : 16.7));
+  const r = stats.read();
+  assert.ok(r.frames > 1600 && r.frames < 1800, `${r.frames}`);
+  assert.equal(Math.round(r.p50 * 10), 167);
+  assert.equal(Math.round(r.p95 * 10), 334);
+  // The slow frames have left the window; the ring wraps without growing.
+  const small = new FrameStats(1000, 8);
+  for (let i = 0; i < 100; i++) small.sample(i * 20);
+  assert.equal(small.read().frames, 7);
+  assert.equal(small.read().p95, 20);
 });

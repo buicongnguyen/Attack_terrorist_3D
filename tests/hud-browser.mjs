@@ -2,8 +2,7 @@
 // the tide chip at every width, HUD coverage at 390x844, world tags clear of the panels, the
 // callout lanes, edge markers, the boss slot, the collapsed map and intel chip, and target kinds
 // told apart by glyph and shape. Runs in the browser suite (tests/browser.mjs).
-import { MISSIONS } from "../src/data.js";
-import { coverage } from "./perf-browser.mjs";
+import { code, coverage } from "./perf-browser.mjs";
 
 const AUDITED = [0, 3, 6, 9, 14, 15, 18];
 const VIEWPORTS = [
@@ -18,7 +17,6 @@ const COVERAGE_TARGET = 0.4;
 // Missions still above the target after every named cut, at their measured share (rounded up),
 // so they cannot grow while the owner decides (docs/VERIFICATION.md, 5.1 H1).
 const COVERAGE_SIGNOFF = { 6: 0.44 };
-const code = (index) => `${MISSIONS[index].chapter + 1}.${index - MISSIONS.findIndex((m) => m.chapter === MISSIONS[index].chapter) + 1}`;
 
 // In the page: a mission started with no dialog in the way, `steps` fixed steps, a fresh HUD.
 function enter(index, steps) {

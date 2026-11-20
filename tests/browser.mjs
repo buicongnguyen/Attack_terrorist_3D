@@ -9,7 +9,7 @@ import { checkProgress } from "./progress-browser.mjs";
 import { checkStrike } from "./strike-browser.mjs";
 import { checkRiver, checkCanalFrame } from "./river-browser.mjs";
 import { checkHarbour } from "./harbour-browser.mjs";
-import { checkPerf } from "./perf-browser.mjs";
+import { checkPerf, ready } from "./perf-browser.mjs";
 import { checkHud } from "./hud-browser.mjs";
 import { checkFeel } from "./feel-browser.mjs";
 import { MODELS, MISSIONS } from "../src/data.js";
@@ -39,7 +39,6 @@ const watch = (page) => {
     if (message.type() === "error") errors.push(message.text());
   });
 };
-const ready = (page) => page.waitForFunction(() => document.documentElement.dataset.ready === "true", null, { timeout: 90000 });
 const pixels = () => {
   const view = __TIDELOCK__.view;
   view.render(__TIDELOCK__.game.time);
